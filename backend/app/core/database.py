@@ -54,7 +54,7 @@ class Neo4jClient:
             "CREATE INDEX skill_category_index IF NOT EXISTS FOR (s:Skill) ON (s.category)"
         ]
 
-        async with self.driver.session() as session:
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:
             for query in constraints:
                 try:
                     await session.run(query)
@@ -66,7 +66,7 @@ class Neo4jClient:
         if not self.driver or not self.is_connected:
             logger.debug(f"Neo4j offline. Query skipped: {query[:40]}...")
             return []
-        async with self.driver.session() as session:
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:
             result = await session.run(query, parameters or {})
             records = [record.data() async for record in result]
             return records

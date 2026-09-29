@@ -25,15 +25,20 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # Neo4j Graph Database
-    NEO4J_URI: str = "bolt://localhost:7687"
-    NEO4J_USERNAME: str = "neo4j"
-    NEO4J_PASSWORD: str = "password"
+    NEO4J_URI: str = "neo4j+ssc://a68e0c1f.databases.neo4j.io"
+    NEO4J_USERNAME: str = "a68e0c1f"
+    NEO4J_PASSWORD: str = ""
+    NEO4J_DATABASE: str = "a68e0c1f"
 
     # GitHub Defaults
     GITHUB_DEFAULT_USER: str = "mohitUpraity"
 
     model_config = SettingsConfigDict(
-        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
+        env_file=[
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".env"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
+            ".env"
+        ],
         env_file_encoding="utf-8",
         extra="ignore"
     )
