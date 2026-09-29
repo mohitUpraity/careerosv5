@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from app.core.security import get_current_user
 from app.schemas.ingest_models import GitHubIngestRequest, GitHubIngestResponse
@@ -7,6 +8,7 @@ from app.schemas.resume_blueprint import ResumeIngestResponse
 from app.services.github_service import github_service
 from app.services.gemini_extractor import gemini_extractor
 from app.services.resume_service import resume_service
+from app.services.linkedin_service import linkedin_service
 from app.services.neo4j_service import neo4j_service
 
 logger = logging.getLogger(__name__)
@@ -129,3 +131,68 @@ async def ingest_candidate_resume(
         companies_mapped=companies,
         graph_nodes_merged=nodes_merged
     )
+
+@router.post("/linkedin")
+async def ingest_linkedin_connections(
+    file: UploadFile = File(...),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Ingests official LinkedIn Connections.csv, mapping 1st-degree contacts,
+    current employers, and alumni nodes into Neo4j AuraDB.
+    """
+    user_id = current_user["id"]
+    logger.info(f"Processing LinkedIn Connections.csv for user {user_id}")
+
+    csv_bytes = await file.read()
+    connections = linkedin_service.parse_connections_csv(csv_bytes)
+
+    if not connections:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Failed to parse valid connections from uploaded CSV. Ensure it is the official LinkedIn Connections.csv file."
+        )
+
+    # Upsert into Neo4j
+    nodes_merged = await neo4j_service.upsert_user_linkedin_connections(
+        user_id=user_id,
+        connections=connections
+    )
+
+    companies = list(set([c["company"] for c in connections if c["company"]]))
+
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "total_connections_imported": len(connections),
+        "companies_mapped": len(companies),
+        "sample_companies": companies[:10],
+        "graph_nodes_merged": nodes_merged
+    }
+
+class LeadPostRequest(BaseModel):
+    post_text: str
+    target_role_hint: Optional[str] = None
+
+@router.post("/lead-post")
+async def ingest_hiring_lead_post(
+    payload: LeadPostRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Pastes a raw LinkedIn 'I am hiring' post or job snippet, extracts company and skills,
+    and immediately runs graph traversal to discover referral paths in your network.
+    """
+    user_id = current_user["id"]
+    lead_data = await linkedin_service.parse_hiring_lead_post(payload.post_text)
+    
+    result = await neo4j_service.upsert_hiring_lead_job(
+        user_id=user_id,
+        lead_data=lead_data
+    )
+
+    return {
+        "status": "success",
+        "lead_extracted": lead_data,
+        "referral_bridges": result["referral_bridges"]
+    }
