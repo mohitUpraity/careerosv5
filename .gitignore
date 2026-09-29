@@ -1,0 +1,29 @@
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+*.log
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.npm/
+
+# IDE / Antigravity
+.idea/
+.vscode/
+*.swp
+*.swo
