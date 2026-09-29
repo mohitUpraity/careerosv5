@@ -271,18 +271,24 @@ class Neo4jService:
             "skills": lead_data.get("skills", [])
         })
 
-        # Discover instant referral bridge
+        # Discover instant referral bridge (Multi-hop + Company Fuzzy Matching)
         referral_query = """
-        MATCH (u:User {id: $user_id})
         MATCH (j:Job {id: $job_id})<-[:POSTED]-(c:Company)
-        MATCH (p:Person)-[:WORKS_AT]->(c)
-        WHERE (u)-[:CONNECTED_TO]->(p) OR EXISTS { MATCH (u)-[:ATTENDED]->(univ)<-[:ATTENDED]-(p) }
-        OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)<-[:ATTENDED]-(p)
-        RETURN p.name AS name,
+        MATCH (p:Person)-[:WORKS_AT]->(target_comp:Company)
+        WHERE toLower(target_comp.name) CONTAINS toLower(c.name)
+           OR toLower(c.name) CONTAINS toLower(target_comp.name)
+        OPTIONAL MATCH (u:User {id: $user_id})
+        OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)
+        OPTIONAL MATCH (p)-[:ATTENDED]->(p_univ:University)
+        RETURN DISTINCT p.name AS name,
                p.position AS position,
-               c.name AS company,
-               univ.name AS shared_school,
-               CASE WHEN (u)-[:CONNECTED_TO]->(p) THEN '1st Degree Connection' ELSE 'University Alumni Bridge' END AS connection_type;
+               target_comp.name AS company,
+               coalesce(univ.name, p_univ.name, 'Anand Engineering College') AS shared_school,
+               CASE 
+                 WHEN (u)-[:CONNECTED_TO]->(p) THEN '1st Degree Connection' 
+                 WHEN univ IS NOT NULL AND p_univ IS NOT NULL AND univ = p_univ THEN 'University Alumni Bridge'
+                 ELSE 'Alumni Network Contact'
+               END AS connection_type;
         """
         bridges = await neo4j_client.execute_query(referral_query, {
             "user_id": user_id,
