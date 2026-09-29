@@ -19,8 +19,8 @@ class GitHubService:
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "CareerOS-v5-Ingestion"
         }
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        if token and token.strip() and token.strip().lower() not in ["string", "none", "null", "undefined"]:
+            headers["Authorization"] = f"Bearer {token.strip()}"
 
         async with httpx.AsyncClient(timeout=15.0) as client:
             # 1. Fetch public repositories
