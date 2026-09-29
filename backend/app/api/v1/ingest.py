@@ -1,10 +1,12 @@
 import logging
-from typing import Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from app.core.security import get_current_user
 from app.schemas.ingest_models import GitHubIngestRequest, GitHubIngestResponse
+from app.schemas.resume_blueprint import ResumeIngestResponse
 from app.services.github_service import github_service
 from app.services.gemini_extractor import gemini_extractor
+from app.services.resume_service import resume_service
 from app.services.neo4j_service import neo4j_service
 
 logger = logging.getLogger(__name__)
@@ -64,5 +66,66 @@ async def ingest_github_repositories(
         repos_processed=len(processed_projects),
         skills_extracted=len(total_skills),
         projects=processed_projects,
+        graph_nodes_merged=nodes_merged
+    )
+
+@router.post("/resume", response_model=ResumeIngestResponse)
+async def ingest_candidate_resume(
+    file: UploadFile = File(None),
+    storage_path: Optional[str] = Form(None),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Ingests Golden Base Resume (PDF upload or Supabase storage path),
+    extracts sections into an editable JSON Blueprint using Gemini 1.5 Flash,
+    and updates user profile, university, and experience nodes in Neo4j AuraDB.
+    """
+    user_id = current_user["id"]
+    logger.info(f"Processing resume upload for user {user_id}")
+
+    pdf_bytes = b""
+    if file:
+        pdf_bytes = await file.read()
+    elif storage_path:
+        # Future: download from Supabase storage if storage_path provided
+        logger.info(f"Fetching from storage path: {storage_path}")
+
+    if not pdf_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No PDF file provided in upload"
+        )
+
+    # 1. Extract digital text stream
+    raw_text = resume_service.extract_text_from_pdf(pdf_bytes)
+    if not raw_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Failed to extract text from PDF document"
+        )
+
+    # 2. Parse into structured JSON layout blueprint
+    blueprint = await resume_service.parse_resume_to_blueprint(raw_text)
+
+    # 3. Upsert into Neo4j Graph
+    nodes_merged = await neo4j_service.upsert_user_resume_blueprint(
+        user_id=user_id,
+        blueprint=blueprint
+    )
+
+    all_skills = []
+    for cat in blueprint.skills:
+        all_skills.extend(cat.skills)
+
+    universities = [edu.university for edu in blueprint.education if edu.university]
+    companies = [exp.company for exp in blueprint.experience if exp.company]
+
+    return ResumeIngestResponse(
+        status="success",
+        user_id=user_id,
+        blueprint=blueprint,
+        total_skills_extracted=len(set(all_skills)),
+        universities_mapped=universities,
+        companies_mapped=companies,
         graph_nodes_merged=nodes_merged
     )
