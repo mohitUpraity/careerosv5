@@ -196,3 +196,64 @@ async def ingest_hiring_lead_post(
         "lead_extracted": lead_data,
         "referral_bridges": result["referral_bridges"]
     }
+
+class PostsIngestRequest(BaseModel):
+    posts_text: str
+
+@router.post("/linkedin/posts")
+async def ingest_linkedin_user_posts(
+    file: UploadFile = File(None),
+    posts_text: Optional[str] = Form(None),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Ingests official LinkedIn 'Shares.csv' / 'Posts.csv' data export OR raw pasted post updates.
+    Extracts Hackathons (e.g. Microsoft Noida Hackathon), Competitions, Project Milestones,
+    Workshops, and Certifications using Gemini 1.5 Flash and permanently maps them into Neo4j AuraDB.
+    """
+    from app.services.linkedin_posts_service import linkedin_posts_service
+    user_id = current_user["id"]
+    combined_content = ""
+
+    if file:
+        file_bytes = await file.read()
+        try:
+            decoded_text = file_bytes.decode("utf-8", errors="ignore")
+            # If CSV, parse rows
+            if file.filename and file.filename.endswith(".csv"):
+                parsed_list = linkedin_posts_service.parse_csv_posts(decoded_text)
+                combined_content = "\n\n---\n\n".join(parsed_list)
+            else:
+                combined_content = decoded_text
+        except Exception as e:
+            logger.warning(f"Error reading file bytes: {e}")
+
+    if posts_text:
+        combined_content = (combined_content + "\n\n" + posts_text).strip()
+
+    if not combined_content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a Shares.csv/Posts.csv file upload or post text in 'posts_text'."
+        )
+
+    # 1. Extract intelligence via Gemini
+    knowledge = await linkedin_posts_service.extract_knowledge_from_posts(combined_content)
+
+    # 2. Merge into Neo4j Knowledge Graph
+    nodes_merged = await linkedin_posts_service.merge_posts_knowledge_to_graph(
+        user_id=user_id,
+        knowledge=knowledge
+    )
+
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "extracted_knowledge": knowledge,
+        "hackathons_count": len(knowledge.get("hackathons", [])),
+        "achievements_count": len(knowledge.get("achievements", [])),
+        "certifications_count": len(knowledge.get("certifications_or_workshops", [])),
+        "skills_count": len(knowledge.get("extracted_skills", [])),
+        "graph_nodes_merged": nodes_merged
+    }
+

@@ -21,7 +21,7 @@ class ResumeService:
     def __init__(self):
         if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AQ."):
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel("gemini-1.5-flash")
+            self.model = genai.GenerativeModel("gemini-3.5-flash-lite")
         else:
             self.model = None
 

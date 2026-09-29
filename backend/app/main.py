@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import neo4j_client
-from app.api.v1 import health, ingest
+from app.api.v1 import health, ingest, profile
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 logger = logging.getLogger("careeros")
@@ -36,6 +36,7 @@ app.add_middleware(
 # Register API Routers
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")
+app.include_router(profile.router, prefix="/api/v1")
 
 @app.get("/")
 async def root():
