@@ -1,9 +1,11 @@
 /**
  * CareerOS Content Script - Ultra Resilient Multi-Surface DOM Extractor
- * Extracts Profile, Activity Posts, Connections, and Job Postings across all LinkedIn layouts.
+ * Supports Deep Auto-Scroll Collection for 800+ Connections
  */
 
 (() => {
+  let isAutoScrolling = false;
+
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const url = window.location.href;
 
@@ -30,8 +32,13 @@
       const posts = extractRecentPosts();
       sendResponse({ type: "POSTS", data: posts });
     } else if (request.action === "EXTRACT_CONNECTIONS_DEEP") {
-      const connData = extractConnectionsData();
-      sendResponse({ type: "CONNECTIONS", data: connData });
+      // Run deep progressive scan with auto-scrolling
+      deepScanConnections((progress) => {
+        chrome.runtime.sendMessage({ action: "DEEP_SCAN_PROGRESS", count: progress.count, isDone: progress.isDone });
+      }).then((connections) => {
+        sendResponse({ type: "CONNECTIONS", data: connections });
+      });
+      return true; // async response
     } else if (request.action === "NAVIGATE_TO") {
       if (request.url) {
         window.location.href = request.url;
@@ -40,6 +47,46 @@
     }
     return true;
   });
+
+  // Deep Auto-Scroll Scanner for 800+ Connections
+  async function deepScanConnections(onProgress) {
+    const connectionsMap = new Map();
+    let prevCount = 0;
+    let noNewCount = 0;
+    const maxScrolls = 25; // scans up to 25 page heights (~200-500 connections per pass)
+
+    for (let i = 0; i < maxScrolls; i++) {
+      // 1. Extract currently visible connections
+      const batch = extractConnectionsData();
+      batch.forEach(c => connectionsMap.set(c.name, c));
+
+      const currentCount = connectionsMap.size;
+      if (onProgress) {
+        onProgress({ count: currentCount, isDone: false });
+      }
+
+      if (currentCount === prevCount) {
+        noNewCount++;
+        if (noNewCount >= 3) break; // reached end of list
+      } else {
+        noNewCount = 0;
+      }
+      prevCount = currentCount;
+
+      // 2. Scroll down smoothly to trigger LinkedIn infinite scroll loader
+      window.scrollBy({ top: 1200, behavior: "smooth" });
+      await new Promise(r => setTimeout(r, 450));
+    }
+
+    // Scroll back to top
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const finalResults = Array.from(connectionsMap.values());
+    if (onProgress) {
+      onProgress({ count: finalResults.length, isDone: true });
+    }
+    return finalResults;
+  }
 
   // Extract from LinkedIn Feed Left Sidebar
   function extractFeedSidebarProfile() {
@@ -137,12 +184,12 @@
     
     // Select all potential connection containers
     let cards = Array.from(document.querySelectorAll(
-      "ul.mn-connections__list > li, li.mn-connection-card, div.mn-connection-card, .scaffold-finite-scroll__content ul > li, .mn-connections > ul > li, .entity-result, li[class*='connection']"
+      "ul.mn-connections__list > li, li.mn-connection-card, div.mn-connection-card, .scaffold-finite-scroll__content ul > li, .mn-connections > ul > li, .entity-result, li[class*='connection'], .mn-connections__list > li"
     ));
 
     // Fallback: If containers not identified by class, find all list items inside main content area
     if (cards.length === 0) {
-      const mainListItems = document.querySelectorAll("main ul > li, .scaffold-layout__main ul > li");
+      const mainListItems = document.querySelectorAll("main ul > li, .scaffold-layout__main ul > li, section ul > li");
       cards = Array.from(mainListItems).filter(el => el.innerText.includes("Connected on") || el.querySelector("a[href*='/in/']"));
     }
 
