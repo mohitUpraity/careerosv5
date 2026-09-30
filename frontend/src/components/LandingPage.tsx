@@ -16,11 +16,13 @@ import {
   Globe2,
   Lock,
   ChevronRight,
-  Loader2
+  Loader2,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from './ThemeToggle';
+import { ExtensionDownloadModal } from './ExtensionDownloadModal';
 
 export const LandingPage: React.FC = () => {
   const { loginWithGoogle } = useAuth();
@@ -28,6 +30,7 @@ export const LandingPage: React.FC = () => {
   const isDark = theme === 'dark';
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
 
   const handleLogin = async () => {
     setAuthError(null);
@@ -75,6 +78,20 @@ export const LandingPage: React.FC = () => {
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
+            <button
+              onClick={() => setIsExtensionModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+              style={{
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+                color: isDark ? '#f8fafc' : '#0f172a'
+              }}
+            >
+              <Download className="w-3.5 h-3.5 text-blue-500" />
+              <span className="hidden sm:inline">Extension</span>
+              <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                Beta
+              </span>
+            </button>
             <button
               onClick={handleLogin}
               disabled={isLoggingIn}
@@ -149,7 +166,7 @@ export const LandingPage: React.FC = () => {
             Synthesize your GitHub repositories, AST-verified skills, and LinkedIn network into an interactive knowledge graph. Discover hidden alumni referral paths and generate tailored ATS resumes in seconds.
           </p>
 
-          {/* Primary CTA Button */}
+          {/* Primary & Secondary CTA Buttons */}
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={handleLogin}
@@ -169,10 +186,25 @@ export const LandingPage: React.FC = () => {
                     <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                     <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                   </svg>
-                  <span>Sign In to Access Your Dashboard</span>
+                  <span>Sign In with Google</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
+            </button>
+
+            <button
+              onClick={() => setIsExtensionModalOpen(true)}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold rounded-2xl border transition-all hover:bg-slate-100 dark:hover:bg-slate-900"
+              style={{
+                borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+                color: isDark ? '#f8fafc' : '#0f172a'
+              }}
+            >
+              <Download className="w-4 h-4 text-blue-500" />
+              <span>Get Chrome Extension</span>
+              <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                Beta
+              </span>
             </button>
           </div>
 
@@ -278,6 +310,12 @@ export const LandingPage: React.FC = () => {
       }`}>
         <p>&copy; {new Date().getFullYear()} CareerOS v5. Multi-Tenant GraphRAG Platform for Software Engineers.</p>
       </footer>
+
+      {/* Extension Download & Setup Guide Modal */}
+      <ExtensionDownloadModal
+        isOpen={isExtensionModalOpen}
+        onClose={() => setIsExtensionModalOpen(false)}
+      />
     </div>
   );
 };

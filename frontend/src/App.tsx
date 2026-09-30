@@ -9,6 +9,7 @@ import { ResumeStudio } from './components/ResumeStudio/ResumeStudio';
 import { BenchmarkLab } from './components/BenchmarkLab/BenchmarkLab';
 import { StartFreshModal } from './components/StartFreshModal';
 import { SyncGitHubModal } from './components/SyncGitHubModal';
+import { ExtensionDownloadModal } from './components/ExtensionDownloadModal';
 import { Toast, ToastMessage } from './components/Toast';
 import { apiService, ProfileAnalysis } from './services/api';
 import { GraphData } from './types';
@@ -19,6 +20,7 @@ const MainLayout: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isSyncGitHubModalOpen, setIsSyncGitHubModalOpen] = useState(false);
+  const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
 
   // App data state
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -87,6 +89,7 @@ const MainLayout: React.FC = () => {
         analysis={analysis}
         onOpenResetModal={() => setIsResetModalOpen(true)}
         onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
+        onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
         onRefreshData={loadProfileData}
         loading={loading}
       />
@@ -140,6 +143,12 @@ const MainLayout: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Extension Download & Setup Guide Modal */}
+      <ExtensionDownloadModal
+        isOpen={isExtensionModalOpen}
+        onClose={() => setIsExtensionModalOpen(false)}
+      />
 
       {/* Sync GitHub Modal */}
       <SyncGitHubModal

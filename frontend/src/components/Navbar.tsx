@@ -11,7 +11,8 @@ import {
   ChevronDown, 
   ShieldCheck,
   UserCheck,
-  Github
+  Github,
+  Download
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ProfileAnalysis } from '../services/api';
@@ -21,6 +22,7 @@ interface NavbarProps {
   analysis: ProfileAnalysis | null;
   onOpenResetModal: () => void;
   onOpenSyncGitHub: () => void;
+  onOpenExtensionModal?: () => void;
   onRefreshData: () => void;
   loading: boolean;
 }
@@ -29,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   analysis,
   onOpenResetModal,
   onOpenSyncGitHub,
+  onOpenExtensionModal,
   onRefreshData,
   loading,
 }) => {
@@ -133,6 +136,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right Actions */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           <ThemeToggle />
+
+          {onOpenExtensionModal && (
+            <button
+              onClick={onOpenExtensionModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-primary)',
+                color: 'var(--text-primary)',
+              }}
+              title="Download Chrome Extension (.zip) & setup guide"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+              <span className="hidden sm:inline">Extension</span>
+              <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                Beta
+              </span>
+            </button>
+          )}
 
           <button
             onClick={onOpenSyncGitHub}
