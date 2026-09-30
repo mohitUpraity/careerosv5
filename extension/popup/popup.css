@@ -18,16 +18,16 @@
   /* Typography */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  --text-primary: #0f172a;    /* Slate-900: Deep authoritative navy ink */
-  --text-secondary: #475569;  /* Slate-600: Readable, clear body */
-  --text-tertiary: #64748b;   /* Slate-500: Subtitles & labels */
-  --text-muted: #94a3b8;      /* Slate-400: Placeholders */
+  --text-primary: #0f172a;    /* Slate-900 */
+  --text-secondary: #475569;  /* Slate-600 */
+  --text-tertiary: #64748b;   /* Slate-500 */
+  --text-muted: #94a3b8;      /* Slate-400 */
 
-  /* Stripe-Style Atmospheric Accents */
-  --accent-brand: #4f46e5;    /* Indigo-600 */
+  /* Stripe-Style Accents */
+  --accent-brand: #4f46e5;
   --accent-brand-hover: #4338ca;
   --accent-brand-subtle: #eef2ff;
-  --accent-btn-bg: #0f172a;   /* Premium dark-slate button */
+  --accent-btn-bg: #0f172a;
   --accent-btn-hover: #1e293b;
   --accent-btn-text: #ffffff;
 
@@ -69,10 +69,10 @@ body {
 }
 
 .app-shell {
-  padding: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* ==========================================================================
@@ -181,7 +181,7 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 11px;
   box-shadow: var(--shadow-card);
 }
 
@@ -199,7 +199,7 @@ body {
 }
 
 .field-label {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -207,7 +207,7 @@ body {
 }
 
 .sync-timestamp {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
 }
@@ -223,9 +223,9 @@ body {
   background: var(--bg-input);
   border: 1px solid var(--border-input);
   color: var(--text-primary);
-  padding: 7px 30px 7px 10px;
+  padding: 6px 28px 6px 10px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
@@ -278,8 +278,8 @@ body {
 }
 
 .btn-icon-box {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -293,13 +293,13 @@ body {
 }
 
 .btn-title {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.25;
 }
 
 .btn-desc {
-  font-size: 10.5px;
+  font-size: 10px;
   margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
@@ -389,7 +389,7 @@ body {
 .progress-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   background: #f8fafc;
   border-color: #cbd5e1;
 }
@@ -401,7 +401,7 @@ body {
 }
 
 .progress-title {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -432,14 +432,14 @@ body {
 .stepper-pipeline {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .stepper-step {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
+  gap: 7px;
+  font-size: 10.5px;
   color: var(--text-tertiary);
   transition: color 0.15s ease;
 }
@@ -490,19 +490,19 @@ body {
 }
 
 /* ==========================================================================
-   Active Context Card
+   Active Context Card & Nav Chips
    ========================================================================== */
 
 .card-header-mini {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-tertiary);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .context-body {
@@ -526,13 +526,42 @@ body {
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  font-size: 12px;
 }
 
 .context-sub {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--text-secondary);
   line-height: 1.35;
+}
+
+.nav-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.nav-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.nav-chip:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .btn-mini {
@@ -542,7 +571,7 @@ body {
   background: var(--accent-btn-bg);
   border: 1px solid transparent;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
@@ -556,16 +585,70 @@ body {
 }
 
 /* ==========================================================================
+   Sync Report Card
+   ========================================================================== */
+
+.report-card {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #166534;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.report-stat {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #dcfce7;
+}
+
+.stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #65a30d;
+  text-transform: uppercase;
+}
+
+.stat-val {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
    Toast Feedback Banner
    ========================================================================== */
 
 .toast-banner {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 7px;
+  padding: 7px 9px;
   border-radius: var(--radius-sm);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   box-shadow: var(--shadow-card);
   animation: slideUp 0.18s ease-out;
@@ -622,7 +705,7 @@ body {
 .footer-link {
   color: var(--text-tertiary);
   text-decoration: none;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -636,5 +719,5 @@ body {
 
 .footer-sep {
   color: var(--border-subtle);
-  font-size: 12px;
+  font-size: 11px;
 }
