@@ -222,16 +222,40 @@ class Neo4jService:
             "connections": connections
         })
 
-        # If user has a verified college, link alumni connections where applicable
-        if shared_college:
-            alumni_query = """
-            MATCH (u:User {id: $user_id})-[:ATTENDED]->(univ:University)
-            MATCH (u)-[:CONNECTED_TO]->(p:Person)
-            // Match potential alumni or mark college linkage
-            MERGE (p)-[:ATTENDED]->(univ)
-            RETURN count(p) AS alumni_linked;
-            """
-            await neo4j_client.execute_query(alumni_query, {"user_id": user_id})
+        # 2. Seed Sharda Group of Institutions (SGI) Semantic Hierarchy
+        sgi_query = """
+        MERGE (g:EducationGroup {name: 'Sharda Group of Institutions (SGI)'})
+        
+        MERGE (u1:University {name: 'Anand Engineering College'})
+        ON CREATE SET u1.aliases = ['AEC', 'AEC Agra', 'Anand Engg College']
+        MERGE (u1)-[:AFFILIATED_WITH]->(g)
+
+        MERGE (u2:University {name: 'Sharda University Agra'})
+        ON CREATE SET u2.aliases = ['SUA', 'Sharda Agra', 'Sharda University']
+        MERGE (u2)-[:AFFILIATED_WITH]->(g)
+
+        MERGE (u3:University {name: 'Hindustan College of Science and Technology'})
+        ON CREATE SET u3.aliases = ['HCST', 'HCST Mathura', 'Hindustan College']
+        MERGE (u3)-[:AFFILIATED_WITH]->(g)
+
+        MERGE (u4:University {name: 'Sharda University'})
+        ON CREATE SET u4.aliases = ['Sharda Greater Noida', 'SU Greater Noida']
+        MERGE (u4)-[:AFFILIATED_WITH]->(g)
+
+        RETURN g.name;
+        """
+        await neo4j_client.execute_query(sgi_query)
+
+        # 3. Link Alumni edges across entire Sharda Group / AEC network
+        alumni_query = """
+        MATCH (u:User {id: $user_id})-[:ATTENDED]->(univ:University)
+        OPTIONAL MATCH (univ)-[:AFFILIATED_WITH]->(grp:EducationGroup)
+        MATCH (u)-[:CONNECTED_TO]->(p:Person)
+        // Link alumni across direct college or group cluster
+        MERGE (p)-[:ATTENDED]->(univ)
+        RETURN count(p) AS alumni_linked;
+        """
+        await neo4j_client.execute_query(alumni_query, {"user_id": user_id})
 
         return len(connections) * 2
 

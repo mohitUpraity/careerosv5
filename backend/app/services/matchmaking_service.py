@@ -181,22 +181,30 @@ class MatchmakingService:
             "target_skills": all_target_skills
         })
 
-        # 3. Query Referral Bridges at Target Company
+        # 3. Query Semantic Referral Bridges (Sharda Group / AEC / HCST Cluster)
         target_company = job_req.get("company_name", "").strip()
         referral_query = """
         MATCH (u:User {id: $user_id})
         OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)
+        OPTIONAL MATCH (univ)-[:AFFILIATED_WITH]->(grp:EducationGroup)
         OPTIONAL MATCH (p:Person)-[:WORKS_AT]->(c:Company)
         WHERE toLower(c.name) CONTAINS toLower($company)
            OR toLower($company) CONTAINS toLower(c.name)
         OPTIONAL MATCH (p)-[:ATTENDED]->(p_univ:University)
+        OPTIONAL MATCH (p_univ)-[:AFFILIATED_WITH]->(p_grp:EducationGroup)
         RETURN DISTINCT p.name AS name,
                p.position AS position,
                c.name AS company,
-               coalesce(univ.name, p_univ.name, 'Anand Engineering College') AS college,
+               coalesce(p_univ.name, univ.name, 'Sharda Group (Anand / HCST / SU)') AS college,
                CASE 
                  WHEN (u)-[:CONNECTED_TO]->(p) THEN '1st Degree Direct Connection'
-                 WHEN univ IS NOT NULL AND p_univ IS NOT NULL AND univ = p_univ THEN 'University Alumni Bridge'
+                 WHEN univ IS NOT NULL AND p_univ IS NOT NULL AND univ = p_univ THEN 'Direct College Alumni (AEC)'
+                 WHEN (grp IS NOT NULL AND p_grp IS NOT NULL AND grp = p_grp) 
+                   OR toLower(p_univ.name) CONTAINS 'sharda'
+                   OR toLower(p_univ.name) CONTAINS 'anand'
+                   OR toLower(p_univ.name) CONTAINS 'hindustan'
+                   OR toLower(p_univ.name) CONTAINS 'hcst'
+                   THEN 'Sharda Group (SGI/HCST/SU) Alumni Bridge'
                  ELSE 'Company Employee Network'
                END AS connection_bridge
         LIMIT 5
