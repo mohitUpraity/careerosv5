@@ -6,6 +6,8 @@
   --border-focus: #58a6ff;
   --primary: #388bfd;
   --primary-glow: rgba(56, 139, 253, 0.35);
+  --master: linear-gradient(135deg, #238636, #1f6feb);
+  --delta: linear-gradient(135deg, #1f6feb, #8957e5);
   --accent: #2ea043;
   --text-main: #f0f6fc;
   --text-muted: #8b949e;
@@ -32,7 +34,7 @@ body {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 /* Header */
@@ -52,7 +54,7 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #238636, #1f6feb);
+  background: var(--master);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,18 +103,21 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   backdrop-filter: blur(8px);
 }
 
 .profile-selector-row {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .profile-selector-row label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -135,6 +140,20 @@ body {
   border-color: var(--primary);
 }
 
+.last-sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid rgba(48, 54, 61, 0.5);
+  padding-top: 6px;
+}
+
+.last-sync-row strong {
+  color: #58a6ff;
+}
+
 /* Actions Section */
 .actions-section {
   display: flex;
@@ -142,33 +161,25 @@ body {
   gap: 8px;
 }
 
-.section-title {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.6px;
-}
-
 .btn {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
-  background: var(--bg-card);
 }
 
 .btn-icon {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .btn-text strong {
   display: block;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-main);
 }
@@ -176,29 +187,88 @@ body {
 .btn-text small {
   display: block;
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(240, 246, 252, 0.7);
+  margin-top: 1px;
 }
 
-.btn-primary {
-  background: linear-gradient(180deg, #1f6feb, #1158c7);
+.btn-master {
+  background: var(--master);
   border-color: #388bfd;
-  box-shadow: 0 2px 8px rgba(31, 111, 235, 0.25);
+  box-shadow: 0 4px 14px rgba(31, 111, 235, 0.35);
 }
 
-.btn-primary:hover {
-  background: linear-gradient(180deg, #388bfd, #1f6feb);
+.btn-master:hover {
+  filter: brightness(1.1);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(56, 139, 253, 0.4);
+  box-shadow: 0 6px 18px rgba(31, 111, 235, 0.5);
 }
 
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  border-color: #58a6ff;
+.btn-delta {
+  background: var(--delta);
+  border-color: #8957e5;
+  box-shadow: 0 3px 12px rgba(137, 87, 229, 0.3);
+}
+
+.btn-delta:hover {
+  filter: brightness(1.1);
   transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(137, 87, 229, 0.45);
 }
 
 .btn:active {
   transform: translateY(0);
+}
+
+/* Progress Stepper */
+.progress-container {
+  background: rgba(33, 38, 45, 0.9);
+  border: 1px solid #388bfd;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #58a6ff;
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: #161b22;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #238636, #388bfd);
+  transition: width 0.3s ease;
+}
+
+.stepper-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.stepper-item.active {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.stepper-item.done {
+  color: #3fb950;
+  font-weight: 600;
 }
 
 /* Context Section */
@@ -209,7 +279,14 @@ body {
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
 }
 
 .context-body {
@@ -252,7 +329,7 @@ body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 /* Footer */
@@ -263,7 +340,7 @@ body {
   gap: 10px;
   font-size: 11px;
   color: var(--text-muted);
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .footer-link {

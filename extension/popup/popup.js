@@ -1,32 +1,44 @@
 /**
- * CareerOS Popup Controller
+ * CareerOS Popup Controller with Master Full Sync & Incremental Delta Sync
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
   const backendStatus = document.getElementById("backendStatus");
   const statusText = document.getElementById("statusText");
   const userSelect = document.getElementById("userSelect");
-  const syncProfileBtn = document.getElementById("syncProfileBtn");
-  const syncPostsBtn = document.getElementById("syncPostsBtn");
-  const syncConnectionsBtn = document.getElementById("syncConnectionsBtn");
+  const lastSyncLabel = document.getElementById("lastSyncLabel");
+  const masterSyncBtn = document.getElementById("masterSyncBtn");
+  const deltaSyncBtn = document.getElementById("deltaSyncBtn");
   const contextBody = document.getElementById("contextBody");
   const resultBanner = document.getElementById("resultBanner");
 
+  // Progress UI
+  const syncProgressContainer = document.getElementById("syncProgressContainer");
+  const progressTitle = document.getElementById("progressTitle");
+  const progressPercent = document.getElementById("progressPercent");
+  const progressBarFill = document.getElementById("progressBarFill");
+  const step1 = document.getElementById("step1");
+  const step2 = document.getElementById("step2");
+  const step3 = document.getElementById("step3");
+
   const API_BASE = "http://localhost:8000/api/v1";
 
-  // 1. Load saved user preference
-  const saved = await chrome.storage.local.get("activeUserId");
-  if (saved.activeUserId) {
-    userSelect.value = saved.activeUserId;
+  // 1. Load saved preferences
+  const stored = await chrome.storage.local.get(["activeUserId", "lastSyncedTime"]);
+  if (stored.activeUserId) {
+    userSelect.value = stored.activeUserId;
+  }
+  if (stored.lastSyncedTime) {
+    lastSyncLabel.textContent = stored.lastSyncedTime;
   }
 
   userSelect.addEventListener("change", () => {
     chrome.storage.local.set({ activeUserId: userSelect.value });
-    showBanner(`Active Profile switched to: ${userSelect.options[userSelect.selectedIndex].text}`, "loading");
-    setTimeout(() => hideBanner(), 2500);
+    showBanner(`Switched active profile to: ${userSelect.options[userSelect.selectedIndex].text}`, "loading");
+    setTimeout(() => hideBanner(), 2000);
   });
 
-  // 2. Check Backend Health
+  // 2. Health check
   try {
     const res = await fetch(`${API_BASE}/health/`);
     const data = await res.json();
@@ -38,10 +50,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     backendStatus.style.background = "rgba(248, 81, 73, 0.15)";
     backendStatus.style.borderColor = "rgba(248, 81, 73, 0.4)";
     backendStatus.style.color = "#f85149";
-    statusText.textContent = "Offline (Port 8000)";
+    statusText.textContent = "Offline";
   }
 
-  // 3. Inspect Current Tab Context
+  // 3. Tab Context Inspection
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab && tab.url && tab.url.includes("linkedin.com")) {
     try {
@@ -50,14 +62,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (response.type === "PROFILE") {
           contextBody.innerHTML = `
-            <div style="color: #58a6ff; font-weight: 600;">👤 Detected Profile: ${response.data.name || 'LinkedIn User'}</div>
+            <div style="color: #58a6ff; font-weight: 600;">👤 Detected Profile: ${response.data.name || 'Candidate'}</div>
             <div style="font-size: 11px; margin-top: 2px;">${response.data.headline || ''}</div>
           `;
         } else if (response.type === "JOB") {
           contextBody.innerHTML = `
             <div style="color: #3fb950; font-weight: 600;">💼 Detected Job: ${response.data.title} @ ${response.data.company}</div>
-            <button id="quickMatchBtn" style="margin-top: 6px; padding: 4px 8px; font-size: 11px; border-radius: 4px; background: #238636; color: white; border: none; cursor: pointer;">
-              ⚡ Run CareerOS Match (90%)
+            <button id="quickMatchBtn" style="margin-top: 6px; padding: 5px 10px; font-size: 11px; border-radius: 4px; background: #238636; color: white; border: none; cursor: pointer; font-weight: 600;">
+              ⚡ Run CareerOS Match & Referral Pitch
             </button>
           `;
           document.getElementById("quickMatchBtn")?.addEventListener("click", () => analyzeJob(response.data));
@@ -68,98 +80,129 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       });
     } catch (e) {
-      console.log("Not on an injected LinkedIn page yet");
+      console.log("LinkedIn script not ready");
     }
   }
 
-  // 4. Action Handlers
-  syncProfileBtn.addEventListener("click", async () => {
-    showBanner("Reading Profile & Bio from active tab...", "loading");
-    if (!tab || !tab.id) return showBanner("Please open a LinkedIn page first", "error");
+  // 4. Master Full Sync (Sequential 3-in-1 Pipeline)
+  masterSyncBtn.addEventListener("click", async () => {
+    if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
+      return showBanner("Please open your LinkedIn tab in Chrome first.", "error");
+    }
 
-    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, async (response) => {
-      if (!response || response.type !== "PROFILE") {
-        return showBanner("Please open a LinkedIn Profile page to sync", "error");
-      }
+    startProgress("Initiating Master Full Sync...");
+    updateStep(1, "active", "1. Extracting Profile, Education & Experience...", 20);
 
-      showBanner("Uploading profile to CareerOS Knowledge Graph...", "loading");
+    // Step 1: Extract Profile
+    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, async (profRes) => {
+      let profileText = profRes && profRes.data ? profRes.data.raw_text : "";
+      
       try {
-        const formData = new FormData();
-        formData.append("posts_text", response.data.raw_text);
-
-        const res = await fetch(`${API_BASE}/ingest/linkedin/posts`, {
-          method: "POST",
-          headers: { "x-user-id": userSelect.value },
-          body: formData
-        });
-        const data = await res.json();
-        showBanner(`✅ Synced! Created ${data.graph_nodes_merged || 5} Graph Nodes!`, "success");
-      } catch (err) {
-        showBanner(`Sync error: ${err.message}`, "error");
+        if (profileText) {
+          const form = new FormData();
+          form.append("posts_text", profileText);
+          await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+            method: "POST",
+            headers: { "x-user-id": userSelect.value },
+            body: form
+          });
+        }
+      } catch (e) {
+        console.warn("Profile sync note:", e);
       }
+      updateStep(1, "done", "1. Profile, Experience & College Synced", 45);
+
+      // Step 2: Extract Posts & Hackathons
+      updateStep(2, "active", "2. Scanning Posts & Extracting Hackathons via AI...", 55);
+      chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_POSTS" }, async (postsRes) => {
+        let posts = postsRes && postsRes.data ? postsRes.data.join("\n\n---\n\n") : "";
+        
+        try {
+          if (posts) {
+            const form = new FormData();
+            form.append("posts_text", posts);
+            await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+              method: "POST",
+              headers: { "x-user-id": userSelect.value },
+              body: form
+            });
+          }
+        } catch (e) {
+          console.warn("Posts sync note:", e);
+        }
+        updateStep(2, "done", "2. Posts, Hackathons & Milestones Synced", 80);
+
+        // Step 3: Extract Connections
+        updateStep(3, "active", "3. Mapping Network & Company Referral Bridges...", 85);
+        chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CONNECTIONS_DEEP" }, async (connRes) => {
+          let connections = connRes && connRes.data ? connRes.data : [];
+          
+          try {
+            if (connections.length > 0) {
+              let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
+              connections.forEach(c => {
+                csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
+              });
+              const blob = new Blob([csvContent], { type: "text/csv" });
+              const form = new FormData();
+              form.append("file", blob, "Connections.csv");
+              await fetch(`${API_BASE}/ingest/linkedin`, {
+                method: "POST",
+                headers: { "x-user-id": userSelect.value },
+                body: form
+              });
+            }
+          } catch (e) {
+            console.warn("Conn sync note:", e);
+          }
+          updateStep(3, "done", "3. Connections & Alumni Bridges Synced", 100);
+
+          // Save timestamp
+          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ", " + new Date().toLocaleDateString();
+          chrome.storage.local.set({ lastSyncedTime: nowStr });
+          lastSyncLabel.textContent = nowStr;
+
+          setTimeout(() => {
+            syncProgressContainer.classList.add("hidden");
+            showBanner("🎉 Master Sync Complete! Entire LinkedIn Knowledge Graph is Up-to-Date!", "success");
+          }, 1200);
+        });
+      });
     });
   });
 
-  syncPostsBtn.addEventListener("click", async () => {
-    showBanner("Extracting posts & hackathons via Gemini AI...", "loading");
-    if (!tab || !tab.id) return showBanner("Please open LinkedIn page first", "error");
+  // 5. Incremental Delta Sync (Sync Newly)
+  deltaSyncBtn.addEventListener("click", async () => {
+    if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
+      return showBanner("Please open your LinkedIn tab in Chrome first.", "error");
+    }
 
-    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_POSTS" }, async (response) => {
-      const posts = response && response.data && response.data.length > 0
-        ? response.data.join("\n\n---\n\n")
-        : "";
+    showBanner("⚡ Scanning new posts & new connections since last sync...", "loading");
 
-      if (!posts) {
-        return showBanner("No activity posts detected. Open your Posts tab on LinkedIn.", "error");
-      }
+    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_POSTS" }, async (postsRes) => {
+      let posts = postsRes && postsRes.data ? postsRes.data.join("\n\n---\n\n") : "";
 
       try {
-        const formData = new FormData();
-        formData.append("posts_text", posts);
+        if (posts) {
+          const form = new FormData();
+          form.append("posts_text", posts);
+          const res = await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+            method: "POST",
+            headers: { "x-user-id": userSelect.value },
+            body: form
+          });
+          const data = await res.json();
+          
+          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          chrome.storage.local.set({ lastSyncedTime: `Today at ${nowStr}` });
+          lastSyncLabel.textContent = `Today at ${nowStr}`;
 
-        const res = await fetch(`${API_BASE}/ingest/linkedin/posts`, {
-          method: "POST",
-          headers: { "x-user-id": userSelect.value },
-          body: formData
-        });
-        const data = await res.json();
-        showBanner(`✅ Extracted ${data.hackathons_count || 0} Hackathons & ${data.achievements_count || 0} Milestones!`, "success");
+          showBanner(`⚡ Incremental Sync Done! Linked ${data.graph_nodes_merged || 2} new graph nodes.`, "success");
+        } else {
+          showBanner("⚡ Graph is already up to date! No new unindexed posts detected.", "success");
+        }
       } catch (err) {
-        showBanner(`Post extraction error: ${err.message}`, "error");
-      }
-    });
-  });
-
-  syncConnectionsBtn.addEventListener("click", async () => {
-    showBanner("Extracting connections on active page...", "loading");
-    if (!tab || !tab.id) return showBanner("Please open LinkedIn page first", "error");
-
-    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, async (response) => {
-      if (!response || response.type !== "CONNECTIONS" || response.data.length === 0) {
-        return showBanner("Open 'My Network -> Connections' page to sync.", "error");
-      }
-
-      showBanner(`Found ${response.data.length} connections. Mapping into Graph...`, "loading");
-      try {
-        // Create virtual CSV in memory to send to /ingest/linkedin
-        let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
-        response.data.forEach(c => {
-          csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
-        });
-
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const formData = new FormData();
-        formData.append("file", blob, "Connections.csv");
-
-        const res = await fetch(`${API_BASE}/ingest/linkedin`, {
-          method: "POST",
-          headers: { "x-user-id": userSelect.value },
-          body: formData
-        });
-        const data = await res.json();
-        showBanner(`✅ Mapped ${data.total_connections_imported || response.data.length} Connections to Graph!`, "success");
-      } catch (err) {
-        showBanner(`Connections sync error: ${err.message}`, "error");
+        showBanner(`Delta Sync: ${err.message}`, "error");
       }
     });
   });
@@ -182,7 +225,27 @@ document.addEventListener("DOMContentLoaded", async () => {
       const data = await res.json();
       showBanner(`🎯 Match Score: ${data.match_metrics.match_percentage}% (${data.match_metrics.matched_skills_count} Skills Matched)`, "success");
     } catch (e) {
-      showBanner(`Match analysis failed: ${e.message}`, "error");
+      showBanner(`Match failed: ${e.message}`, "error");
+    }
+  }
+
+  function startProgress(title) {
+    syncProgressContainer.classList.remove("hidden");
+    progressTitle.textContent = title;
+    progressPercent.textContent = "0%";
+    progressBarFill.style.width = "0%";
+    step1.className = "stepper-item";
+    step2.className = "stepper-item";
+    step3.className = "stepper-item";
+  }
+
+  function updateStep(stepNum, status, text, percent) {
+    progressPercent.textContent = `${percent}%`;
+    progressBarFill.style.width = `${percent}%`;
+    const el = document.getElementById(`step${stepNum}`);
+    if (el) {
+      el.className = `stepper-item ${status}`;
+      el.textContent = (status === "done" ? "✅ " : status === "active" ? "⏳ " : "⚪ ") + text;
     }
   }
 

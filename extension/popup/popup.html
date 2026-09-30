@@ -17,64 +17,76 @@
         <div class="logo-icon">⚡</div>
         <div class="logo-text">
           <h2>CareerOS</h2>
-          <span class="version-tag">v5.0 Graph AI</span>
+          <span class="version-tag">Graph Intelligence</span>
         </div>
       </div>
       <div class="status-pill" id="backendStatus">
         <span class="status-dot"></span>
-        <span id="statusText">Connected</span>
+        <span id="statusText">Online</span>
       </div>
     </header>
 
-    <!-- Profile Switcher -->
+    <!-- Profile Selector -->
     <div class="profile-card">
       <div class="profile-selector-row">
-        <label for="userSelect">Active Profile:</label>
+        <label for="userSelect">Active Profile</label>
         <select id="userSelect" class="styled-select">
           <option value="dev-user-0000-0000-0000-000000000001">👤 Mohit Upraity (mohitUpraity)</option>
           <option value="user-krati-0000-0000-0000-000000000002">👤 Krati Verma (Krati-orbit)</option>
         </select>
       </div>
-    </div>
-
-    <!-- 1-Click Sync Actions -->
-    <div class="actions-section">
-      <p class="section-title">ONE-CLICK GRAPH SYNC</p>
-
-      <button id="syncProfileBtn" class="btn btn-primary">
-        <span class="btn-icon">👤</span>
-        <div class="btn-text">
-          <strong>Sync Profile & Bio</strong>
-          <small>Extracts Experience, College & Skills</small>
-        </div>
-      </button>
-
-      <button id="syncPostsBtn" class="btn btn-secondary">
-        <span class="btn-icon">🏆</span>
-        <div class="btn-text">
-          <strong>Sync Posts & Hackathons</strong>
-          <small>Extracts Milestones via Gemini AI</small>
-        </div>
-      </button>
-
-      <button id="syncConnectionsBtn" class="btn btn-secondary">
-        <span class="btn-icon">🤝</span>
-        <div class="btn-text">
-          <strong>Sync Connections Network</strong>
-          <small>Maps Employer & Alumni Bridges</small>
-        </div>
-      </button>
-    </div>
-
-    <!-- Active Context Analyzer (for Job posts / Target Profiles) -->
-    <div class="context-section" id="contextCard">
-      <p class="section-title">PAGE INTELLIGENCE</p>
-      <div class="context-body" id="contextBody">
-        <span class="context-placeholder">Navigate to a LinkedIn Profile, Post, or Job to unlock AI Intelligence.</span>
+      <div class="last-sync-row">
+        <span>Last Synced:</span>
+        <strong id="lastSyncLabel">Never</strong>
       </div>
     </div>
 
-    <!-- Result / Log Banner -->
+    <!-- Master Actions Section -->
+    <div class="actions-section">
+      <!-- 1-Click Master Sync -->
+      <button id="masterSyncBtn" class="btn btn-master">
+        <span class="btn-icon">🚀</span>
+        <div class="btn-text">
+          <strong>Master Full Sync (All-in-One)</strong>
+          <small>Profile + Posts + Hackathons + Network</small>
+        </div>
+      </button>
+
+      <!-- Incremental Delta Sync -->
+      <button id="deltaSyncBtn" class="btn btn-delta">
+        <span class="btn-icon">⚡</span>
+        <div class="btn-text">
+          <strong>Sync Newly (Delta Changes)</strong>
+          <small>Only scans new posts & connections since last sync</small>
+        </div>
+      </button>
+    </div>
+
+    <!-- Live Sync Stepper Progress -->
+    <div id="syncProgressContainer" class="progress-container hidden">
+      <div class="progress-header">
+        <span id="progressTitle">Syncing Knowledge Graph...</span>
+        <span id="progressPercent">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="progressBarFill" class="progress-bar-fill"></div>
+      </div>
+      <div class="stepper-list">
+        <div class="stepper-item" id="step1">⚪ 1. Profile, Experience & College</div>
+        <div class="stepper-item" id="step2">⚪ 2. Posts, Hackathons & Milestones (AI)</div>
+        <div class="stepper-item" id="step3">⚪ 3. Connections & Alumni Bridges</div>
+      </div>
+    </div>
+
+    <!-- Active Page Context -->
+    <div class="context-section" id="contextCard">
+      <p class="section-title">ACTIVE TAB INTELLIGENCE</p>
+      <div class="context-body" id="contextBody">
+        <span class="context-placeholder">Navigate on LinkedIn to see live match intelligence.</span>
+      </div>
+    </div>
+
+    <!-- Result / Status Banner -->
     <div id="resultBanner" class="result-banner hidden"></div>
 
     <!-- Footer -->

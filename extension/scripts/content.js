@@ -25,6 +25,9 @@
     } else if (request.action === "EXTRACT_POSTS") {
       const posts = extractRecentPosts();
       sendResponse({ type: "POSTS", data: posts });
+    } else if (request.action === "EXTRACT_CONNECTIONS_DEEP") {
+      const connData = extractConnectionsData();
+      sendResponse({ type: "CONNECTIONS", data: connData });
     }
     return true; // Keep message channel open for async response
   });
