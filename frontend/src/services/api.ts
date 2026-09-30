@@ -107,8 +107,15 @@ export const apiService = {
   async uploadResumePdf(file: File, headers: Record<string, string>): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
-    const reqHeaders = { ...headers };
-    delete reqHeaders['Content-Type'];
+    
+    // Copy auth headers but do NOT set Content-Type header so browser sets multipart/form-data boundary automatically
+    const reqHeaders: Record<string, string> = {};
+    if (headers['Authorization'] || headers['authorization']) {
+      reqHeaders['Authorization'] = headers['Authorization'] || headers['authorization'];
+    }
+    if (headers['x-user-id']) {
+      reqHeaders['x-user-id'] = headers['x-user-id'];
+    }
 
     const res = await fetch(`${API_BASE}/api/v1/ingest/resume`, {
       method: 'POST',

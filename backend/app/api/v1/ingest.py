@@ -179,39 +179,48 @@ async def ingest_candidate_resume(
             detail="No PDF file provided in upload"
         )
 
-    # 1. Extract digital text stream
-    raw_text = resume_service.extract_text_from_pdf(pdf_bytes)
-    if not raw_text:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Failed to extract text from PDF document"
+    try:
+        # 1. Extract digital text stream
+        raw_text = resume_service.extract_text_from_pdf(pdf_bytes)
+        if not raw_text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Failed to extract text from PDF document"
+            )
+
+        # 2. Parse into structured JSON layout blueprint
+        blueprint = await resume_service.parse_resume_to_blueprint(raw_text)
+
+        # 3. Upsert into Neo4j Graph
+        nodes_merged = await neo4j_service.upsert_user_resume_blueprint(
+            user_id=user_id,
+            blueprint=blueprint
         )
 
-    # 2. Parse into structured JSON layout blueprint
-    blueprint = await resume_service.parse_resume_to_blueprint(raw_text)
+        all_skills = []
+        for cat in blueprint.skills:
+            all_skills.extend(cat.skills)
 
-    # 3. Upsert into Neo4j Graph
-    nodes_merged = await neo4j_service.upsert_user_resume_blueprint(
-        user_id=user_id,
-        blueprint=blueprint
-    )
+        universities = [edu.university for edu in blueprint.education if edu.university]
+        companies = [exp.company for exp in blueprint.experience if exp.company]
 
-    all_skills = []
-    for cat in blueprint.skills:
-        all_skills.extend(cat.skills)
-
-    universities = [edu.university for edu in blueprint.education if edu.university]
-    companies = [exp.company for exp in blueprint.experience if exp.company]
-
-    return ResumeIngestResponse(
-        status="success",
-        user_id=user_id,
-        blueprint=blueprint,
-        total_skills_extracted=len(set(all_skills)),
-        universities_mapped=universities,
-        companies_mapped=companies,
-        graph_nodes_merged=nodes_merged
-    )
+        return ResumeIngestResponse(
+            status="success",
+            user_id=user_id,
+            blueprint=blueprint,
+            total_skills_extracted=len(set(all_skills)),
+            universities_mapped=universities,
+            companies_mapped=companies,
+            graph_nodes_merged=nodes_merged
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing resume upload: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Resume processing failed: {str(e)}"
+        )
 
 @router.post("/linkedin")
 async def ingest_linkedin_connections(
