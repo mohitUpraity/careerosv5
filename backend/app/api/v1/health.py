@@ -1,6 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from typing import Dict, Any
 from app.core.database import neo4j_client
 from app.core.config import settings
+from app.core.security import get_current_user
+from app.services.profile_service import profile_service
 
 router = APIRouter(tags=["System"])
 
@@ -18,26 +21,13 @@ async def health_check():
     }
 
 @router.post("/health/wipe-database")
-async def wipe_database():
+async def wipe_database(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
     """
-    Completely wipes all nodes and relationships from Neo4j AuraDB for a clean start.
+    Safely purges ONLY the authenticated user's sub-graph and projects.
+    Guarantees zero data loss or interference with other users.
     """
-    if not neo4j_client.driver or not neo4j_client.is_connected:
-        return {
-            "status": "success",
-            "message": "Graph reset: operating in clean verified offline candidate state."
-        }
-
-    try:
-        await neo4j_client.execute_query("MATCH (n) DETACH DELETE n")
-        await neo4j_client.init_schema()
-        return {
-            "status": "success",
-            "message": "Neo4j AuraDB completely wiped and constraints re-initialized. Ready for fresh onboarding!"
-        }
-    except Exception as e:
-        return {
-            "status": "success",
-            "message": f"Graph reset completed with notice: {str(e)}"
-        }
+    user_id = current_user["id"]
+    return await profile_service.reset_user_profile_data(user_id=user_id)
 

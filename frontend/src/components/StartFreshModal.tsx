@@ -28,13 +28,14 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
   const handleWipeDatabase = async () => {
     setLoading(true);
     setActionStep('progress');
-    setStatusMessage('Wiping Neo4j AuraDB graph and re-initializing constraints...');
+    setStatusMessage('Purging your personal graph sub-nodes in Neo4j AuraDB...');
     try {
-      await apiService.wipeDatabase(getAuthHeaders());
-      setStatusMessage('Graph successfully wiped! Re-seeding candidate repos and LinkedIn network...');
+      await apiService.resetProfile(getAuthHeaders());
       
-      // Auto re-ingest default candidate repos
-      await apiService.ingestGithub(githubUser, getAuthHeaders());
+      if (githubUser.trim()) {
+        setStatusMessage(`Re-indexing GitHub repositories for @${githubUser.trim()}...`);
+        await apiService.ingestGithub(githubUser.trim(), getAuthHeaders());
+      }
       
       if (selectedFile) {
         setStatusMessage('Uploading and parsing LinkedIn Connections CSV...');
@@ -42,7 +43,7 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
       }
 
       setActionStep('done');
-      onSuccess('CareerOS graph reset complete! Clean database ready.');
+      onSuccess('Your personal CareerOS graph was reset successfully. Other accounts are untouched.');
     } catch (err: any) {
       console.error(err);
       onError(err.message || 'Failed to complete reset');
@@ -73,10 +74,10 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-              Database Reset & Fresh Start
+              Reset Personal Graph & Profile
             </h3>
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Purge stale graph data and re-index clean candidate profile
+              Purge your synced repos and start fresh (Scoped to your account)
             </p>
           </div>
         </div>
@@ -92,9 +93,9 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
             >
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" style={{ color: 'var(--warning-600)' }} />
               <div>
-                <p className="font-semibold" style={{ color: 'var(--warning-600)' }}>Warning</p>
+                <p className="font-semibold" style={{ color: 'var(--warning-600)' }}>Account-Scoped Action</p>
                 <p className="mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  This will wipe all existing nodes and relationships for the active profile ({activeProfile.name}) in Neo4j AuraDB and rebuild clean schemas.
+                  This will delete only your personal repositories, skills, and connections for <strong>{activeProfile.name}</strong>. No other user or global database record will be affected.
                 </p>
               </div>
             </div>
@@ -102,14 +103,14 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
             <div>
               <label className="block text-xs font-medium mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
                 <Github className="w-4 h-4" />
-                GitHub Username to Index:
+                Optional: Re-sync GitHub Username right away:
               </label>
               <input
                 type="text"
                 value={githubUser}
                 onChange={(e) => setGithubUser(e.target.value)}
                 className="input-base w-full"
-                placeholder="e.g. mohitUpraity"
+                placeholder="Leave blank to start with an empty graph"
               />
             </div>
 
@@ -140,11 +141,11 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
                 type="button"
                 onClick={handleWipeDatabase}
                 disabled={loading}
-                className="px-4 py-2.5 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-all"
+                className="px-4 py-2.5 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
                 style={{ backgroundColor: 'var(--error-600)' }}
               >
                 <Trash2 className="w-4 h-4" />
-                Wipe & Start Fresh
+                Reset My Profile
               </button>
             </div>
           </div>
@@ -164,10 +165,10 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
           <div className="py-6 text-center space-y-4">
             <CheckCircle2 className="w-12 h-12 mx-auto" style={{ color: 'var(--success-600)' }} />
             <h4 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-              Database Fresh Start Complete!
+              Profile Reset Complete!
             </h4>
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              All stale records removed. Fresh graph seeded and ready for match analysis.
+              Your personal graph has been cleared safely without affecting any other users.
             </p>
             <div className="pt-4">
               <button
@@ -176,7 +177,7 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
                   onClose();
                   window.location.reload();
                 }}
-                className="px-5 py-2.5 text-white rounded-lg text-xs font-semibold"
+                className="px-5 py-2.5 text-white rounded-lg text-xs font-semibold cursor-pointer"
                 style={{ backgroundColor: 'var(--brand-600)' }}
               >
                 Reload Dashboard

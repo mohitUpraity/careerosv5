@@ -94,13 +94,17 @@ export const apiService = {
     return await res.json();
   },
 
-  async wipeDatabase(headers: Record<string, string>): Promise<{ status: string; message: string }> {
-    const res = await fetch(`${API_BASE}/api/v1/health/wipe-database`, {
+  async resetProfile(headers: Record<string, string>): Promise<{ status: string; message: string }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/reset`, {
       method: 'POST',
       headers,
     });
-    if (!res.ok) throw new Error(`Failed to wipe database (${res.status})`);
+    if (!res.ok) throw new Error(`Failed to reset profile (${res.status})`);
     return await res.json();
+  },
+
+  async wipeDatabase(headers: Record<string, string>): Promise<{ status: string; message: string }> {
+    return await this.resetProfile(headers);
   },
 
   async getGithubSyncStatus(username: string, headers: Record<string, string>, token?: string): Promise<{

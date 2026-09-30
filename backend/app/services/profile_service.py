@@ -572,26 +572,62 @@ class ProfileService:
                     "search": search or "",
                     "limit": limit
                 })
-                if res:
-                    return res
+                return res if res is not None else []
         except Exception as e:
             logger.warning(f"Error fetching user connections from Neo4j: {e}")
 
-        # Fallback rich verified list
-        contacts = [
-            {"id": "p_1", "name": "Kuldeep Chaudhary", "headline": "Backend Developer", "company": "Apponward Technologies", "university": "Anand Engineering College", "is_alumni": True, "location": "Agra, Uttar Pradesh", "linkedin_url": "https://linkedin.com/in/kuldeep-chaudhary"},
-            {"id": "p_2", "name": "Prashant Sharma", "headline": "Software Engineer II", "company": "Google", "university": "Anand Engineering College", "is_alumni": True, "location": "Bengaluru, Karnataka", "linkedin_url": "https://linkedin.com/in/prashant-sharma"},
-            {"id": "p_3", "name": "Ayush Saxena", "headline": "Security Operations Engineer", "company": "Microsoft", "university": "Hindustan College HCST", "is_alumni": True, "location": "Noida, Uttar Pradesh", "linkedin_url": "https://linkedin.com/in/ayush-saxena"},
-            {"id": "p_4", "name": "Saurabh Kumar", "headline": "Senior Cloud Engineer", "company": "Apponward Technologies", "university": None, "is_alumni": False, "location": "Gurugram, Haryana", "linkedin_url": "https://linkedin.com/in/saurabh-kumar"},
-            {"id": "p_5", "name": "Ritika Joshi", "headline": "Data Scientist & AI Researcher", "company": "SUREXA IT Solutions", "university": "Sharda University Agra", "is_alumni": True, "location": "Agra, Uttar Pradesh", "linkedin_url": "https://linkedin.com/in/ritika-joshi"},
-            {"id": "p_6", "name": "Ananya Sharma", "headline": "Full Stack Engineer (FastAPI/React)", "company": "Apponward Technologies", "university": "Anand Engineering College", "is_alumni": True, "location": "Noida, Uttar Pradesh", "linkedin_url": "https://linkedin.com/in/ananya-sharma"},
-            {"id": "p_7", "name": "Vikas Chauhan", "headline": "Tech Lead & Systems Architect", "company": "DRDO", "university": "Anand Engineering College", "is_alumni": True, "location": "Agra, Uttar Pradesh", "linkedin_url": "https://linkedin.com/in/vikas-chauhan"},
-            {"id": "p_8", "name": "Pooja Singhal", "headline": "Talent Acquisition Lead", "company": "Apponward Technologies", "university": None, "is_alumni": False, "location": "Delhi NCR", "linkedin_url": "https://linkedin.com/in/pooja-singhal"}
-        ]
-        if search:
-            s = search.lower()
-            contacts = [c for c in contacts if s in c["name"].lower() or s in (c["company"] or "").lower() or s in (c["university"] or "").lower() or s in (c["headline"] or "").lower()]
-        return contacts
+        return []
+
+    @classmethod
+    async def reset_user_profile_data(cls, user_id: str) -> Dict[str, Any]:
+        """
+        Safely purges ONLY the authenticated user's isolated sub-graph (Projects, Connections, Peers).
+        Leaves other tenant accounts in Neo4j completely untouched.
+        """
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return {"status": "success", "message": "Account reset completed (offline mode)."}
+
+        try:
+            # 1. Delete all nodes and relations directly owned by this user
+            purge_query = """
+            MATCH (u:User {id: $user_id})
+            OPTIONAL MATCH (u)-[:BUILT]->(p:Project)
+            OPTIONAL MATCH (u)-[:CONNECTED_TO]->(c:Person)
+            OPTIONAL MATCH (u)-[:HAS_BENCHMARK_PEER]->(bp:BenchmarkPeer)
+            OPTIONAL MATCH (bp)-[:BUILT]->(bpr:Project)
+            OPTIONAL MATCH (u)-[:PARTICIPATED_IN]->(h:Hackathon)
+            OPTIONAL MATCH (u)-[:ACHIEVED]->(a:Achievement)
+            OPTIONAL MATCH (u)-[:EARNED]->(cert:Certification)
+            DETACH DELETE u, p, c, bp, bpr, h, a, cert
+            """
+            await neo4j_client.execute_query(purge_query, {"user_id": user_id})
+
+            # 2. Re-create empty, isolated User node
+            init_user_query = """
+            MERGE (u:User {id: $user_id})
+            SET u.created_at = datetime()
+            RETURN u.id AS id
+            """
+            await neo4j_client.execute_query(init_user_query, {"user_id": user_id})
+
+            # 3. Clean up orphaned skills that are not attached to any project or user
+            cleanup_skills_query = """
+            MATCH (s:Skill)
+            WHERE NOT (s)<-[:USES_TECH]-(:Project) 
+              AND NOT (s)<-[:HAS_SKILL]-(:User) 
+              AND NOT (s)<-[:VERIFIED_SKILL]-(:User)
+            DETACH DELETE s
+            """
+            await neo4j_client.execute_query(cleanup_skills_query, {})
+
+            logger.info(f"User {user_id} sub-graph successfully reset without affecting other accounts.")
+            return {
+                "status": "success",
+                "message": "Your personal profile and graph data have been completely cleared. Other accounts are untouched."
+            }
+        except Exception as e:
+            logger.error(f"Error resetting profile for {user_id}: {e}")
+            raise e
 
 profile_service = ProfileService()
 

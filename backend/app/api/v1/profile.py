@@ -65,3 +65,19 @@ async def get_connections(
         logger.error(f"Failed to fetch connections for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/reset", response_model=Dict[str, Any])
+async def reset_current_user_profile(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Safely purges ONLY the authenticated user's personal graph & repos.
+    """
+    user_id = current_user["id"]
+    try:
+        res = await profile_service.reset_user_profile_data(user_id=user_id)
+        return res
+    except Exception as e:
+        logger.error(f"Failed to reset profile for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
