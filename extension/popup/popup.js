@@ -1,5 +1,5 @@
 /**
- * CareerOS Popup Controller with Master Full Sync & Incremental Delta Sync
+ * CareerOS Popup Controller - Clean, Modern Graph Co-Pilot Interface
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -11,8 +11,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const deltaSyncBtn = document.getElementById("deltaSyncBtn");
   const contextBody = document.getElementById("contextBody");
   const resultBanner = document.getElementById("resultBanner");
+  const toastMsg = document.getElementById("toastMsg");
+  const toastIcon = document.getElementById("toastIcon");
 
-  // Progress UI
+  // Stepper Elements
   const syncProgressContainer = document.getElementById("syncProgressContainer");
   const progressTitle = document.getElementById("progressTitle");
   const progressPercent = document.getElementById("progressPercent");
@@ -23,7 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const API_BASE = "http://localhost:8000/api/v1";
 
-  // 1. Load saved preferences
+  // 1. Load active profile & last sync time
   const stored = await chrome.storage.local.get(["activeUserId", "lastSyncedTime"]);
   if (stored.activeUserId) {
     userSelect.value = stored.activeUserId;
@@ -34,8 +36,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   userSelect.addEventListener("change", () => {
     chrome.storage.local.set({ activeUserId: userSelect.value });
-    showBanner(`Switched active profile to: ${userSelect.options[userSelect.selectedIndex].text}`, "loading");
-    setTimeout(() => hideBanner(), 2000);
+    const selectedName = userSelect.options[userSelect.selectedIndex].text.split(" (")[0];
+    showToast(`Active profile: ${selectedName}`, "loading");
+    setTimeout(() => hideToast(), 1800);
   });
 
   // 2. Health check
@@ -47,9 +50,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       statusText.textContent = "Online";
     }
   } catch (e) {
-    backendStatus.style.background = "rgba(248, 81, 73, 0.15)";
-    backendStatus.style.borderColor = "rgba(248, 81, 73, 0.4)";
-    backendStatus.style.color = "#f85149";
+    backendStatus.classList.add("error");
     statusText.textContent = "Offline";
   }
 
@@ -62,20 +63,37 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (response.type === "PROFILE") {
           contextBody.innerHTML = `
-            <div style="color: #58a6ff; font-weight: 600;">👤 Detected Profile: ${response.data.name || 'Candidate'}</div>
-            <div style="font-size: 11px; margin-top: 2px;">${response.data.headline || ''}</div>
+            <div class="context-item">
+              <div class="context-title">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                ${escapeHtml(response.data.name || 'Candidate Profile')}
+              </div>
+              <div class="context-sub">${escapeHtml(response.data.headline || '')}</div>
+            </div>
           `;
         } else if (response.type === "JOB") {
           contextBody.innerHTML = `
-            <div style="color: #3fb950; font-weight: 600;">💼 Detected Job: ${response.data.title} @ ${response.data.company}</div>
-            <button id="quickMatchBtn" style="margin-top: 6px; padding: 5px 10px; font-size: 11px; border-radius: 4px; background: #238636; color: white; border: none; cursor: pointer; font-weight: 600;">
-              ⚡ Run CareerOS Match & Referral Pitch
-            </button>
+            <div class="context-item">
+              <div class="context-title">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                ${escapeHtml(response.data.title)} @ ${escapeHtml(response.data.company)}
+              </div>
+              <button id="quickMatchBtn" class="btn-mini">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Run Match & Generate Referral Pitch
+              </button>
+            </div>
           `;
           document.getElementById("quickMatchBtn")?.addEventListener("click", () => analyzeJob(response.data));
         } else if (response.type === "CONNECTIONS") {
           contextBody.innerHTML = `
-            <div style="color: #d29922; font-weight: 600;">🤝 Connections Page: ${response.data.length} contacts visible</div>
+            <div class="context-item">
+              <div class="context-title">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Connections (${response.data.length} visible)
+              </div>
+              <div class="context-sub">Ready to map into Neo4j graph cluster.</div>
+            </div>
           `;
         }
       });
@@ -87,11 +105,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 4. Master Full Sync (Sequential 3-in-1 Pipeline)
   masterSyncBtn.addEventListener("click", async () => {
     if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
-      return showBanner("Please open your LinkedIn tab in Chrome first.", "error");
+      return showToast("Please open a LinkedIn tab in Chrome first.", "error");
     }
 
     startProgress("Initiating Master Full Sync...");
-    updateStep(1, "active", "1. Extracting Profile, Education & Experience...", 20);
+    updateStep(1, "active", 20);
 
     // Step 1: Extract Profile
     chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, async (profRes) => {
@@ -108,12 +126,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           });
         }
       } catch (e) {
-        console.warn("Profile sync note:", e);
+        console.warn("Profile sync:", e);
       }
-      updateStep(1, "done", "1. Profile, Experience & College Synced", 45);
+      updateStep(1, "done", 40);
 
       // Step 2: Extract Posts & Hackathons
-      updateStep(2, "active", "2. Scanning Posts & Extracting Hackathons via AI...", 55);
+      updateStep(2, "active", 60);
       chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_POSTS" }, async (postsRes) => {
         let posts = postsRes && postsRes.data ? postsRes.data.join("\n\n---\n\n") : "";
         
@@ -128,12 +146,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
           }
         } catch (e) {
-          console.warn("Posts sync note:", e);
+          console.warn("Posts sync:", e);
         }
-        updateStep(2, "done", "2. Posts, Hackathons & Milestones Synced", 80);
+        updateStep(2, "done", 80);
 
         // Step 3: Extract Connections
-        updateStep(3, "active", "3. Mapping Network & Company Referral Bridges...", 85);
+        updateStep(3, "active", 88);
         chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CONNECTIONS_DEEP" }, async (connRes) => {
           let connections = connRes && connRes.data ? connRes.data : [];
           
@@ -153,19 +171,19 @@ document.addEventListener("DOMContentLoaded", async () => {
               });
             }
           } catch (e) {
-            console.warn("Conn sync note:", e);
+            console.warn("Conn sync:", e);
           }
-          updateStep(3, "done", "3. Connections & Alumni Bridges Synced", 100);
+          updateStep(3, "done", 100);
 
           // Save timestamp
-          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ", " + new Date().toLocaleDateString();
-          chrome.storage.local.set({ lastSyncedTime: nowStr });
-          lastSyncLabel.textContent = nowStr;
+          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          chrome.storage.local.set({ lastSyncedTime: `Today, ${nowStr}` });
+          lastSyncLabel.textContent = `Today, ${nowStr}`;
 
           setTimeout(() => {
             syncProgressContainer.classList.add("hidden");
-            showBanner("🎉 Master Sync Complete! Entire LinkedIn Knowledge Graph is Up-to-Date!", "success");
-          }, 1200);
+            showToast("Master Sync Complete. Graph up to date!", "success");
+          }, 1000);
         });
       });
     });
@@ -174,10 +192,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // 5. Incremental Delta Sync (Sync Newly)
   deltaSyncBtn.addEventListener("click", async () => {
     if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
-      return showBanner("Please open your LinkedIn tab in Chrome first.", "error");
+      return showToast("Please open a LinkedIn tab in Chrome first.", "error");
     }
 
-    showBanner("⚡ Scanning new posts & new connections since last sync...", "loading");
+    showToast("Scanning for new posts & connections...", "loading");
 
     chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_POSTS" }, async (postsRes) => {
       let posts = postsRes && postsRes.data ? postsRes.data.join("\n\n---\n\n") : "";
@@ -194,21 +212,21 @@ document.addEventListener("DOMContentLoaded", async () => {
           const data = await res.json();
           
           const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          chrome.storage.local.set({ lastSyncedTime: `Today at ${nowStr}` });
-          lastSyncLabel.textContent = `Today at ${nowStr}`;
+          chrome.storage.local.set({ lastSyncedTime: `Today, ${nowStr}` });
+          lastSyncLabel.textContent = `Today, ${nowStr}`;
 
-          showBanner(`⚡ Incremental Sync Done! Linked ${data.graph_nodes_merged || 2} new graph nodes.`, "success");
+          showToast(`Delta sync complete! Indexed ${data.graph_nodes_merged || 2} new graph nodes.`, "success");
         } else {
-          showBanner("⚡ Graph is already up to date! No new unindexed posts detected.", "success");
+          showToast("Knowledge Graph is already up to date.", "success");
         }
       } catch (err) {
-        showBanner(`Delta Sync: ${err.message}`, "error");
+        showToast(`Sync failed: ${err.message}`, "error");
       }
     });
   });
 
   async function analyzeJob(jobData) {
-    showBanner(`Analyzing match against ${jobData.company}...`, "loading");
+    showToast(`Analyzing match against ${jobData.company}...`, "loading");
     try {
       const res = await fetch(`${API_BASE}/matches/analyze`, {
         method: "POST",
@@ -223,9 +241,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
       });
       const data = await res.json();
-      showBanner(`🎯 Match Score: ${data.match_metrics.match_percentage}% (${data.match_metrics.matched_skills_count} Skills Matched)`, "success");
+      showToast(`Match: ${data.match_metrics.match_percentage}% fit (${data.match_metrics.matched_skills_count} skills matched)`, "success");
     } catch (e) {
-      showBanner(`Match failed: ${e.message}`, "error");
+      showToast(`Match failed: ${e.message}`, "error");
     }
   }
 
@@ -234,28 +252,41 @@ document.addEventListener("DOMContentLoaded", async () => {
     progressTitle.textContent = title;
     progressPercent.textContent = "0%";
     progressBarFill.style.width = "0%";
-    step1.className = "stepper-item";
-    step2.className = "stepper-item";
-    step3.className = "stepper-item";
+    step1.className = "stepper-step";
+    step2.className = "stepper-step";
+    step3.className = "stepper-step";
   }
 
-  function updateStep(stepNum, status, text, percent) {
+  function updateStep(stepNum, status, percent) {
     progressPercent.textContent = `${percent}%`;
     progressBarFill.style.width = `${percent}%`;
     const el = document.getElementById(`step${stepNum}`);
     if (el) {
-      el.className = `stepper-item ${status}`;
-      el.textContent = (status === "done" ? "✅ " : status === "active" ? "⏳ " : "⚪ ") + text;
+      el.className = `stepper-step ${status}`;
     }
   }
 
-  function showBanner(msg, type) {
-    resultBanner.className = `result-banner ${type}`;
-    resultBanner.textContent = msg;
+  function showToast(msg, type) {
+    resultBanner.className = `toast-banner ${type}`;
+    toastMsg.textContent = msg;
+
+    if (type === "success") {
+      toastIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+    } else if (type === "error") {
+      toastIcon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    } else {
+      toastIcon.innerHTML = `<svg class="icon-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`;
+    }
+
     resultBanner.classList.remove("hidden");
   }
 
-  function hideBanner() {
+  function hideToast() {
     resultBanner.classList.add("hidden");
+  }
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 });
