@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareerOS Co-Pilot</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-row">
+        <div class="logo-icon">⚡</div>
+        <div class="logo-text">
+          <h2>CareerOS</h2>
+          <span class="version-tag">v5.0 Graph AI</span>
+        </div>
+      </div>
+      <div class="status-pill" id="backendStatus">
+        <span class="status-dot"></span>
+        <span id="statusText">Connected</span>
+      </div>
+    </header>
+
+    <!-- Profile Switcher -->
+    <div class="profile-card">
+      <div class="profile-selector-row">
+        <label for="userSelect">Active Profile:</label>
+        <select id="userSelect" class="styled-select">
+          <option value="dev-user-0000-0000-0000-000000000001">👤 Mohit Upraity (mohitUpraity)</option>
+          <option value="user-krati-0000-0000-0000-000000000002">👤 Krati Verma (Krati-orbit)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 1-Click Sync Actions -->
+    <div class="actions-section">
+      <p class="section-title">ONE-CLICK GRAPH SYNC</p>
+
+      <button id="syncProfileBtn" class="btn btn-primary">
+        <span class="btn-icon">👤</span>
+        <div class="btn-text">
+          <strong>Sync Profile & Bio</strong>
+          <small>Extracts Experience, College & Skills</small>
+        </div>
+      </button>
+
+      <button id="syncPostsBtn" class="btn btn-secondary">
+        <span class="btn-icon">🏆</span>
+        <div class="btn-text">
+          <strong>Sync Posts & Hackathons</strong>
+          <small>Extracts Milestones via Gemini AI</small>
+        </div>
+      </button>
+
+      <button id="syncConnectionsBtn" class="btn btn-secondary">
+        <span class="btn-icon">🤝</span>
+        <div class="btn-text">
+          <strong>Sync Connections Network</strong>
+          <small>Maps Employer & Alumni Bridges</small>
+        </div>
+      </button>
+    </div>
+
+    <!-- Active Context Analyzer (for Job posts / Target Profiles) -->
+    <div class="context-section" id="contextCard">
+      <p class="section-title">PAGE INTELLIGENCE</p>
+      <div class="context-body" id="contextBody">
+        <span class="context-placeholder">Navigate to a LinkedIn Profile, Post, or Job to unlock AI Intelligence.</span>
+      </div>
+    </div>
+
+    <!-- Result / Log Banner -->
+    <div id="resultBanner" class="result-banner hidden"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <a href="http://localhost:8000/docs" target="_blank" class="footer-link">Swagger Docs</a>
+      <span class="divider">•</span>
+      <a href="http://localhost:3000/profile" target="_blank" class="footer-link">Web Dashboard</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
