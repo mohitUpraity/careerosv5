@@ -20,7 +20,7 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [actionStep, setActionStep] = useState<'confirm' | 'progress' | 'done'>('confirm');
   const [statusMessage, setStatusMessage] = useState('');
-  const [githubUser, setGithubUser] = useState('mohitUpraity');
+  const [githubUser, setGithubUser] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   if (!isOpen) return null;

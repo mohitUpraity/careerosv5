@@ -69,13 +69,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
           }}
         >
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <img
-                src={activeProfile.avatar}
-                alt={activeProfile.name}
-                className="w-10 h-10 rounded-lg object-cover"
-                style={{ border: '2px solid var(--border-primary)' }}
-              />
+            <div className="relative shrink-0">
+              {activeProfile.avatar ? (
+                <img
+                  src={activeProfile.avatar}
+                  alt={activeProfile.name}
+                  className="w-10 h-10 rounded-lg object-cover"
+                  style={{ border: '2px solid var(--border-primary)' }}
+                />
+              ) : (
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm bg-blue-600 text-white"
+                  style={{ border: '2px solid var(--border-primary)' }}
+                >
+                  {(activeProfile.name || 'U').charAt(0).toUpperCase()}
+                </div>
+              )}
               <span
                 className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full"
                 style={{
@@ -92,17 +101,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
               <p className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
                 {activeProfile.role}
               </p>
-              <a
-                href={`https://github.com/${activeProfile.githubUser}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] font-mono mt-0.5"
-                style={{ color: 'var(--brand-600)' }}
-              >
-                <Code2 className="w-3 h-3" />
-                @{activeProfile.githubUser}
-                <ExternalLink className="w-2.5 h-2.5" />
-              </a>
+              {activeProfile.githubUser ? (
+                <a
+                  href={`https://github.com/${activeProfile.githubUser}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[10px] font-mono mt-0.5"
+                  style={{ color: 'var(--brand-600)' }}
+                >
+                  <Code2 className="w-3 h-3" />
+                  @{activeProfile.githubUser}
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] font-mono mt-0.5 text-slate-400">
+                  <Code2 className="w-3 h-3" />
+                  No GitHub Synced
+                </span>
+              )}
             </div>
           </div>
         </div>

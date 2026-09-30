@@ -12,8 +12,11 @@
   "host_permissions": [
     "https://*.linkedin.com/*",
     "http://localhost:8000/*",
-    "http://127.0.0.1:8000/*"
+    "http://127.0.0.1:8000/*",
+    "https://*.onrender.com/*",
+    "https://*.vercel.app/*"
   ],
+
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

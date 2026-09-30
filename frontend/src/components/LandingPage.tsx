@@ -27,17 +27,25 @@ export const LandingPage: React.FC = () => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const handleLogin = async () => {
+    setAuthError(null);
     try {
       setIsLoggingIn(true);
       await loginWithGoogle();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        setAuthError(`Domain Authorization Needed: The domain "${window.location.hostname}" must be added to Authorized Domains in Firebase Console.`);
+      } else {
+        setAuthError(err?.message || 'Failed to sign in with Google. Please try again.');
+      }
     } finally {
       setIsLoggingIn(false);
     }
   };
+
 
   return (
     <div className={`min-h-screen transition-colors duration-200 ${
@@ -103,6 +111,30 @@ export const LandingPage: React.FC = () => {
             <span className="w-1 h-1 rounded-full bg-blue-400"></span>
             <span className="text-[11px] font-normal opacity-80">Neo4j AuraDB &bull; Groq Llama 3.3 &bull; Gemini Flash</span>
           </div>
+
+          {/* Error Alert if Domain Unauthorized or Login Issue */}
+          {authError && (
+            <div className="max-w-2xl mx-auto mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs text-left animate-in fade-in duration-150 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold shrink-0">
+                  ⚠️
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs mb-1">Firebase Domain Authorization Required</h4>
+                  <p className="leading-relaxed opacity-90 mb-2">
+                    Firebase blocks authentication on new domains by default. Please add your live Vercel domain to the authorized list:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 font-mono text-[11px] bg-amber-100/60 dark:bg-amber-900/30 p-2.5 rounded-xl">
+                    <li>Go to <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="underline font-bold text-blue-600 dark:text-blue-400">Firebase Console &rarr;</a></li>
+                    <li>Select project <strong>careerosv5</strong> &rarr; <strong>Authentication</strong></li>
+                    <li>Click <strong>Settings</strong> tab &rarr; <strong>Authorized domains</strong></li>
+                    <li>Click <strong>Add domain</strong> &rarr; type <code className="font-bold bg-white/70 dark:bg-black/40 px-1 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.hostname : 'careerosv5.vercel.app'}</code> &rarr; Save</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
 
           {/* Heading */}
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight max-w-4xl mx-auto leading-[1.15]">

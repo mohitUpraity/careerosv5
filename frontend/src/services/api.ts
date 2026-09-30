@@ -22,11 +22,11 @@ export const apiService = {
     if (!res.ok) throw new Error(`Failed to load profile analysis (${res.status})`);
     const data = await res.json();
     return {
-      repos_count: data.repos_count ?? data.metrics?.total_projects ?? 4,
-      connections_count: data.connections_count ?? data.metrics?.network_reach_connections ?? 797,
-      alumni_count: data.alumni_count ?? 12,
-      top_skills: data.top_skills ?? ['Python', 'FastAPI', 'Neo4j', 'Docker'],
-      graph_nodes_count: data.graph_nodes_count ?? 25,
+      repos_count: data.repos_count ?? data.metrics?.total_projects ?? 0,
+      connections_count: data.connections_count ?? data.metrics?.network_reach_connections ?? 0,
+      alumni_count: data.alumni_count ?? 0,
+      top_skills: data.top_skills ?? [],
+      graph_nodes_count: data.graph_nodes_count ?? 0,
       ...data
     };
   },

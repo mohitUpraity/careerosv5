@@ -47,11 +47,11 @@ const MainLayout: React.FC = () => {
       const [graph, analysisData] = await Promise.all([
         apiService.getGraph(headers).catch(() => ({ nodes: [], links: [] })),
         apiService.getAnalysis(headers).catch(() => ({
-          repos_count: 3,
-          connections_count: 797,
-          alumni_count: 12,
-          top_skills: ['FastAPI', 'Python', 'Neo4j', 'Docker'],
-          graph_nodes_count: 42,
+          repos_count: 0,
+          connections_count: 0,
+          alumni_count: 0,
+          top_skills: [],
+          graph_nodes_count: 0,
         })),
       ]);
       setGraphData(graph);

@@ -111,22 +111,22 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="hidden xl:flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <div className="flex items-center gap-1.5">
             <GitFork className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Repos: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.repos_count ?? 3}</strong></span>
+            <span>Repos: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.repos_count ?? 0}</strong></span>
           </div>
           <span style={{ color: 'var(--border-secondary)' }}>|</span>
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Network: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.connections_count ?? '797+'}</strong></span>
+            <span>Network: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.connections_count ?? 0}</strong></span>
           </div>
           <span style={{ color: 'var(--border-secondary)' }}>|</span>
           <div className="flex items-center gap-1.5">
             <GraduationCap className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Alumni: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.alumni_count ?? '12'}</strong></span>
+            <span>Alumni: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.alumni_count ?? 0}</strong></span>
           </div>
           <span style={{ color: 'var(--border-secondary)' }}>|</span>
           <div className="flex items-center gap-1.5">
             <Share2 className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Nodes: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.graph_nodes_count ?? '42+'}</strong></span>
+            <span>Nodes: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.graph_nodes_count ?? 0}</strong></span>
           </div>
         </div>
 

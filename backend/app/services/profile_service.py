@@ -224,76 +224,43 @@ class ProfileService:
         return {
             "status": "success",
             "user_id": user_id,
-            "repos_count": 4,
-            "connections_count": 797,
-            "alumni_count": 12,
-            "graph_nodes_count": 25,
-            "top_skills": ["Python", "FastAPI", "Neo4j", "Docker", "React", "GraphRAG"],
+            "repos_count": 0,
+            "connections_count": 0,
+            "alumni_count": 0,
+            "graph_nodes_count": 1,
+            "top_skills": [],
             "profile": {
-                "full_name": "Mohit Upraity",
-                "email": "mohitupraity123@gmail.com",
-                "github_username": "mohitUpraity",
-                "linkedin_url": "https://linkedin.com/in/mohitupraity",
-                "education": [
-                    {
-                        "university": "Anand Engineering College",
-                        "degree": "B.Tech in Computer Science and Engineering",
-                        "field_of_study": "Computer Science & Artificial Intelligence",
-                        "end_date": "2027"
-                    }
-                ]
+                "full_name": "Candidate",
+                "email": "",
+                "github_username": "",
+                "linkedin_url": "",
+                "education": []
             },
             "metrics": {
-                "profile_strength_score": 92,
-                "total_skills": 16,
-                "code_verified_skills_count": 10,
-                "resume_skills_count": 6,
-                "total_projects": 4,
-                "total_work_experiences": 2,
-                "total_hackathons": 4,
-                "network_reach_connections": 797
+                "profile_strength_score": 10,
+                "total_skills": 0,
+                "code_verified_skills_count": 0,
+                "resume_skills_count": 0,
+                "total_projects": 0,
+                "total_work_experiences": 0,
+                "total_hackathons": 0,
+                "network_reach_connections": 0
             },
             "skills_analysis": {
-                "code_verified_skills": [
-                    {"name": "Python", "category": "Languages", "verified_by_code": True, "evidence_projects": ["careerosv5", "RecoverIQ"], "sources": ["GitHub AST"]},
-                    {"name": "FastAPI", "category": "Frameworks", "verified_by_code": True, "evidence_projects": ["careerosv5"], "sources": ["GitHub AST"]},
-                    {"name": "Neo4j", "category": "Databases", "verified_by_code": True, "evidence_projects": ["careerosv5"], "sources": ["GitHub AST"]},
-                    {"name": "GraphRAG", "category": "AI / Graphs", "verified_by_code": True, "evidence_projects": ["careerosv5"], "sources": ["GitHub AST"]},
-                    {"name": "Docker", "category": "DevOps & Cloud", "verified_by_code": True, "evidence_projects": ["RecoverIQ"], "sources": ["GitHub AST"]},
-                    {"name": "React", "category": "Frontend", "verified_by_code": True, "evidence_projects": ["careerOS", "AgriFarm AI"], "sources": ["GitHub AST"]}
-                ],
-                "resume_only_skills": [
-                    {"name": "Kubernetes", "category": "DevOps & Cloud", "verified_by_code": False, "evidence_projects": [], "sources": ["Resume"]},
-                    {"name": "PostgreSQL", "category": "Databases", "verified_by_code": False, "evidence_projects": [], "sources": ["Resume"]}
-                ]
+                "code_verified_skills": [],
+                "resume_only_skills": []
             },
-            "projects": [
-                {"id": "proj_careerosv5", "name": "careerosv5", "description": "GraphRAG Career Navigation & Multi-Agent Referral Co-Pilot", "repo_url": "https://github.com/mohitUpraity/careerosv5", "stars": 2, "primary_language": "Python", "tech_stack": ["Python", "FastAPI", "Neo4j", "GraphRAG", "React"]},
-                {"id": "proj_RecoverIQ", "name": "RecoverIQ", "description": "Automated Incident Response & SOC Platform with Agentic AI", "repo_url": "https://github.com/mohitUpraity/RecoverIQ", "stars": 3, "primary_language": "Python", "tech_stack": ["Python", "Docker", "FastAPI"]},
-                {"id": "proj_reconpilot", "name": "reconpilot", "description": "Reconnaissance & Vulnerability Assessment Automation", "repo_url": "https://github.com/mohitUpraity/reconpilot", "stars": 1, "primary_language": "Python", "tech_stack": ["Python", "iptables", "Security"]},
-                {"id": "proj_careerOS", "name": "careerOS", "description": "Career Orchestration Engine v1 with D3 Visualizer", "repo_url": "https://github.com/mohitUpraity/careerOS", "stars": 1, "primary_language": "TypeScript", "tech_stack": ["TypeScript", "React", "TailwindCSS"]}
-            ],
-            "experience": [
-                {"company": "DRDO – ADRDE Agra", "role": "Cybersecurity & AI Intern", "start_date": "Feb 2026", "end_date": "Jun 2026", "is_current": True},
-                {"company": "SUREXA IT Solutions", "role": "ML & Backend Intern", "start_date": "Apr 2026", "end_date": "Present", "is_current": True}
-            ],
-            "hackathons": [
-                {"name": "Microsoft Noida AI Hackathon 2026", "organizer": "Microsoft", "location": "Noida", "project_built": "RecoverIQ", "highlights": "1st Runner Up", "date": "2026"},
-                {"name": "Smart India Hackathon (SIH)", "organizer": "Govt of India", "location": "Agra", "project_built": "AgriFarm AI", "highlights": "Finalist", "date": "2025"}
-            ],
-            "achievements": [
-                {"title": "4x National Hackathon Winner", "organization": "Various", "description": "Secured top podium finishes in AI, distributed systems, and cyber security hackathons.", "date": "2025-2026"}
-            ],
-            "certifications": [
-                {"name": "Neo4j Certified Professional", "issuer": "Neo4j GraphAcademy", "date": "2025"}
-            ],
+            "projects": [],
+            "experience": [],
+            "hackathons": [],
+            "achievements": [],
+            "certifications": [],
             "network_intelligence": {
-                "total_connections": 797,
-                "target_companies_accessible": ["Apponward Technologies", "DRDO", "Google", "Microsoft", "SUREXA IT Solutions"]
+                "total_connections": 0,
+                "target_companies_accessible": []
             },
             "recommendations": [
-                "High profile completeness! Ready for automated Job Matchmaking and AI Referral Pitch Generation.",
-                "Your code-verified skills in Python, FastAPI, and Neo4j give you a 90%+ AST proof advantage for backend roles."
+                "Welcome to CareerOS! Sync your GitHub repositories or upload your resume to build your personal Knowledge Graph."
             ]
         }
 
@@ -301,6 +268,7 @@ class ProfileService:
     async def get_graph_topology(cls, user_id: str) -> Dict[str, Any]:
         """
         Returns complete node & edge graph topology for D3 force-directed visualizer.
+        Strictly multi-tenant isolated to user_id.
         """
         nodes = []
         links = []
@@ -329,6 +297,7 @@ class ProfileService:
                     "label": label or rel_type
                 })
 
+        user_name = "Candidate"
         try:
             if neo4j_client.driver and neo4j_client.is_connected:
                 # 1. User
@@ -336,8 +305,13 @@ class ProfileService:
                     "MATCH (u:User {id: $user_id}) RETURN u.full_name as name, u.github_username as gh, u.email as email",
                     {"user_id": user_id}
                 )
-                user_name = u_res[0]["name"] if u_res and u_res[0].get("name") else "Mohit Upraity"
-                add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "Software Engineer @ DRDO / SGI", "github": "mohitUpraity"})
+                if u_res and u_res[0].get("name"):
+                    user_name = u_res[0]["name"]
+                elif u_res and u_res[0].get("email"):
+                    user_name = u_res[0]["email"].split("@")[0]
+
+                gh_handle = u_res[0].get("gh", "") if u_res else ""
+                add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "Candidate Profile", "github": gh_handle})
 
                 # 2. Projects & Skills
                 proj_res = await neo4j_client.execute_query(
@@ -352,8 +326,8 @@ class ProfileService:
                     pid = f"proj_{p['name']}"
                     add_node(pid, p["name"], "project", "Code Repository", {
                         "desc": p.get("desc") or "Verified Project",
-                        "url": p.get("url") or f"https://github.com/mohitUpraity/{p['name']}",
-                        "lang": p.get("lang") or "Python",
+                        "url": p.get("url") or f"https://github.com/{gh_handle}/{p['name']}",
+                        "lang": p.get("lang") or "Code",
                         "stars": p.get("stars", 0),
                         "skills": p.get("skills", [])
                     })
@@ -379,7 +353,7 @@ class ProfileService:
                         "role": e.get("role", "Engineer"),
                         "timeline": f"{e.get('start', '')} - {e.get('end', 'Present')}"
                     })
-                    add_link(f"user_{user_id}", cid, "WORKED_AT", e.get("role", "Intern"))
+                    add_link(f"user_{user_id}", cid, "WORKED_AT", e.get("role", "Role"))
 
                 # 4. Education & Universities
                 edu_res = await neo4j_client.execute_query(
@@ -391,9 +365,9 @@ class ProfileService:
                 )
                 for edu in edu_res:
                     uid = f"univ_{edu['name']}"
-                    add_node(uid, edu["name"], "university", "College / SGI Cluster", {
-                        "degree": edu.get("degree", "B.Tech"),
-                        "field": edu.get("field", "CSE")
+                    add_node(uid, edu["name"], "university", "University / College", {
+                        "degree": edu.get("degree", "Degree"),
+                        "field": edu.get("field", "")
                     })
                     add_link(f"user_{user_id}", uid, "ATTENDED")
 
@@ -405,7 +379,7 @@ class ProfileService:
                     OPTIONAL MATCH (p)-[:ATTENDED]->(univ:University)
                     RETURN p.id as pid, p.name as name, p.headline as headline, p.linkedin_url as url,
                            c.name as company, univ.name as univ
-                    LIMIT 50
+                    LIMIT 100
                     """,
                     {"user_id": user_id}
                 )
@@ -426,15 +400,42 @@ class ProfileService:
                         add_link(pid, cid, "WORKS_AT")
                     if c.get("univ"):
                         uid = f"univ_{c['univ']}"
-                        add_node(uid, c["univ"], "university", "SGI Cluster")
+                        add_node(uid, c["univ"], "university", "University Cluster")
                         add_link(pid, uid, "ATTENDED")
 
         except Exception as e:
             logger.warning(f"Error building graph topology from Neo4j: {e}")
 
-        # Fallback if empty or disconnected
-        if len(nodes) <= 1:
-            return cls._generate_default_rich_graph(user_id)
+        # If empty, return clean user node only
+        if len(nodes) == 0:
+            add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "Candidate Profile"})
+
+        return {
+            "status": "success",
+            "nodes_count": len(nodes),
+            "links_count": len(links),
+            "nodes": nodes,
+            "links": links
+        }
+
+    @classmethod
+    def _generate_default_rich_graph(cls, user_id: str, user_name: str = "Candidate") -> Dict[str, Any]:
+        return {
+            "status": "success",
+            "nodes_count": 1,
+            "links_count": 0,
+            "nodes": [
+                {
+                    "id": f"user_{user_id}",
+                    "label": user_name,
+                    "type": "user",
+                    "category": "Candidate",
+                    "val": 28
+                }
+            ],
+            "links": []
+        }
+
 
         return {
             "status": "success",

@@ -699,6 +699,35 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
           </div>
         )}
 
+        {!loading && (!graphData?.nodes || graphData.nodes.length <= 1) && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 p-4 pointer-events-none">
+            <div className={`max-w-md w-full p-6 rounded-2xl shadow-xl border backdrop-blur-md text-center pointer-events-auto transition-all animate-in fade-in zoom-in-95 duration-200 ${
+              isDark 
+                ? 'bg-slate-900/90 border-slate-800 text-slate-100 shadow-slate-950/50' 
+                : 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200/50'
+            }`}>
+              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
+                <GitBranch className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold mb-1.5">No Graph Data Yet</h3>
+              <p className={`text-xs leading-relaxed mb-5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Welcome to CareerOS! Your personal knowledge graph is completely clean and empty. Sync your GitHub repositories to map your real code AST verified skills and topological footprint.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                {onOpenSyncGitHub && (
+                  <button
+                    onClick={onOpenSyncGitHub}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Github className="w-4 h-4" />
+                    Sync GitHub Account
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <svg ref={svgRef} className="w-full h-full" />
 
         {/* Crisp Categorical Legend — Bottom Left */}
