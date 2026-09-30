@@ -4,7 +4,6 @@ import logging
 import re
 from typing import Dict, Any, Optional, List
 from pypdf import PdfReader
-import google.generativeai as genai
 from app.core.config import settings
 from app.schemas.resume_blueprint import (
     ResumeBlueprint,

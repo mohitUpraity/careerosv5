@@ -3,16 +3,23 @@ import io
 import logging
 import re
 from typing import List, Dict, Any, Optional
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 class LinkedInService:
     def __init__(self):
-        if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AQ."):
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel("gemini-1.5-flash")
+        if settings.GEMINI_API_KEY and genai:
+            try:
+                genai.configure(api_key=settings.GEMINI_API_KEY)
+                self.model = genai.GenerativeModel("gemini-1.5-flash")
+            except Exception:
+                self.model = None
         else:
             self.model = None
 

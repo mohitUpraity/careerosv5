@@ -4,14 +4,12 @@ import csv
 import json
 import logging
 from typing import Dict, Any, List, Optional
-import google.generativeai as genai
-from app.core.config import settings
-from app.core.database import neo4j_client
-
-logger = logging.getLogger(__name__)
-
-if settings.GEMINI_API_KEY:
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+try:
+    import google.generativeai as genai
+    if settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+except Exception:
+    genai = None
 
 POSTS_EXTRACTION_PROMPT = """
 You are an expert Career Knowledge Extraction AI.
