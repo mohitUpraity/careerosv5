@@ -45,6 +45,8 @@ class ResumeBlueprint(BaseModel):
     education: List[EducationEntry] = []
     projects: List[ProjectEntry] = []
     skills: List[SkillCategory] = []
+    certifications: List[str] = []
+    achievements: List[str] = []
     raw_text: Optional[str] = ""
 
 class ResumeIngestResponse(BaseModel):

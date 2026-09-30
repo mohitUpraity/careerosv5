@@ -5,44 +5,54 @@
 
 (() => {
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const url = window.location.href;
+    try {
+      const url = window.location.href;
 
-    if (request.action === "EXTRACT_CURRENT_PAGE") {
-      if (url.includes("/mynetwork/invite-connect/connections")) {
-        const connData = extractConnectionsData();
-        sendResponse({ type: "CONNECTIONS", data: connData, pageType: "CONNECTIONS_PAGE" });
-      } else if (url.includes("/recent-activity")) {
+      if (request.action === "EXTRACT_CURRENT_PAGE") {
+        if (url.includes("/mynetwork/invite-connect/connections")) {
+          const connData = extractConnectionsData();
+          sendResponse({ type: "CONNECTIONS", data: connData, pageType: "CONNECTIONS_PAGE" });
+        } else if (url.includes("/recent-activity")) {
+          const posts = extractRecentPosts();
+          sendResponse({ type: "POSTS", data: posts, pageType: "ACTIVITY_POSTS_PAGE" });
+        } else if (url.includes("/in/")) {
+          const profileData = extractFullProfileData();
+          sendResponse({ type: "PROFILE", data: profileData, pageType: "FULL_PROFILE" });
+        } else if (url.includes("/feed")) {
+          const feedProfile = extractFeedSidebarProfile();
+          sendResponse({ type: "PROFILE", data: feedProfile, pageType: "FEED_SUMMARY" });
+        } else if (url.includes("/jobs/view") || url.includes("/jobs/collections")) {
+          const jobData = extractJobData();
+          sendResponse({ type: "JOB", data: jobData, pageType: "JOB_POSTING" });
+        } else {
+          sendResponse({ type: "OTHER", pageType: "LINKEDIN_PAGE", data: { raw_text: (document.body?.innerText || "").slice(0, 5000) } });
+        }
+        return false;
+      } else if (request.action === "EXTRACT_POSTS") {
         const posts = extractRecentPosts();
-        sendResponse({ type: "POSTS", data: posts, pageType: "ACTIVITY_POSTS_PAGE" });
-      } else if (url.includes("/in/")) {
-        const profileData = extractFullProfileData();
-        sendResponse({ type: "PROFILE", data: profileData, pageType: "FULL_PROFILE" });
-      } else if (url.includes("/feed")) {
-        const feedProfile = extractFeedSidebarProfile();
-        sendResponse({ type: "PROFILE", data: feedProfile, pageType: "FEED_SUMMARY" });
-      } else if (url.includes("/jobs/view") || url.includes("/jobs/collections")) {
-        const jobData = extractJobData();
-        sendResponse({ type: "JOB", data: jobData, pageType: "JOB_POSTING" });
-      } else {
-        sendResponse({ type: "OTHER", pageType: "LINKEDIN_PAGE", data: { raw_text: document.body.innerText.slice(0, 5000) } });
+        sendResponse({ type: "POSTS", data: posts });
+        return false;
+      } else if (request.action === "EXTRACT_CONNECTIONS_DEEP") {
+        deepScanConnections((progress) => {
+          chrome.runtime.sendMessage({ action: "DEEP_SCAN_PROGRESS", count: progress.count, isDone: progress.isDone }).catch(() => {});
+        }).then((connections) => {
+          sendResponse({ type: "CONNECTIONS", data: connections });
+        }).catch(err => {
+          sendResponse({ type: "ERROR", message: err.message });
+        });
+        return true; // only return true for async
+      } else if (request.action === "NAVIGATE_TO") {
+        if (request.url) {
+          window.location.href = request.url;
+          sendResponse({ success: true });
+        }
+        return false;
       }
-    } else if (request.action === "EXTRACT_POSTS") {
-      const posts = extractRecentPosts();
-      sendResponse({ type: "POSTS", data: posts });
-    } else if (request.action === "EXTRACT_CONNECTIONS_DEEP") {
-      deepScanConnections((progress) => {
-        chrome.runtime.sendMessage({ action: "DEEP_SCAN_PROGRESS", count: progress.count, isDone: progress.isDone });
-      }).then((connections) => {
-        sendResponse({ type: "CONNECTIONS", data: connections });
-      });
-      return true; // async response
-    } else if (request.action === "NAVIGATE_TO") {
-      if (request.url) {
-        window.location.href = request.url;
-        sendResponse({ success: true });
-      }
+    } catch (err) {
+      sendResponse({ type: "ERROR", message: err.message });
+      return false;
     }
-    return true;
+    return false;
   });
 
   // Deep Auto-Scroll Scanner for 800+ Connections

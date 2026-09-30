@@ -1,50 +1,41 @@
 import json
 import logging
-import google.generativeai as genai
 from typing import List, Dict, Any
 from app.core.config import settings
+from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
 class GeminiExtractor:
     def __init__(self):
-        if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AQ."):
-            # Genuine Google AI Studio API Key
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel("gemini-3.5-flash-lite")
-        else:
-            self.model = None
+        pass
 
     async def extract_project_skills(self, repo_data: Dict[str, Any]) -> List[Dict[str, str]]:
         """
-        Uses Gemini 1.5 Flash to parse project description, languages, and readme into categorized skills.
+        Uses Groq Llama 3.3 / Gemini to parse project description, languages, and readme into categorized skills.
         Includes deterministic fallback heuristics.
         """
-        if self.model:
-            prompt = f"""
-You are a technical knowledge graph parser for CareerOS.
-Analyze this GitHub project and extract the technical skills, frameworks, databases, libraries, and tools used.
-
+        system_prompt = "You are a technical knowledge graph parser. Analyze the GitHub project and extract the technical skills, frameworks, databases, libraries, and tools."
+        user_prompt = f"""
 Project Name: {repo_data.get('name')}
 Description: {repo_data.get('description')}
 Languages: {", ".join(repo_data.get('languages', []))}
 README Snippet:
 {repo_data.get('readme_snippet', '')}
 
-Return ONLY a valid JSON array of objects with the exact structure:
-[
-  {{"name": "SkillName", "category": "Language|Framework|Database|Cloud|DevOps|AI/ML"}}
-]
-Do not include backticks, markdown fences, or explanations.
+Return JSON with structure:
+{{
+  "skills": [
+    {{"name": "SkillName", "category": "Language|Framework|Database|Cloud|DevOps|AI/ML|Security"}}
+  ]
+}}
 """
-            try:
-                response = self.model.generate_content(prompt)
-                clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-                extracted = json.loads(clean_text)
-                if isinstance(extracted, list):
-                    return extracted
-            except Exception as e:
-                logger.warning(f"Gemini API call fallback to heuristic parser: {e}")
+        parsed = await llm_service.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
+        if parsed and isinstance(parsed, dict) and "skills" in parsed and isinstance(parsed["skills"], list):
+            return parsed["skills"]
+        elif isinstance(parsed, list):
+            return parsed
+
 
         # High-precision deterministic fallback parser
         skills = []

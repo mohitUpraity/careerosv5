@@ -53,7 +53,7 @@
       </div>
     </section>
 
-    <!-- Master Auto-Sync CTA -->
+    <!-- Master Auto-Sync CTA & Quick Delta CTA -->
     <section class="actions-group">
       <!-- Autonomous 1-Click Master Sync -->
       <button id="masterSyncBtn" class="action-btn btn-primary">
@@ -63,11 +63,29 @@
           </svg>
         </div>
         <div class="btn-content">
-          <div class="btn-title">Auto-Pilot Master Sync</div>
-          <div class="btn-desc">Auto-navigates Profile, Posts & Connections</div>
+          <div class="btn-title">Auto-Pilot Full Sync</div>
+          <div class="btn-desc">Auto-navigates Profile ➔ All 800+ Conn ➔ All Posts</div>
         </div>
         <div class="btn-arrow">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </div>
+      </button>
+
+      <!-- Quick Delta Sync Button (New Only) -->
+      <button id="deltaSyncBtn" class="action-btn btn-delta">
+        <div class="btn-icon-box btn-icon-delta">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div class="btn-content">
+          <div class="btn-title">⚡ Quick Delta Sync (New Only)</div>
+          <div class="btn-desc">Scans newest additions & stops at last checkpoint</div>
+        </div>
+        <div class="btn-arrow">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
         </div>
@@ -80,18 +98,31 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         <span>MANUAL MODULAR SYNC</span>
       </div>
-      <div class="modular-grid">
+      <div class="modular-grid four-col">
         <button class="mod-btn" id="syncProfileOnlyBtn">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
-          <span>Sync Profile</span>
-        </button>
-        <button class="mod-btn" id="syncPostsOnlyBtn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-          <span>Sync Posts</span>
+          <span>Profile</span>
         </button>
         <button class="mod-btn" id="syncConnOnlyBtn">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          <span>Sync Network</span>
+          <span>All Conn</span>
+        </button>
+        <button class="mod-btn" id="syncDeltaConnBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>⚡ Delta Conn</span>
+        </button>
+        <button class="mod-btn" id="syncPostsOnlyBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>Posts Feed</span>
+        </button>
+      </div>
+
+      <!-- Instant CSV Ingestion -->
+      <div class="csv-upload-row">
+        <input type="file" id="csvFileInput" accept=".csv" class="hidden-file-input">
+        <button class="csv-btn" id="uploadCsvBtn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Instant Import LinkedIn Connections.csv</span>
         </button>
       </div>
     </section>
