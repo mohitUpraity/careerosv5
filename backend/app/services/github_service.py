@@ -97,6 +97,13 @@ class GitHubService:
                     except Exception:
                         readme_text = ""
 
+                # Always ensure primary language is included in languages list
+                primary_lang = repo.get("language")
+                if primary_lang and primary_lang not in languages:
+                    languages.insert(0, primary_lang)
+
+                topics = repo.get("topics", [])
+
                 return {
                     "id": f"github:{owner}:{repo_name}",
                     "name": repo_name,
@@ -105,8 +112,9 @@ class GitHubService:
                     "stars": repo.get("stargazers_count", 0),
                     "forks": repo.get("forks_count", 0),
                     "is_fork": repo.get("fork", False),
-                    "primary_language": repo.get("language") or (languages[0] if languages else "Unknown"),
-                    "languages": languages,
+                    "primary_language": primary_lang or (languages[0] if languages else "General"),
+                    "languages": languages if languages else ([primary_lang] if primary_lang else ["General"]),
+                    "topics": topics,
                     "readme_snippet": readme_text[:2500]
                 }
 

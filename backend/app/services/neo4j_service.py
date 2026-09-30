@@ -51,14 +51,17 @@ class Neo4jService:
                           p.primary_language = $primary_language,
                           p.created_at = datetime()
             ON MATCH SET p.description = $description,
-                         p.stars_count = $stars
+                         p.stars_count = $stars,
+                         p.primary_language = $primary_language
             MERGE (u)-[:BUILT]->(p)
             WITH p, u
-            UNWIND $skills AS skill_data
+            UNWIND CASE WHEN size($skills) = 0 THEN [null] ELSE $skills END AS skill_data
+            WITH p, u, skill_data WHERE skill_data IS NOT NULL
             MERGE (s:Skill {name: skill_data.name})
-            ON CREATE SET s.category = skill_data.category
+            ON CREATE SET s.category = coalesce(skill_data.category, 'Technical')
             MERGE (p)-[:USES_TECH]->(s)
             MERGE (u)-[:HAS_SKILL {source: 'github'}]->(s)
+            MERGE (u)-[:VERIFIED_SKILL]->(s)
             RETURN count(s) AS linked_skills;
             """
             params = {

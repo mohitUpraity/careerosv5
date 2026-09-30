@@ -37,13 +37,16 @@ class ProfileService:
             user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
             user_info = user_res[0] if user_res else {}
 
-            # 2. Fetch Verified Skills & Evidence Source
+            # 2. Fetch Verified Skills & Evidence Source (from Projects and User)
             skills_query = """
-            MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
-            OPTIONAL MATCH (u)-[:BUILT]->(p:Project)-[:USES_TECH]->(s)
+            MATCH (u:User {id: $user_id})
+            OPTIONAL MATCH (u)-[:BUILT]->(p:Project)-[:USES_TECH]->(ps:Skill)
+            OPTIONAL MATCH (u)-[r:HAS_SKILL]->(us:Skill)
+            WITH u, coalesce(ps, us) AS s, p, r
+            WHERE s IS NOT NULL
             RETURN s.name AS skill,
                    s.category AS category,
-                   collect(DISTINCT r.source) AS sources,
+                   collect(DISTINCT coalesce(r.source, 'github')) AS sources,
                    collect(DISTINCT p.name) AS backed_by_projects,
                    count(DISTINCT p) AS project_count
             ORDER BY project_count DESC, s.name ASC
@@ -164,13 +167,13 @@ class ProfileService:
             if verified_count < 5:
                 recommendations.append("Connect more GitHub repositories to verify your claimed resume skills with real code.")
             if hack_count == 0:
-                recommendations.append("Import your LinkedIn posts/shares to index hackathons like Microsoft Noida Hackathon into the graph.")
+                recommendations.append("Import your LinkedIn posts/shares to index hackathons into the graph.")
             if network_count < 10:
                 recommendations.append("Import your LinkedIn connections CSV to unlock hidden alumni referral bridges.")
             if strength_score >= 70:
                 recommendations.append("High profile completeness! Ready for automated Job Matchmaking and AI Referral Pitch Generation.")
 
-            top_skills = [s["name"] for s in verified_skills[:5]] if verified_skills else ["Python", "FastAPI", "Neo4j", "Docker"]
+            top_skills = [s["name"] for s in verified_skills[:5]] if verified_skills else []
 
             return {
                 "status": "success",
@@ -181,7 +184,7 @@ class ProfileService:
                 "graph_nodes_count": 1 + proj_count + total_skills_count + exp_count + network_count,
                 "top_skills": top_skills,
                 "profile": {
-                    "full_name": user_info.get("full_name") or "Mohit Upraity",
+                    "full_name": user_info.get("full_name") or "Candidate",
                     "email": user_info.get("email"),
                     "github_username": user_info.get("github_username"),
                     "linkedin_url": user_info.get("linkedin_url"),
