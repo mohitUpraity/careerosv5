@@ -53,9 +53,9 @@
       </div>
     </section>
 
-    <!-- Sync Action Buttons -->
+    <!-- Master Auto-Sync CTA -->
     <section class="actions-group">
-      <!-- Master Full Sync -->
+      <!-- Autonomous 1-Click Master Sync -->
       <button id="masterSyncBtn" class="action-btn btn-primary">
         <div class="btn-icon-box">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -63,8 +63,8 @@
           </svg>
         </div>
         <div class="btn-content">
-          <div class="btn-title">Master Full Sync</div>
-          <div class="btn-desc">Profile, Posts, Hackathons & Network</div>
+          <div class="btn-title">Auto-Pilot Master Sync</div>
+          <div class="btn-desc">Auto-navigates Profile, Posts & Connections</div>
         </div>
         <div class="btn-arrow">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -72,21 +72,28 @@
           </svg>
         </div>
       </button>
+    </section>
 
-      <!-- Incremental Delta Sync -->
-      <button id="deltaSyncBtn" class="action-btn btn-secondary">
-        <div class="btn-icon-box">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-        </div>
-        <div class="btn-content">
-          <div class="btn-title">Sync Newly (Delta)</div>
-          <div class="btn-desc">Scan unindexed posts & contacts only</div>
-        </div>
-      </button>
+    <!-- Modular Individual Sync Controls -->
+    <section class="card modular-card">
+      <div class="card-header-mini">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>MANUAL MODULAR SYNC</span>
+      </div>
+      <div class="modular-grid">
+        <button class="mod-btn" id="syncProfileOnlyBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
+          <span>Sync Profile</span>
+        </button>
+        <button class="mod-btn" id="syncPostsOnlyBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>Sync Posts</span>
+        </button>
+        <button class="mod-btn" id="syncConnOnlyBtn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          <span>Sync Network</span>
+        </button>
+      </div>
     </section>
 
     <!-- Progress Pipeline Stepper -->
@@ -144,15 +151,15 @@
       <div class="nav-chips-row">
         <button class="nav-chip" id="navProfileBtn">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>
-          Profile
+          Go to Profile
         </button>
         <button class="nav-chip" id="navPostsBtn">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-          My Posts
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          Go to Posts
         </button>
         <button class="nav-chip" id="navConnectionsBtn">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Connections
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          Go to Connections
         </button>
       </div>
     </section>
@@ -174,7 +181,7 @@
         </div>
         <div class="report-stat">
           <span class="stat-label">Hackathons / DRDO</span>
-          <strong class="stat-val" id="reportMilestones">Synced (3)</strong>
+          <strong class="stat-val" id="reportMilestones">Synced</strong>
         </div>
         <div class="report-stat">
           <span class="stat-label">Connections Mapped</span>

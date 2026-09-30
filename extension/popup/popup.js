@@ -1,5 +1,5 @@
 /**
- * CareerOS Popup Controller - 100% Real Authentic Multi-Surface Sync
+ * CareerOS Popup Controller - Autonomous Multi-Tab Pipeline & Modular Sync Controls
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -8,12 +8,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const userSelect = document.getElementById("userSelect");
   const lastSyncLabel = document.getElementById("lastSyncLabel");
   const masterSyncBtn = document.getElementById("masterSyncBtn");
-  const deltaSyncBtn = document.getElementById("deltaSyncBtn");
   const contextBody = document.getElementById("contextBody");
   const contextHeaderTitle = document.getElementById("contextHeaderTitle");
   const resultBanner = document.getElementById("resultBanner");
   const toastMsg = document.getElementById("toastMsg");
   const toastIcon = document.getElementById("toastIcon");
+
+  // Modular Sync Buttons
+  const syncProfileOnlyBtn = document.getElementById("syncProfileOnlyBtn");
+  const syncPostsOnlyBtn = document.getElementById("syncPostsOnlyBtn");
+  const syncConnOnlyBtn = document.getElementById("syncConnOnlyBtn");
 
   // Nav buttons
   const navProfileBtn = document.getElementById("navProfileBtn");
@@ -44,7 +48,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Listen for auto-scroll deep progress
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.action === "DEEP_SCAN_PROGRESS") {
-      updateStep(3, "active", 90, `3. Auto-scrolling & Scanning... (${msg.count} real contacts)`);
+      updateStep(3, "active", 90, `3. Auto-scrolling & Scanning... (${msg.count} contacts)`);
     }
   });
 
@@ -97,7 +101,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, (response) => {
         if (!response) {
-          contextBody.innerHTML = `<span class="context-empty">Please refresh this LinkedIn tab (Cmd+R) so the extension connects.</span>`;
+          contextBody.innerHTML = `<span class="context-empty">Please refresh this LinkedIn tab (Cmd+R) so the extension attaches.</span>`;
           return;
         }
 
@@ -111,9 +115,9 @@ document.addEventListener("DOMContentLoaded", async () => {
               <div class="context-item">
                 <div class="context-title">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                  ${connList.length} Visible Contacts Detected
+                  ${connList.length} Real Contacts Detected
                 </div>
-                <div class="context-sub">Found: <strong>${escapeHtml(names)}</strong>... Click Master Sync to Auto-Scroll & Ingest.</div>
+                <div class="context-sub">Found: <strong>${escapeHtml(names)}</strong>... Click Sync Network to ingest.</div>
               </div>
             `;
           } else {
@@ -123,7 +127,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                   0 Connections Visible
                 </div>
-                <div class="context-sub">Please refresh LinkedIn page (Cmd+R) so the content script attaches to the DOM.</div>
+                <div class="context-sub">Please refresh LinkedIn page (Cmd+R) so the content script connects to DOM.</div>
               </div>
             `;
           }
@@ -174,13 +178,121 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // 4. Master Full Sync (100% Real Data Ingestion)
-  masterSyncBtn.addEventListener("click", async () => {
+  // 4. Modular Action 1: Sync Profile Only
+  syncProfileOnlyBtn?.addEventListener("click", async () => {
     if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
       return showToast("Please open a LinkedIn tab in Chrome first.", "error");
     }
 
-    startProgress("Initiating Master Full Sync...");
+    showToast("Extracting Profile Details & College Cluster...", "loading");
+    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, async (profRes) => {
+      let profileText = profRes && profRes.data ? (profRes.data.raw_text || profRes.data.headline || "") : "";
+      let candidateName = profRes && profRes.data && profRes.data.name ? profRes.data.name : "Candidate Profile";
+
+      if (profileText) {
+        try {
+          const form = new FormData();
+          form.append("posts_text", profileText);
+          await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+            method: "POST",
+            headers: { "x-user-id": userSelect.value },
+            body: form
+          });
+          showToast(`Synced Profile: ${candidateName}`, "success");
+        } catch (e) {
+          showToast(`Profile sync: ${e.message}`, "error");
+        }
+      } else {
+        showToast("Navigating to profile...", "loading");
+        chrome.tabs.update(tab.id, { url: "https://www.linkedin.com/in/me/" });
+      }
+    });
+  });
+
+  // 5. Modular Action 2: Sync Posts Only
+  syncPostsOnlyBtn?.addEventListener("click", async () => {
+    if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
+      return showToast("Please open a LinkedIn tab in Chrome first.", "error");
+    }
+
+    showToast("Scanning Activity Posts & Extracting Hackathons with AI...", "loading");
+    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_POSTS" }, async (postsRes) => {
+      let postsList = postsRes && postsRes.data ? postsRes.data : [];
+      let postsText = postsList.join("\n\n---\n\n");
+
+      if (postsText) {
+        try {
+          const form = new FormData();
+          form.append("posts_text", postsText);
+          const res = await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+            method: "POST",
+            headers: { "x-user-id": userSelect.value },
+            body: form
+          });
+          const d = await res.json();
+          showToast(`AI Extracted ${d.graph_nodes_merged || postsList.length} milestones & awards!`, "success");
+        } catch (e) {
+          showToast(`Posts sync: ${e.message}`, "error");
+        }
+      } else {
+        showToast("Opening your Posts page...", "loading");
+        chrome.tabs.update(tab.id, { url: "https://www.linkedin.com/in/me/recent-activity/all/" });
+      }
+    });
+  });
+
+  // 6. Modular Action 3: Sync Connections Only
+  syncConnOnlyBtn?.addEventListener("click", async () => {
+    if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
+      return showToast("Please open a LinkedIn tab in Chrome first.", "error");
+    }
+
+    showToast("Auto-scrolling & scanning all connections...", "loading");
+    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CONNECTIONS_DEEP" }, async (connRes) => {
+      let connections = connRes && connRes.data ? connRes.data : [];
+
+      if (connections.length > 0) {
+        try {
+          let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
+          connections.forEach(c => {
+            csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
+          });
+          const blob = new Blob([csvContent], { type: "text/csv" });
+          const form = new FormData();
+          form.append("file", blob, "Connections.csv");
+          await fetch(`${API_BASE}/ingest/linkedin`, {
+            method: "POST",
+            headers: { "x-user-id": userSelect.value },
+            body: form
+          });
+
+          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          chrome.storage.local.set({ 
+            lastSyncedTime: `Today, ${nowStr}`,
+            syncedConnCount: connections.length
+          });
+          lastSyncLabel.textContent = `Today, ${nowStr}`;
+          reportConnections.textContent = `${connections.length} Contacts`;
+          syncReportCard.classList.remove("hidden");
+
+          showToast(`Synced ${connections.length} real connections into Neo4j!`, "success");
+        } catch (e) {
+          showToast(`Connections sync error: ${e.message}`, "error");
+        }
+      } else {
+        showToast("Opening Connections page... Please click Sync Network again.", "loading");
+        chrome.tabs.update(tab.id, { url: "https://www.linkedin.com/mynetwork/invite-connect/connections/" });
+      }
+    });
+  });
+
+  // 7. Auto-Pilot Master Sync
+  masterSyncBtn?.addEventListener("click", async () => {
+    if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
+      return showToast("Please open a LinkedIn tab in Chrome first.", "error");
+    }
+
+    startProgress("Initiating Auto-Pilot Master Sync...");
     updateStep(1, "active", 15, "1. Extracting Profile Details...");
 
     // Step 1: Extract Profile
@@ -271,53 +383,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             showToast(`Master Sync Complete! Synced ${countStr}.`, "success");
           } else {
-            // Honest 0 feedback
-            updateStep(3, "done", 100, "3. 0 connections on current tab (Refresh page & retry)");
+            updateStep(3, "done", 100, "3. 0 connections on current tab (Refresh tab & retry)");
             reportConnections.textContent = "0 Contacts";
             syncReportCard.classList.remove("hidden");
             showToast("0 connections detected. Please refresh LinkedIn tab (Cmd+R) and click Master Sync again.", "error");
           }
         });
       });
-    });
-  });
-
-  // 5. Incremental Delta Sync
-  deltaSyncBtn.addEventListener("click", async () => {
-    if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
-      return showToast("Please open a LinkedIn tab in Chrome first.", "error");
-    }
-
-    showToast("Scanning for new unindexed updates...", "loading");
-
-    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_CURRENT_PAGE" }, async (pageRes) => {
-      let syncText = "";
-      if (pageRes && pageRes.data) {
-        syncText = pageRes.data.raw_text || JSON.stringify(pageRes.data);
-      }
-
-      try {
-        if (syncText) {
-          const form = new FormData();
-          form.append("posts_text", syncText);
-          const res = await fetch(`${API_BASE}/ingest/linkedin/posts`, {
-            method: "POST",
-            headers: { "x-user-id": userSelect.value },
-            body: form
-          });
-          const data = await res.json();
-          
-          const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          chrome.storage.local.set({ lastSyncedTime: `Today, ${nowStr}` });
-          lastSyncLabel.textContent = `Today, ${nowStr}`;
-
-          showToast(`Delta sync complete! Indexed ${data.graph_nodes_merged || 2} new graph nodes.`, "success");
-        } else {
-          showToast("Knowledge Graph is already up to date.", "success");
-        }
-      } catch (err) {
-        showToast(`Sync failed: ${err.message}`, "error");
-      }
     });
   });
 

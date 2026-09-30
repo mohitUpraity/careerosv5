@@ -41,7 +41,7 @@
   --status-offline-border: #fecaca;
   --status-offline-text: #b91c1c;
 
-  /* Radii & Multi-Layer Atmospheric Shadows */
+  /* Radii & Shadows */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 10px;
@@ -75,10 +75,7 @@ body {
   gap: 10px;
 }
 
-/* ==========================================================================
-   Header & Brand
-   ========================================================================== */
-
+/* Header */
 .header {
   display: flex;
   align-items: center;
@@ -173,10 +170,7 @@ body {
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
-/* ==========================================================================
-   Cards & Layout Components
-   ========================================================================== */
-
+/* Cards */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
@@ -185,7 +179,7 @@ body {
   box-shadow: var(--shadow-card);
 }
 
-/* Profile Card */
+/* Profile Selector */
 .profile-card {
   display: flex;
   flex-direction: column;
@@ -253,10 +247,7 @@ body {
   align-items: center;
 }
 
-/* ==========================================================================
-   Action Buttons
-   ========================================================================== */
-
+/* Actions */
 .actions-group {
   display: flex;
   flex-direction: column;
@@ -268,7 +259,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
@@ -278,8 +269,8 @@ body {
 }
 
 .btn-icon-box {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -293,13 +284,13 @@ body {
 }
 
 .btn-title {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.25;
 }
 
 .btn-desc {
-  font-size: 10px;
+  font-size: 10.5px;
   margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
@@ -312,7 +303,6 @@ body {
   transition: transform 0.15s ease;
 }
 
-/* Primary Button (Stripe Deep Slate) */
 .btn-primary {
   background: var(--accent-btn-bg);
   color: var(--accent-btn-text);
@@ -346,46 +336,49 @@ body {
   transform: translateY(1px);
 }
 
-/* Secondary Button (Clean White Card) */
-.btn-secondary {
-  background: var(--bg-card);
-  border-color: var(--border-card);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-card);
+/* Modular Sync Grid */
+.modular-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #ffffff;
 }
 
-.btn-secondary .btn-icon-box {
+.modular-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.mod-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-app);
   border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.btn-secondary .btn-desc {
-  color: var(--text-tertiary);
-}
-
-.btn-secondary .btn-arrow {
-  color: var(--text-muted);
-}
-
-.btn-secondary:hover {
+.mod-btn:hover {
   background: var(--bg-hover);
   border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
 
-.btn-secondary:hover .btn-arrow {
-  transform: translateX(2px);
-  color: var(--text-primary);
+.mod-btn:active {
+  transform: translateY(0);
 }
 
-.btn-secondary:active {
-  transform: translateY(1px);
-}
-
-/* ==========================================================================
-   Sync Progress Stepper
-   ========================================================================== */
-
+/* Stepper */
 .progress-card {
   display: flex;
   flex-direction: column;
@@ -489,10 +482,7 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* ==========================================================================
-   Active Context Card & Nav Chips
-   ========================================================================== */
-
+/* Active Context & Toolbar */
 .card-header-mini {
   display: flex;
   align-items: center;
@@ -502,7 +492,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-tertiary);
-  margin-bottom: 5px;
+  margin-bottom: 3px;
 }
 
 .context-body {
@@ -547,9 +537,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
-  background: var(--bg-hover);
+  background: var(--bg-app);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: 10px;
@@ -584,10 +574,7 @@ body {
   background: var(--accent-btn-hover);
 }
 
-/* ==========================================================================
-   Sync Report Card
-   ========================================================================== */
-
+/* Sync Report Card */
 .report-card {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
@@ -638,10 +625,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* ==========================================================================
-   Toast Feedback Banner
-   ========================================================================== */
-
+/* Toast */
 .toast-banner {
   display: flex;
   align-items: center;
@@ -690,10 +674,7 @@ body {
   display: none !important;
 }
 
-/* ==========================================================================
-   Footer
-   ========================================================================== */
-
+/* Footer */
 .footer {
   display: flex;
   align-items: center;
