@@ -9,11 +9,12 @@ import {
   Database, 
   Shield, 
   ExternalLink,
-  Code2
+  Code2,
+  GitCompare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export type ActiveTab = 'graph' | 'matcher' | 'referrals' | 'resume';
+export type ActiveTab = 'graph' | 'matcher' | 'benchmark' | 'referrals' | 'resume';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -35,6 +36,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       label: 'Job Matchmaker',
       sublabel: 'AI-Powered Scoring',
       icon: Target,
+    },
+    {
+      id: 'benchmark' as ActiveTab,
+      label: 'Benchmark Lab',
+      sublabel: 'Peer Gap Analysis',
+      icon: GitCompare,
     },
     {
       id: 'referrals' as ActiveTab,

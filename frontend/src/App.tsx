@@ -6,6 +6,7 @@ import { KnowledgeGraph } from './components/KnowledgeGraph/KnowledgeGraph';
 import { JobMatchmaker } from './components/JobMatchmaker/JobMatchmaker';
 import { ReferralHub } from './components/ReferralHub/ReferralHub';
 import { ResumeStudio } from './components/ResumeStudio/ResumeStudio';
+import { BenchmarkLab } from './components/BenchmarkLab/BenchmarkLab';
 import { StartFreshModal } from './components/StartFreshModal';
 import { SyncGitHubModal } from './components/SyncGitHubModal';
 import { Toast, ToastMessage } from './components/Toast';
@@ -107,6 +108,14 @@ const MainLayout: React.FC = () => {
             <JobMatchmaker
               onSelectTailorResume={handleSelectTailorResume}
               onNavigateToReferrals={handleNavigateToReferrals}
+              onError={(msg) => addToast('error', msg)}
+              onSuccess={(msg) => addToast('success', msg)}
+            />
+          )}
+
+          {activeTab === 'benchmark' && (
+            <BenchmarkLab
+              onSelectTailorResume={handleSelectTailorResume}
               onError={(msg) => addToast('error', msg)}
               onSuccess={(msg) => addToast('success', msg)}
             />

@@ -108,3 +108,57 @@ export interface UserProfile {
   avatar_url?: string;
   isBenchmarkPeer?: boolean;
 }
+
+export interface BenchmarkPeer {
+  id: string;
+  name: string;
+  github_username: string;
+  role: string;
+  company: string;
+  avatar_url: string;
+  bio?: string;
+  repos_count: number;
+  skills: string[];
+}
+
+export interface SkillGapItem {
+  skill: string;
+  priority: 'High' | 'Medium' | 'Low';
+  impact: string;
+  action_item: string;
+}
+
+export interface RoadmapPhase {
+  phase: string;
+  milestones: string[];
+}
+
+export interface BenchmarkComparisonResult {
+  candidate: {
+    name: string;
+    repos_count: number;
+    stars_count: number;
+    languages: string[];
+    skills: string[];
+    connections_count: number;
+  };
+  peer: BenchmarkPeer & {
+    stars_count: number;
+    languages: string[];
+  };
+  skill_matrix: {
+    shared_skills: string[];
+    candidate_unique_skills: string[];
+    missing_peer_skills: string[];
+    overlap_percentage: number;
+  };
+  ai_analysis: {
+    candidate_score: number;
+    peer_score: number;
+    experience_gap_summary: string;
+    critical_skill_gaps: SkillGapItem[];
+    candidate_superpowers: string[];
+    strategic_roadmap: RoadmapPhase[];
+    hiring_manager_verdict: string;
+  };
+}

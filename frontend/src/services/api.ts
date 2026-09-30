@@ -171,5 +171,48 @@ export const apiService = {
     });
     if (!res.ok) throw new Error(`LinkedIn ingestion failed (${res.status})`);
     return await res.json();
+  },
+
+  async getBenchmarkPeers(headers: Record<string, string>): Promise<{ peers: any[]; total: number }> {
+    const res = await fetch(`${API_BASE}/api/v1/benchmark/peers`, { headers });
+    if (!res.ok) throw new Error(`Failed to load benchmark peers (${res.status})`);
+    return await res.json();
+  },
+
+  async addBenchmarkPeer(
+    payload: { github_username?: string; name?: string; role?: string; company?: string; custom_skills?: string[] },
+    headers: Record<string, string>
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/v1/benchmark/peers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to add benchmark peer (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getBenchmarkComparison(peerId?: string, headers: Record<string, string> = {}): Promise<any> {
+    const url = peerId 
+      ? `${API_BASE}/api/v1/benchmark/compare?peer_id=${encodeURIComponent(peerId)}`
+      : `${API_BASE}/api/v1/benchmark/compare`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to generate comparison (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async deleteBenchmarkPeer(peerId: string, headers: Record<string, string>): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/v1/benchmark/peers/${encodeURIComponent(peerId)}`, {
+      method: 'DELETE',
+      headers,
+    });
+    if (!res.ok) throw new Error(`Failed to delete peer (${res.status})`);
+    return await res.json();
   }
 };
