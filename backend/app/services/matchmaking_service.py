@@ -181,33 +181,40 @@ class MatchmakingService:
             "target_skills": all_target_skills
         })
 
-        # 3. Query Semantic Referral Bridges (Sharda Group / AEC / HCST Cluster)
+        # 3. Query Universal Multi-Source Referral Bridges
         target_company = job_req.get("company_name", "").strip()
         referral_query = """
         MATCH (u:User {id: $user_id})
+        
+        // 1. User Context
         OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)
         OPTIONAL MATCH (univ)-[:AFFILIATED_WITH]->(grp:EducationGroup)
+        OPTIONAL MATCH (u)-[:WORKED_AT]->(past_comp:Company)
+        OPTIONAL MATCH (u)-[:PARTICIPATED_IN]->(hack:Hackathon)
+
+        // 2. Target Company Employees
         OPTIONAL MATCH (p:Person)-[:WORKS_AT]->(c:Company)
         WHERE toLower(c.name) CONTAINS toLower($company)
            OR toLower($company) CONTAINS toLower(c.name)
+
+        // 3. Person Context
         OPTIONAL MATCH (p)-[:ATTENDED]->(p_univ:University)
         OPTIONAL MATCH (p_univ)-[:AFFILIATED_WITH]->(p_grp:EducationGroup)
+        OPTIONAL MATCH (p)-[:WORKED_AT]->(p_past_comp:Company)
+
         RETURN DISTINCT p.name AS name,
                p.position AS position,
-               c.name AS company,
-               coalesce(p_univ.name, univ.name, 'Sharda Group (Anand / HCST / SU)') AS college,
+               coalesce(c.name, $company) AS company,
+               coalesce(p_univ.name, univ.name, 'Alumni Network') AS college,
                CASE 
                  WHEN (u)-[:CONNECTED_TO]->(p) THEN '1st Degree Direct Connection'
-                 WHEN univ IS NOT NULL AND p_univ IS NOT NULL AND univ = p_univ THEN 'Direct College Alumni (AEC)'
-                 WHEN (grp IS NOT NULL AND p_grp IS NOT NULL AND grp = p_grp) 
-                   OR toLower(p_univ.name) CONTAINS 'sharda'
-                   OR toLower(p_univ.name) CONTAINS 'anand'
-                   OR toLower(p_univ.name) CONTAINS 'hindustan'
-                   OR toLower(p_univ.name) CONTAINS 'hcst'
-                   THEN 'Sharda Group (SGI/HCST/SU) Alumni Bridge'
+                 WHEN univ IS NOT NULL AND p_univ IS NOT NULL AND univ = p_univ THEN 'Direct University Alumni Bridge'
+                 WHEN grp IS NOT NULL AND p_grp IS NOT NULL AND grp = p_grp THEN grp.name + ' Alumni Bridge'
+                 WHEN past_comp IS NOT NULL AND p_past_comp IS NOT NULL AND past_comp = p_past_comp THEN 'Ex-Colleague (' + past_comp.name + ') Bridge'
+                 WHEN hack IS NOT NULL AND toLower(hack.organizer) CONTAINS toLower($company) THEN 'Hackathon Sponsor (' + hack.name + ') Bridge'
                  ELSE 'Company Employee Network'
                END AS connection_bridge
-        LIMIT 5
+        LIMIT 6
         """
         referral_bridges = []
         if target_company and target_company.lower() not in ["target company", "confidential", ""]:
