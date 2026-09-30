@@ -19,126 +19,127 @@ logger = logging.getLogger(__name__)
 
 class ResumeService:
     def __init__(self):
-        if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AQ."):
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel("gemini-3.5-flash-lite")
-        else:
-            self.model = None
+        pass
 
     @classmethod
     def extract_text_from_pdf(cls, file_bytes: bytes) -> str:
-        """Extracts clean digital text from a PDF byte stream."""
+        """Extracts clean digital text from a PDF byte stream while preserving layout structure."""
         try:
             reader = PdfReader(io.BytesIO(file_bytes))
             full_text = []
             for page in reader.pages:
                 page_text = page.extract_text() or ""
-                # Normalize spaces (some PDFs separate characters with spaces)
-                normalized = re.sub(r'(\w)\s+(\w)', r'\1 \2', page_text)
                 full_text.append(page_text.strip())
-            return "\n".join(full_text)
+            return "\n\n".join(full_text)
         except Exception as e:
             logger.error(f"Error reading PDF byte stream: {e}")
             return ""
 
     async def parse_resume_to_blueprint(self, raw_text: str) -> ResumeBlueprint:
         """
-        Parses unstructured resume text into a strict JSON Layout Blueprint.
+        Parses unstructured resume text into a strict JSON Layout Blueprint
+        using high-precision Gemini 1.5 Flash and Groq Llama 3.3.
         """
-        # Collapse multi-line single word breaks common in some PDF layouts
-        clean_text = self._normalize_pdf_text(raw_text)
+        from app.services.llm_service import llm_service
 
-        if self.model and clean_text:
-            prompt = f"""
-You are an expert ATS and Resume Layout Parser for CareerOS.
-Analyze the following resume text and parse it into an exact structured JSON blueprint.
+        if not raw_text or not raw_text.strip():
+            return self._advanced_heuristic_parser("", "")
 
-Resume Text:
+        system_prompt = """You are an elite, high-precision ATS resume and candidate intelligence parser.
+Extract the EXACT factual information from the candidate's resume into a structured JSON blueprint.
+
+CRITICAL EXTRACTION RULES:
+1. Candidate Full Name: Extract the actual human person's name from the very top of the resume. Never put project names, technologies, or job titles as the candidate name.
+2. Education: Extract university/college name, degree title (e.g. B.Tech, B.E., M.S., B.S.), major/field of study, and years.
+3. Experience: Extract company name, role/title, dates, and achievement bullet points.
+4. Projects: Extract project title, tech stack used, and bullet points.
+5. Skills: Categorize real technical skills into clean groups (Languages, Frameworks, Databases, Cloud & DevOps, AI/ML & Tools).
+
+Return ONLY valid JSON matching this schema (no markdown fences, no commentary):"""
+
+        user_prompt = f"""
+Resume Content:
 \"\"\"
-{clean_text[:15000]}
+{raw_text[:18000]}
 \"\"\"
 
-Return ONLY a valid JSON object with the exact structure below (no markdown fences, no backticks):
+JSON Schema:
 {{
   "contact": {{
-    "full_name": "Candidate Name",
-    "email": "email@example.com",
-    "phone": "+1234567890",
-    "location": "City, Country",
-    "linkedin_url": "linkedin.com/in/username",
-    "github_url": "github.com/username",
+    "full_name": "Exact Candidate Name",
+    "email": "candidate email or empty",
+    "phone": "candidate phone or empty",
+    "location": "City, State or Country or empty",
+    "linkedin_url": "linkedin profile url or username or empty",
+    "github_url": "github profile url or username or empty",
     "portfolio_url": ""
   }},
-  "summary": "Professional summary statement",
+  "summary": "Candidate professional summary statement",
+  "education": [
+    {{
+      "university": "College or University Name",
+      "degree": "Degree Title",
+      "field_of_study": "Major / Field",
+      "start_date": "Start Year / Date",
+      "end_date": "End Year / Date",
+      "gpa": ""
+    }}
+  ],
   "experience": [
     {{
       "company": "Company Name",
-      "role": "Job Title",
-      "location": "City/Remote",
-      "start_date": "MM/YYYY or Month Year",
-      "end_date": "Present or Month Year",
+      "role": "Job Role / Title",
+      "location": "Location or Remote",
+      "start_date": "Start Date",
+      "end_date": "End Date or Present",
       "is_current": true,
       "bullets": [
         "Achievement or responsibility bullet"
       ]
     }}
   ],
-  "education": [
-    {{
-      "university": "University / College Name",
-      "degree": "Degree (e.g. B.E. in Computer Science Engineering)",
-      "field_of_study": "Computer Science",
-      "start_date": "2023",
-      "end_date": "2027",
-      "gpa": ""
-    }}
-  ],
   "projects": [
     {{
       "name": "Project Name",
-      "tech_stack": "React, Firebase, IoT",
+      "tech_stack": "React, Python, etc.",
       "repo_url": "",
       "live_url": "",
       "bullets": [
-        "Feature description"
+        "Project description or feature bullet"
       ]
     }}
   ],
   "skills": [
     {{
-      "category": "Languages & Web",
-      "skills": ["Python", "JavaScript", "TypeScript", "HTML", "CSS", "React.js", "Next.js", "Node.js"]
+      "category": "Languages",
+      "skills": ["Skill 1", "Skill 2"]
     }},
     {{
-      "category": "Databases",
-      "skills": ["MongoDB", "PostgreSQL", "MySQL", "Firebase"]
+      "category": "Frameworks",
+      "skills": ["Skill 1", "Skill 2"]
     }},
     {{
-      "category": "AI & Security",
-      "skills": ["NLP", "RAG", "LLMs", "Network Security", "TCP/IP", "Wireshark", "Kali Linux"]
+      "category": "Databases & Cloud",
+      "skills": ["Skill 1", "Skill 2"]
     }}
   ]
 }}
 """
+        parsed_data = await llm_service.chat_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.1
+        )
+
+        if parsed_data and isinstance(parsed_data, dict) and "contact" in parsed_data:
             try:
-                response = self.model.generate_content(prompt)
-                clean_json = response.text.strip().replace("```json", "").replace("```", "").strip()
-                parsed_data = json.loads(clean_json)
                 parsed_data["raw_text"] = raw_text
                 return ResumeBlueprint(**parsed_data)
-            except Exception as e:
-                logger.warning(f"Gemini API parse failed, using advanced heuristic parser: {e}")
+            except Exception as pe:
+                logger.warning(f"Validation error constructing ResumeBlueprint from LLM output: {pe}")
 
-        # Advanced Heuristic Parser
-        return self._advanced_heuristic_parser(clean_text, raw_text)
-
-    def _normalize_pdf_text(self, text: str) -> str:
-        # Reconnect single character or single word line breaks (e.g. "M o h i t" or "Mohit \n Prasad")
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        joined = " ".join(lines)
-        # Fix spaced-out words
-        joined = re.sub(r'\s{2,}', ' ', joined)
-        return joined
+        # Fallback to algorithmic parser if LLM fails
+        return self._advanced_heuristic_parser(raw_text, raw_text)
 
     def _advanced_heuristic_parser(self, text: str, raw_text: str) -> ResumeBlueprint:
         """

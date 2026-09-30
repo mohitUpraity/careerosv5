@@ -145,13 +145,13 @@ class Neo4jService:
                       u.blueprint_json = $blueprint_json,
                       u.created_at = datetime(),
                       u.updated_at = datetime()
-        ON MATCH SET u.full_name = $full_name,
-                     u.email = $email,
-                     u.phone = $phone,
-                     u.location = $location,
-                     u.linkedin_url = $linkedin,
-                     u.github_url = $github,
-                     u.summary = $summary,
+        ON MATCH SET u.full_name = CASE WHEN $full_name <> '' THEN $full_name ELSE u.full_name END,
+                     u.email = CASE WHEN $email <> '' THEN $email ELSE u.email END,
+                     u.phone = CASE WHEN $phone <> '' THEN $phone ELSE u.phone END,
+                     u.location = CASE WHEN $location <> '' THEN $location ELSE u.location END,
+                     u.linkedin_url = CASE WHEN $linkedin <> '' THEN $linkedin ELSE u.linkedin_url END,
+                     u.github_url = CASE WHEN $github <> '' THEN $github ELSE u.github_url END,
+                     u.summary = CASE WHEN $summary <> '' THEN $summary ELSE u.summary END,
                      u.blueprint_json = $blueprint_json,
                      u.updated_at = datetime()
         RETURN u.id AS id;
@@ -169,9 +169,34 @@ class Neo4jService:
         })
         nodes_merged += 1
 
+        # Purge previous resume-sourced relationships for this user to ensure clean state
+        try:
+            purge_old_resume_rels = """
+            MATCH (u:User {id: $user_id})
+            OPTIONAL MATCH (u)-[r1:HAS_SKILL {source: 'resume'}]->()
+            OPTIONAL MATCH (u)-[r2:ATTENDED]->()
+            OPTIONAL MATCH (u)-[r3:WORKED_AT]->()
+            DELETE r1, r2, r3;
+            """
+            await neo4j_client.execute_query(purge_old_resume_rels, {"user_id": user_id})
+        except Exception as pe:
+            logger.warning(f"Note on purging old resume relationships: {pe}")
+
         # 2. Upsert Education & University Nodes
+        forbidden_terms = set()
+        if contact.full_name:
+            forbidden_terms.add(contact.full_name.strip().lower())
+            for part in contact.full_name.strip().lower().split():
+                if len(part) > 2:
+                    forbidden_terms.add(part)
+
         for edu in blueprint.education:
-            if edu.university:
+            raw_univ = (edu.university or "").strip()
+            # Clean university string: remove degree suffixes and trailing punctuation
+            clean_univ = re.split(r'\s*[-–—|,]\s*(?:B\.?Tech|Bachelor|Master|B\.?E|Degree|Engineering)', raw_univ, flags=re.IGNORECASE)[0].strip()
+            clean_univ = re.sub(r'[\(\)\[\]]', '', clean_univ).strip()
+            if clean_univ and len(clean_univ) > 3:
+                forbidden_terms.add(clean_univ.lower())
                 edu_query = """
                 MATCH (u:User {id: $user_id})
                 MERGE (univ:University {name: $university_name})
@@ -179,20 +204,25 @@ class Neo4jService:
                 ON CREATE SET r.degree = $degree,
                               r.field_of_study = $field,
                               r.end_date = $end_date
+                ON MATCH SET r.degree = $degree,
+                             r.field_of_study = $field,
+                             r.end_date = $end_date
                 RETURN univ.name;
                 """
                 await neo4j_client.execute_query(edu_query, {
                     "user_id": user_id,
-                    "university_name": edu.university.strip(),
-                    "degree": edu.degree,
-                    "field": edu.field_of_study,
-                    "end_date": edu.end_date
+                    "university_name": clean_univ[:60],
+                    "degree": edu.degree or "Degree",
+                    "field": edu.field_of_study or "Engineering / Science",
+                    "end_date": edu.end_date or ""
                 })
                 nodes_merged += 1
 
         # 3. Upsert Work Experience & Company Nodes
         for exp in blueprint.experience:
-            if exp.company:
+            comp_name = (exp.company or "").strip()
+            if comp_name and len(comp_name) > 1 and len(comp_name) < 60:
+                forbidden_terms.add(comp_name.lower())
                 comp_query = """
                 MATCH (u:User {id: $user_id})
                 MERGE (c:Company {name: $company_name})
@@ -201,23 +231,53 @@ class Neo4jService:
                               r.start_date = $start_date,
                               r.end_date = $end_date,
                               r.is_current = $is_current
+                ON MATCH SET r.role = $role,
+                             r.start_date = $start_date,
+                             r.end_date = $end_date,
+                             r.is_current = $is_current
                 RETURN c.name;
                 """
                 await neo4j_client.execute_query(comp_query, {
                     "user_id": user_id,
-                    "company_name": exp.company.strip(),
-                    "role": exp.role,
-                    "start_date": exp.start_date,
-                    "end_date": exp.end_date,
-                    "is_current": exp.is_current
+                    "company_name": comp_name,
+                    "role": exp.role or "Software Engineer",
+                    "start_date": exp.start_date or "",
+                    "end_date": exp.end_date or "",
+                    "is_current": bool(exp.is_current)
                 })
                 nodes_merged += 1
 
-        # 4. Upsert Skills from Resume
+        # 4. Upsert Skills from Resume (Strict Sanitization against name/institution/company/sentences)
         all_skills = []
+        invalid_skill_words = {
+            "experience", "education", "project", "projects", "engineer", "software",
+            "developer", "student", "candidate", "resume", "summary", "profile", "curriculum",
+            "technologies", "technology", "skills", "languages", "frameworks", "tools", "email", "phone"
+        }
+        seen_skill_names = set()
+
         for cat in blueprint.skills:
             for s in cat.skills:
-                all_skills.append({"name": s.strip(), "category": cat.category})
+                cleaned_skill = s.strip()
+                # Remove leading/trailing bullet symbols or dashes
+                cleaned_skill = re.sub(r'^[•\-\*\+:]\s*', '', cleaned_skill).strip()
+                if not cleaned_skill:
+                    continue
+
+                # Discard sentence-like skill strings or full names
+                if len(cleaned_skill) > 30 or len(cleaned_skill) < 2:
+                    continue
+                if cleaned_skill.lower() in forbidden_terms or any(t in cleaned_skill.lower().split() for t in forbidden_terms if len(t) > 3):
+                    continue
+                if any(w in cleaned_skill.lower() for w in invalid_skill_words):
+                    continue
+                if re.search(r'[@\/\\:;]', cleaned_skill):
+                    continue
+                if cleaned_skill.lower() in seen_skill_names:
+                    continue
+
+                seen_skill_names.add(cleaned_skill.lower())
+                all_skills.append({"name": cleaned_skill, "category": cat.category or "Technical"})
 
         if all_skills:
             skill_query = """

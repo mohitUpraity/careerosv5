@@ -52,18 +52,24 @@ class LLMService:
                 logger.warning(f"Groq chat completion failed: {e}. Falling back to Gemini/Heuristics.")
 
         # 2. Fallback to Gemini if configured
-        if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AQ."):
-            try:
-                import google.generativeai as genai
-                import asyncio
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                gmodel = genai.GenerativeModel("gemini-3.5-flash-lite")
-                combined_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn strictly valid JSON only."
-                response = await asyncio.to_thread(gmodel.generate_content, combined_prompt)
-                clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-                return json.loads(clean_text)
-            except Exception as ge:
-                logger.warning(f"Gemini fallback failed: {ge}")
+        if settings.GEMINI_API_KEY:
+            for gem_model_name in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                try:
+                    import google.generativeai as genai
+                    import asyncio
+                    genai.configure(api_key=settings.GEMINI_API_KEY)
+                    gmodel = genai.GenerativeModel(gem_model_name)
+                    combined_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn strictly valid JSON only (no markdown fences, no commentary)."
+                    response = await asyncio.to_thread(gmodel.generate_content, combined_prompt)
+                    if response and response.text:
+                        clean_text = response.text.strip()
+                        if "```json" in clean_text:
+                            clean_text = clean_text.split("```json")[1].split("```")[0].strip()
+                        elif "```" in clean_text:
+                            clean_text = clean_text.split("```")[1].split("```")[0].strip()
+                        return json.loads(clean_text)
+                except Exception as ge:
+                    logger.warning(f"Gemini model {gem_model_name} failed: {ge}")
 
         return None
 

@@ -374,7 +374,27 @@ class ProfileService:
                     })
                     add_link(f"user_{user_id}", uid, "ATTENDED")
 
-                # 5. Connections & Alumni Bridges
+                # 5. Direct Skills (from Resume and verified sources)
+                skill_res = await neo4j_client.execute_query(
+                    """
+                    MATCH (u:User {id: $user_id})-[:HAS_SKILL]->(s:Skill)
+                    RETURN DISTINCT s.name as name, s.category as category
+                    LIMIT 40
+                    """,
+                    {"user_id": user_id}
+                )
+                user_name_tokens = set(user_name.lower().split()) if user_name else set()
+                for s in skill_res:
+                    sname = (s.get("name") or "").strip()
+                    if not sname or len(sname) > 30 or len(sname) < 2:
+                        continue
+                    if sname.lower() == user_name.lower() or sname.lower() in user_name_tokens:
+                        continue
+                    sid = f"skill_{sname.lower()}"
+                    add_node(sid, sname, "skill", s.get("category") or "Technical Skill", {"verified": True})
+                    add_link(f"user_{user_id}", sid, "HAS_SKILL")
+
+                # 6. Connections & Alumni Bridges
                 conn_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)
@@ -423,6 +443,9 @@ class ProfileService:
 
     @classmethod
     def _generate_default_rich_graph(cls, user_id: str, user_name: str = "Candidate") -> Dict[str, Any]:
+        """
+        Returns a clean initial graph node for the user if database is completely fresh.
+        """
         return {
             "status": "success",
             "nodes_count": 1,
@@ -437,101 +460,6 @@ class ProfileService:
                 }
             ],
             "links": []
-        }
-
-
-        return {
-            "status": "success",
-            "nodes_count": len(nodes),
-            "links_count": len(links),
-            "nodes": nodes,
-            "links": links
-        }
-
-    @classmethod
-    def _generate_default_rich_graph(cls, user_id: str) -> Dict[str, Any]:
-        """
-        Verified high-fidelity topology representing Mohit's real assets when offline.
-        """
-        nodes = [
-            {"id": f"user_{user_id}", "label": "Mohit Upraity", "type": "user", "category": "Candidate", "val": 28, "headline": "Software Engineer @ DRDO / SGI", "github": "mohitUpraity"},
-            # Repos
-            {"id": "proj_careerosv5", "label": "careerosv5", "type": "project", "category": "Code Repository", "val": 20, "desc": "GraphRAG Career Navigation Co-Pilot", "url": "https://github.com/mohitUpraity/careerosv5", "lang": "Python", "stars": 2},
-            {"id": "proj_RecoverIQ", "label": "RecoverIQ", "type": "project", "category": "Code Repository", "val": 18, "desc": "AI Automated Incident Response Platform", "url": "https://github.com/mohitUpraity/RecoverIQ", "lang": "Python", "stars": 3},
-            {"id": "proj_reconpilot", "label": "reconpilot", "type": "project", "category": "Code Repository", "val": 16, "desc": "Reconnaissance & Vulnerability Assessment Automation", "url": "https://github.com/mohitUpraity/reconpilot", "lang": "Python", "stars": 1},
-            {"id": "proj_careerOS", "label": "careerOS", "type": "project", "category": "Code Repository", "val": 16, "desc": "Career Orchestration Engine v1", "url": "https://github.com/mohitUpraity/careerOS", "lang": "TypeScript", "stars": 1},
-            # Universities
-            {"id": "univ_anand", "label": "Anand Engineering College", "type": "university", "category": "SGI Cluster", "val": 22, "degree": "B.Tech in CSE (2023-2027)"},
-            {"id": "univ_sharda", "label": "Sharda University Agra", "type": "university", "category": "SGI Cluster", "val": 18, "degree": "Sister Campus / Alumni Network"},
-            {"id": "univ_hcst", "label": "Hindustan College HCST", "type": "university", "category": "SGI Cluster", "val": 18, "degree": "SGI Alumni Node"},
-            # Companies
-            {"id": "comp_drdo", "label": "DRDO – ADRDE Agra", "type": "company", "category": "Employer / Company", "val": 22, "role": "Cybersecurity & AI Intern", "timeline": "Feb 2026 - Jun 2026"},
-            {"id": "comp_surexa", "label": "SUREXA IT Solutions", "type": "company", "category": "Employer / Company", "val": 18, "role": "ML & Backend Intern", "timeline": "Apr 2026 - Present"},
-            {"id": "comp_apponward", "label": "Apponward Technologies", "type": "company", "category": "Target Company", "val": 20},
-            {"id": "comp_google", "label": "Google", "type": "company", "category": "Target Company", "val": 20},
-            {"id": "comp_microsoft", "label": "Microsoft", "type": "company", "category": "Target Company", "val": 20},
-            # Skills
-            {"id": "skill_python", "label": "Python", "type": "skill", "category": "Language", "val": 12, "verified": True},
-            {"id": "skill_fastapi", "label": "FastAPI", "type": "skill", "category": "Framework", "val": 12, "verified": True},
-            {"id": "skill_neo4j", "label": "Neo4j / Cypher", "type": "skill", "category": "Database", "val": 12, "verified": True},
-            {"id": "skill_graphrag", "label": "GraphRAG", "type": "skill", "category": "AI / Graphs", "val": 12, "verified": True},
-            {"id": "skill_docker", "label": "Docker", "type": "skill", "category": "DevOps", "val": 10, "verified": True},
-            {"id": "skill_iptables", "label": "Linux iptables / DPI", "type": "skill", "category": "Security", "val": 10, "verified": True},
-            {"id": "skill_react", "label": "React / Next.js", "type": "skill", "category": "Frontend", "val": 10, "verified": True},
-            # Key Connections / Alumni Bridges
-            {"id": "person_kuldeep", "label": "Kuldeep Chaudhary", "type": "person", "category": "Alumni Bridge", "val": 14, "headline": "Backend Developer @ Apponward", "company": "Apponward Technologies", "college": "Anand Engineering College", "is_alumni": True},
-            {"id": "person_prashant", "label": "Prashant Sharma", "type": "person", "category": "Alumni Bridge", "val": 14, "headline": "Software Engineer @ Google", "company": "Google", "college": "Anand Engineering College", "is_alumni": True},
-            {"id": "person_ayush", "label": "Ayush Saxena", "type": "person", "category": "Alumni Bridge", "val": 14, "headline": "Security Engineer @ Microsoft", "company": "Microsoft", "college": "Hindustan College HCST", "is_alumni": True},
-            {"id": "person_saurabh", "label": "Saurabh Kumar", "type": "person", "category": "1st-Degree Connection", "val": 12, "headline": "Cloud Solutions Architect", "company": "Apponward Technologies", "is_alumni": False},
-            {"id": "person_ritika", "label": "Ritika Joshi", "type": "person", "category": "Alumni Bridge", "val": 14, "headline": "Data Scientist @ SUREXA", "company": "SUREXA IT Solutions", "college": "Sharda University Agra", "is_alumni": True}
-        ]
-
-        links = [
-            # User to Projects
-            {"source": f"user_{user_id}", "target": "proj_careerosv5", "type": "BUILT", "label": "BUILT"},
-            {"source": f"user_{user_id}", "target": "proj_RecoverIQ", "type": "BUILT", "label": "BUILT"},
-            {"source": f"user_{user_id}", "target": "proj_reconpilot", "type": "BUILT", "label": "BUILT"},
-            {"source": f"user_{user_id}", "target": "proj_careerOS", "type": "BUILT", "label": "BUILT"},
-            # User to Universities & Employers
-            {"source": f"user_{user_id}", "target": "univ_anand", "type": "ATTENDED", "label": "ATTENDED"},
-            {"source": f"user_{user_id}", "target": "comp_drdo", "type": "WORKED_AT", "label": "INTERN"},
-            {"source": f"user_{user_id}", "target": "comp_surexa", "type": "WORKED_AT", "label": "INTERN"},
-            # Projects to Skills
-            {"source": "proj_careerosv5", "target": "skill_python", "type": "USES_TECH", "label": "USES"},
-            {"source": "proj_careerosv5", "target": "skill_fastapi", "type": "USES_TECH", "label": "USES"},
-            {"source": "proj_careerosv5", "target": "skill_neo4j", "type": "USES_TECH", "label": "USES"},
-            {"source": "proj_careerosv5", "target": "skill_graphrag", "type": "USES_TECH", "label": "USES"},
-            {"source": "proj_RecoverIQ", "target": "skill_python", "type": "USES_TECH", "label": "USES"},
-            {"source": "proj_RecoverIQ", "target": "skill_docker", "type": "USES_TECH", "label": "USES"},
-            {"source": "proj_reconpilot", "target": "skill_iptables", "type": "USES_TECH", "label": "USES"},
-            # User to Skills
-            {"source": f"user_{user_id}", "target": "skill_python", "type": "HAS_SKILL", "label": "VERIFIED"},
-            {"source": f"user_{user_id}", "target": "skill_fastapi", "type": "HAS_SKILL", "label": "VERIFIED"},
-            {"source": f"user_{user_id}", "target": "skill_neo4j", "type": "HAS_SKILL", "label": "VERIFIED"},
-            {"source": f"user_{user_id}", "target": "skill_react", "type": "HAS_SKILL", "label": "CLAIMED"},
-            # Alumni & Connections to Colleges & Companies
-            {"source": f"user_{user_id}", "target": "person_kuldeep", "type": "CONNECTED_TO", "label": "1st-Degree"},
-            {"source": f"user_{user_id}", "target": "person_prashant", "type": "CONNECTED_TO", "label": "1st-Degree"},
-            {"source": f"user_{user_id}", "target": "person_ayush", "type": "CONNECTED_TO", "label": "1st-Degree"},
-            {"source": f"user_{user_id}", "target": "person_saurabh", "type": "CONNECTED_TO", "label": "1st-Degree"},
-            {"source": f"user_{user_id}", "target": "person_ritika", "type": "CONNECTED_TO", "label": "1st-Degree"},
-            {"source": "person_kuldeep", "target": "comp_apponward", "type": "WORKS_AT", "label": "WORKS_AT"},
-            {"source": "person_kuldeep", "target": "univ_anand", "type": "ATTENDED", "label": "ALUMNI"},
-            {"source": "person_prashant", "target": "comp_google", "type": "WORKS_AT", "label": "WORKS_AT"},
-            {"source": "person_prashant", "target": "univ_anand", "type": "ATTENDED", "label": "ALUMNI"},
-            {"source": "person_ayush", "target": "comp_microsoft", "type": "WORKS_AT", "label": "WORKS_AT"},
-            {"source": "person_ayush", "target": "univ_hcst", "type": "ATTENDED", "label": "ALUMNI"},
-            {"source": "person_saurabh", "target": "comp_apponward", "type": "WORKS_AT", "label": "WORKS_AT"},
-            {"source": "person_ritika", "target": "comp_surexa", "type": "WORKS_AT", "label": "WORKS_AT"},
-            {"source": "person_ritika", "target": "univ_sharda", "type": "ATTENDED", "label": "ALUMNI"}
-        ]
-
-        return {
-            "status": "success",
-            "nodes_count": len(nodes),
-            "links_count": len(links),
-            "nodes": nodes,
-            "links": links
         }
 
     @classmethod

@@ -102,7 +102,7 @@ class LinkedInPostsService:
 
         try:
             import asyncio
-            model = genai.GenerativeModel("gemini-3.5-flash-lite")
+            model = genai.GenerativeModel("gemini-1.5-flash")
             prompt = POSTS_EXTRACTION_PROMPT.replace("{posts_content}", posts_text[:20000])
             
             response = await asyncio.to_thread(model.generate_content, prompt)
