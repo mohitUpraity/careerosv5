@@ -77,7 +77,42 @@ class Neo4jService:
         return nodes_merged_count
 
     @classmethod
+    async def get_user_synced_projects(cls, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Queries Neo4j for all Project nodes currently linked to the candidate via (u:User)-[:BUILT]->(p:Project).
+        """
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return []
+
+        query = """
+        MATCH (u:User {id: $user_id})-[:BUILT]->(p:Project)
+        RETURN p.id AS id, p.name AS name, p.repo_url AS repo_url, p.primary_language AS primary_language, p.stars_count AS stars
+        ORDER BY p.name ASC;
+        """
+        try:
+            results = await neo4j_client.execute_query(query, {"user_id": user_id})
+            return results or []
+        except Exception as e:
+            logger.warning(f"Failed to fetch user projects from Neo4j: {e}")
+            return []
+
+    @classmethod
+    async def get_user_synced_project_ids(cls, user_id: str) -> List[str]:
+        """
+        Returns list of synced project IDs and normalized repo names for fast deduplication.
+        """
+        projects = await cls.get_user_synced_projects(user_id)
+        synced_identifiers = set()
+        for p in projects:
+            if p.get("id"):
+                synced_identifiers.add(str(p["id"]).lower())
+            if p.get("name"):
+                synced_identifiers.add(str(p["name"]).lower())
+        return list(synced_identifiers)
+
+    @classmethod
     async def upsert_user_resume_blueprint(
+
         cls,
         user_id: str,
         blueprint: Any

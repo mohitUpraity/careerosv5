@@ -103,15 +103,57 @@ export const apiService = {
     return await res.json();
   },
 
-  async ingestGithub(username: string, headers: Record<string, string>): Promise<any> {
+  async getGithubSyncStatus(username: string, headers: Record<string, string>, token?: string): Promise<{
+    status: string;
+    username: string;
+    total_github_repos: number;
+    synced_projects_count: number;
+    unsynced_repos_count: number;
+    synced_projects: Array<{ id: string; name: string; repo_url: string; primary_language: string; stars?: number }>;
+  }> {
+    const params = new URLSearchParams({ username });
+    if (token) params.append('token', token);
+    const res = await fetch(`${API_BASE}/api/v1/ingest/github/status?${params.toString()}`, { headers });
+    if (!res.ok) throw new Error(`Failed to load GitHub sync status (${res.status})`);
+    return await res.json();
+  },
+
+  async ingestGithub(
+    username: string, 
+    headers: Record<string, string>, 
+    maxRepos: number = 0, 
+    token?: string,
+    includeForks: boolean = false,
+    onlyUnsynced: boolean = false
+  ): Promise<{
+    status: string;
+    username: string;
+    repos_processed: number;
+    repos_total_found: number;
+    new_repos_synced: number;
+    already_synced_count: number;
+    skills_extracted: number;
+    projects: any[];
+    graph_nodes_merged: number;
+  }> {
     const res = await fetch(`${API_BASE}/api/v1/ingest/github`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ github_username: username }),
+      body: JSON.stringify({ 
+        username, 
+        max_repos: maxRepos,
+        github_token: token || undefined,
+        include_forks: includeForks,
+        only_unsynced: onlyUnsynced
+      }),
     });
-    if (!res.ok) throw new Error(`GitHub ingestion failed (${res.status})`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `GitHub ingestion failed (${res.status})`);
+    }
     return await res.json();
   },
+
 
   async ingestLinkedinCsv(file: File, headers: Record<string, string>): Promise<any> {
     const formData = new FormData();

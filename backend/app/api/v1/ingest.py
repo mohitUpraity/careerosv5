@@ -1,7 +1,8 @@
+import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from app.core.security import get_current_user
 from app.schemas.ingest_models import GitHubIngestRequest, GitHubIngestResponse
 from app.schemas.resume_blueprint import ResumeIngestResponse
@@ -15,26 +16,55 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ingest", tags=["Data Ingestion"])
 
+@router.get("/github/status")
+async def get_github_sync_status(
+    username: str = Query("mohitUpraity"),
+    token: Optional[str] = Query(None),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Returns total public repositories on GitHub vs currently synced repositories in Neo4j.
+    """
+    user_id = current_user["id"]
+    synced_projects = await neo4j_service.get_user_synced_projects(user_id)
+    synced_names = {str(p.get("name", "")).lower() for p in synced_projects if p.get("name")}
+    
+    total_public_repos = await github_service.get_user_public_repo_count(username=username, token=token)
+    
+    return {
+        "status": "success",
+        "username": username,
+        "total_github_repos": total_public_repos,
+        "synced_projects_count": len(synced_projects),
+        "unsynced_repos_count": max(0, total_public_repos - len(synced_projects)),
+        "synced_projects": synced_projects
+    }
+
 @router.post("/github", response_model=GitHubIngestResponse)
 async def ingest_github_repositories(
     payload: GitHubIngestRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
-    Ingests public repositories for a candidate, extracts tech stacks using Gemini,
+    Ingests public repositories for a candidate, extracts tech stacks using Gemini/Groq in parallel,
     and merges the graph topology into Neo4j scoped to the authenticated user.
+    Supports syncing all repos (max_repos=0) and incremental syncing of only unsynced repos.
     """
     username = payload.username or "mohitUpraity"
     user_id = current_user["id"]
     user_email = current_user.get("email", "")
 
-    logger.info(f"Initiating GitHub ingestion for user {user_id} (GitHub: {username})")
+    logger.info(f"Initiating GitHub ingestion for user {user_id} (GitHub: {username}, max_repos: {payload.max_repos}, only_unsynced: {payload.only_unsynced})")
 
-    # 1. Fetch repositories
+    # 1. Fetch currently synced repositories in Neo4j
+    synced_identifiers = set(await neo4j_service.get_user_synced_project_ids(user_id))
+
+    # 2. Fetch target repositories from GitHub
     raw_projects = await github_service.fetch_user_repositories(
         username=username,
         token=payload.github_token,
-        max_repos=payload.max_repos
+        max_repos=payload.max_repos,
+        include_forks=payload.include_forks
     )
 
     if not raw_projects:
@@ -43,18 +73,54 @@ async def ingest_github_repositories(
             detail=f"No public repositories found for GitHub user '{username}'"
         )
 
-    # 2. Extract skills per project using Gemini
-    total_skills = set()
-    processed_projects = []
+    total_found = len(raw_projects)
+    already_synced_in_batch = 0
+    projects_to_process = []
 
+    # 3. Filter if incremental sync requested
     for proj in raw_projects:
-        extracted_skills = await gemini_extractor.extract_project_skills(proj)
-        proj["skills"] = extracted_skills
-        for s in extracted_skills:
-            total_skills.add(s["name"])
-        processed_projects.append(proj)
+        proj_id_lower = str(proj["id"]).lower()
+        proj_name_lower = str(proj["name"]).lower()
+        is_synced = (proj_id_lower in synced_identifiers) or (proj_name_lower in synced_identifiers)
 
-    # 3. Upsert into Neo4j Graph with Multi-Tenant Isolation
+        if is_synced:
+            already_synced_in_batch += 1
+            if payload.only_unsynced:
+                continue  # Skip already synced projects
+
+        projects_to_process.append(proj)
+
+    # If only_unsynced was requested and no new repos remain:
+    if payload.only_unsynced and not projects_to_process:
+        return GitHubIngestResponse(
+            status="success",
+            username=username,
+            repos_processed=0,
+            repos_total_found=total_found,
+            new_repos_synced=0,
+            already_synced_count=already_synced_in_batch,
+            skills_extracted=0,
+            projects=[],
+            graph_nodes_merged=0
+        )
+
+    # 4. Extract skills concurrently with bounded semaphore
+    semaphore = asyncio.Semaphore(6)
+    total_skills = set()
+
+    async def process_project_skills(proj: Dict[str, Any]) -> Dict[str, Any]:
+        async with semaphore:
+            extracted_skills = await gemini_extractor.extract_project_skills(proj)
+            proj["skills"] = extracted_skills
+            return proj
+
+    processed_projects = await asyncio.gather(*[process_project_skills(p) for p in projects_to_process])
+
+    for proj in processed_projects:
+        for s in proj.get("skills", []):
+            total_skills.add(s["name"])
+
+    # 5. Upsert into Neo4j Graph with Multi-Tenant Isolation
     nodes_merged = await neo4j_service.upsert_user_github_projects(
         user_id=user_id,
         user_email=user_email,
@@ -62,14 +128,20 @@ async def ingest_github_repositories(
         projects=processed_projects
     )
 
+    new_synced_count = len(processed_projects) if payload.only_unsynced else max(0, len(processed_projects) - already_synced_in_batch)
+
     return GitHubIngestResponse(
         status="success",
         username=username,
         repos_processed=len(processed_projects),
+        repos_total_found=total_found,
+        new_repos_synced=new_synced_count,
+        already_synced_count=already_synced_in_batch,
         skills_extracted=len(total_skills),
         projects=processed_projects,
         graph_nodes_merged=nodes_merged
     )
+
 
 @router.post("/resume", response_model=ResumeIngestResponse)
 async def ingest_candidate_resume(

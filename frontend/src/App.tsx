@@ -7,6 +7,7 @@ import { JobMatchmaker } from './components/JobMatchmaker/JobMatchmaker';
 import { ReferralHub } from './components/ReferralHub/ReferralHub';
 import { ResumeStudio } from './components/ResumeStudio/ResumeStudio';
 import { StartFreshModal } from './components/StartFreshModal';
+import { SyncGitHubModal } from './components/SyncGitHubModal';
 import { Toast, ToastMessage } from './components/Toast';
 import { apiService, ProfileAnalysis } from './services/api';
 import { GraphData } from './types';
@@ -16,6 +17,7 @@ const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('graph');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isSyncGitHubModalOpen, setIsSyncGitHubModalOpen] = useState(false);
 
   // App data state
   const [graphData, setGraphData] = useState<GraphData | null>(null);
@@ -78,11 +80,12 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#080C14] text-slate-100 selection:bg-emerald-500/30">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
       {/* Top Navigation */}
       <Navbar
         analysis={analysis}
         onOpenResetModal={() => setIsResetModalOpen(true)}
+        onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
         onRefreshData={loadProfileData}
         loading={loading}
       />
@@ -91,9 +94,13 @@ const MainLayout: React.FC = () => {
       <div className="flex-1 flex flex-col lg:flex-row">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto min-h-[calc(100vh-61px)]">
+        <main className="flex-1 p-4 lg:p-6 overflow-y-auto min-h-[calc(100vh-57px)]">
           {activeTab === 'graph' && (
-            <KnowledgeGraph graphData={graphData} loading={loading} />
+            <KnowledgeGraph 
+              graphData={graphData} 
+              loading={loading} 
+              onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
+            />
           )}
 
           {activeTab === 'matcher' && (
@@ -124,6 +131,17 @@ const MainLayout: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Sync GitHub Modal */}
+      <SyncGitHubModal
+        isOpen={isSyncGitHubModalOpen}
+        onClose={() => setIsSyncGitHubModalOpen(false)}
+        onSyncSuccess={() => {
+          loadProfileData();
+        }}
+        onSuccessToast={(msg) => addToast('success', msg)}
+        onErrorToast={(msg) => addToast('error', msg)}
+      />
 
       {/* Database Reset & Fresh Start Modal */}
       <StartFreshModal

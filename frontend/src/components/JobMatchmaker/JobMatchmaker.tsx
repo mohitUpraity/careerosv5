@@ -122,15 +122,14 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
         getAuthHeaders()
       );
       setAnalysisResult(result);
-      onSuccess(`Match score calculated: ${result.match_score}% via Groq Llama 3.3!`);
+      onSuccess(`Match score calculated: ${result.match_score}%`);
 
-      // Trigger celebratory confetti for high scores!
       if (result.match_score >= 70) {
         confetti({
-          particleCount: 80,
-          spread: 70,
+          particleCount: 60,
+          spread: 60,
           origin: { y: 0.6 },
-          colors: ['#10b981', '#06b6d4', '#6366f1']
+          colors: ['#2563EB', '#059669', '#7C3AED']
         });
       }
     } catch (err: any) {
@@ -149,30 +148,34 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Top Header & Presets */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900/90 border border-slate-800/80 shadow-xl">
+      <div
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl card"
+      >
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="p-1.5 rounded-lg" style={{ backgroundColor: 'var(--brand-50)', color: 'var(--brand-600)' }}>
               <Zap className="w-4 h-4" />
             </span>
-            <h2 className="text-lg font-bold text-slate-100">Live AI Job Matchmaker</h2>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Job Matchmaker</h2>
           </div>
-          <p className="text-xs text-slate-400">
-            Real-time GraphRAG skill topology matching powered by Groq Llama 3.3 70B
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            AI-powered skill topology matching against job descriptions
           </p>
         </div>
 
-        {/* Preset Selector Badges */}
+        {/* Preset Selector */}
         <div className="flex flex-wrap items-center gap-2">
           {PRESET_JOBS.map((preset) => (
             <button
               key={preset.id}
               onClick={() => handleSelectPreset(preset.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                selectedPreset === preset.id
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              style={{
+                backgroundColor: selectedPreset === preset.id ? 'var(--brand-50)' : 'transparent',
+                color: selectedPreset === preset.id ? 'var(--brand-600)' : 'var(--text-secondary)',
+                border: `1px solid ${selectedPreset === preset.id ? 'var(--brand-100)' : 'var(--border-primary)'}`,
+                fontWeight: selectedPreset === preset.id ? 600 : 500,
+              }}
             >
               {preset.company.split(' ')[0]}
             </button>
@@ -183,39 +186,45 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
       {/* Main Grid: Input Panel & Results */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Job Input Card */}
-        <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4 flex flex-col justify-between">
+        <div className="lg:col-span-5 p-5 rounded-xl card space-y-4 flex flex-col justify-between">
           <div className="space-y-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Target Company</label>
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company</label>
               <input
                 type="text"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                className="input-base w-full text-sm"
                 placeholder="e.g. Google, Apponward"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Target Role / Title</label>
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Role / Title</label>
               <input
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                className="input-base w-full text-sm"
                 placeholder="e.g. Senior Backend Engineer"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Job Description / Requirements
               </label>
               <textarea
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
                 rows={10}
-                className="w-full px-3.5 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 font-mono leading-relaxed focus:outline-none focus:border-emerald-500/50"
+                className="w-full px-3 py-2.5 text-sm font-mono leading-relaxed rounded-lg"
+                style={{
+                  backgroundColor: 'var(--bg-primary)',
+                  border: '1px solid var(--border-primary)',
+                  color: 'var(--text-primary)',
+                  outline: 'none',
+                }}
                 placeholder="Paste the full job description here..."
               />
             </div>
@@ -224,17 +233,18 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
           <button
             onClick={handleRunMatch}
             disabled={loading}
-            className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all"
+            className="w-full py-3 px-4 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+            style={{ backgroundColor: 'var(--brand-600)' }}
           >
             {loading ? (
               <>
                 <Cpu className="w-4 h-4 animate-spin" />
-                Analyzing Graph Topology with Groq Llama 3.3...
+                Analyzing...
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Run Sub-Second AI Match Analysis
+                Run Match Analysis
               </>
             )}
           </button>
@@ -244,35 +254,30 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
         <div className="lg:col-span-7 space-y-6">
           {analysisResult ? (
             <div className="space-y-6 animate-fade-in">
-              {/* Score Bento Box */}
-              <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl">
+              {/* Score Card */}
+              <div
+                className="p-6 rounded-xl card flex flex-col sm:flex-row items-center justify-between gap-6"
+              >
                 <div className="space-y-2 text-center sm:text-left">
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400 font-semibold">
-                    GraphRAG Compatibility
+                  <span className="badge-brand text-[10px] font-mono uppercase tracking-widest font-semibold">
+                    Compatibility Score
                   </span>
-                  <h3 className="text-xl font-bold text-slate-100">{analysisResult.job_title}</h3>
-                  <p className="text-xs text-slate-400">{analysisResult.company}</p>
-                  <p className="text-xs text-slate-300 max-w-md mt-2 leading-relaxed">
+                  <h3 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{analysisResult.job_title}</h3>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{analysisResult.company}</p>
+                  <p className="text-xs max-w-md mt-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                     {analysisResult.summary}
                   </p>
                 </div>
 
-                {/* Animated Circular SVG Match Gauge */}
+                {/* Circular SVG Match Gauge */}
                 <div className="relative flex items-center justify-center shrink-0">
                   <svg className="w-36 h-36 transform -rotate-90">
+                    <circle cx="72" cy="72" r={radius} stroke="var(--bg-tertiary)" strokeWidth="10" fill="transparent" />
                     <circle
                       cx="72"
                       cy="72"
                       r={radius}
-                      stroke="rgba(30, 41, 59, 0.8)"
-                      strokeWidth="10"
-                      fill="transparent"
-                    />
-                    <circle
-                      cx="72"
-                      cy="72"
-                      r={radius}
-                      stroke={score >= 80 ? '#10b981' : score >= 60 ? '#06b6d4' : '#f59e0b'}
+                      stroke={score >= 80 ? 'var(--score-high)' : score >= 60 ? 'var(--score-mid)' : 'var(--score-low)'}
                       strokeWidth="10"
                       strokeDasharray={circumference}
                       strokeDashoffset={strokeDashoffset}
@@ -282,42 +287,45 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <span className="text-3xl font-black text-slate-100">{score}%</span>
-                    <span className="text-[10px] uppercase font-mono text-emerald-400 font-bold">
+                    <span className="text-3xl font-black" style={{ color: 'var(--text-primary)' }}>{score}%</span>
+                    <span className="text-[10px] uppercase font-mono font-bold" style={{
+                      color: score >= 80 ? 'var(--score-high)' : score >= 60 ? 'var(--score-mid)' : 'var(--score-low)'
+                    }}>
                       {score >= 80 ? 'Strong Fit' : score >= 60 ? 'Competitive' : 'Gap Found'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Matched Skills & Code Evidence */}
-              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+              {/* Matched Skills */}
+              <div className="p-5 rounded-xl card space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    Code-Verified Matching Skills ({analysisResult.matched_skills.length})
+                  <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                    <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--success-600)' }} />
+                    Matching Skills ({analysisResult.matched_skills.length})
                   </h4>
-                  <span className="text-[10px] font-mono text-emerald-400">AST Code Evidence</span>
+                  <span className="badge-success text-[10px] font-mono">Verified</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {analysisResult.matched_skills.map((skill, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-emerald-500/30 transition-all flex items-start gap-2.5"
+                      className="p-2.5 rounded-lg card-hover flex items-start gap-2.5"
+                      style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}
                     >
-                      <Code className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <Code className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--success-600)' }} />
                       <div className="min-w-0 flex-1">
-                        <span className="text-xs font-semibold text-slate-200 block truncate">
+                        <span className="text-xs font-semibold block truncate" style={{ color: 'var(--text-primary)' }}>
                           {skill.skill}
                         </span>
                         {skill.repo_name && (
-                          <span className="text-[10px] font-mono text-cyan-400 flex items-center gap-1 mt-0.5">
+                          <span className="text-[10px] font-mono flex items-center gap-1 mt-0.5" style={{ color: 'var(--brand-600)' }}>
                             repo: {skill.repo_name}
                           </span>
                         )}
                         {skill.code_evidence && (
-                          <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">
+                          <p className="text-[10px] mt-1 line-clamp-2" style={{ color: 'var(--text-tertiary)' }}>
                             {skill.code_evidence}
                           </p>
                         )}
@@ -327,30 +335,27 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
                 </div>
               </div>
 
-              {/* Missing Skills Gap & Mitigation */}
+              {/* Missing Skills Gap */}
               {analysisResult.missing_skills.length > 0 && (
-                <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-                  <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-400" />
-                    Identified Skill Gaps & Mitigation Roadmap
+                <div className="p-5 rounded-xl card space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--warning-600)' }}>
+                    <AlertCircle className="w-4 h-4" />
+                    Skill Gaps ({analysisResult.missing_skills.length})
                   </h4>
 
                   <div className="flex flex-wrap gap-2">
                     {analysisResult.missing_skills.map((gap, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium"
-                      >
+                      <span key={idx} className="badge-warning text-xs font-medium px-2.5 py-1 rounded-lg">
                         {gap}
                       </span>
                     ))}
                   </div>
 
                   {analysisResult.gap_recommendations && analysisResult.gap_recommendations.length > 0 && (
-                    <ul className="space-y-1.5 pt-2 text-xs text-slate-300 border-t border-slate-800/60">
+                    <ul className="space-y-1.5 pt-2 text-xs" style={{ borderTop: '1px solid var(--border-primary)', color: 'var(--text-secondary)' }}>
                       {analysisResult.gap_recommendations.map((rec, idx) => (
                         <li key={idx} className="flex items-start gap-2">
-                          <ChevronRight className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <ChevronRight className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: 'var(--warning-600)' }} />
                           <span>{rec}</span>
                         </li>
                       ))}
@@ -359,22 +364,25 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
                 </div>
               )}
 
-              {/* Coworker Benchmark Comparison */}
+              {/* Peer Benchmark */}
               {analysisResult.peer_comparison && (
-                <div className="p-5 rounded-2xl bg-indigo-950/20 border border-indigo-500/20 space-y-3">
+                <div
+                  className="p-5 rounded-xl space-y-3"
+                  style={{ backgroundColor: 'var(--info-50)', border: '1px solid var(--brand-100)' }}
+                >
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-indigo-400" />
-                      Peer Benchmark Advantage vs Coworker Profile
+                    <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--brand-600)' }}>
+                      <TrendingUp className="w-4 h-4" />
+                      Peer Benchmark Comparison
                     </h4>
-                    <span className="text-xs font-bold text-indigo-400">
-                      Peer Score: {analysisResult.peer_comparison.coworker_score ?? 74}%
+                    <span className="text-xs font-bold" style={{ color: 'var(--brand-600)' }}>
+                      Peer: {analysisResult.peer_comparison.coworker_score ?? 74}%
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-300 leading-relaxed">
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                     {analysisResult.peer_comparison.advantage_summary ||
-                      'Your project evidence in distributed systems and kernel-level telemetry gives you a competitive edge for this role.'}
+                      'Your project evidence gives you a competitive edge for this role.'}
                   </p>
                 </div>
               )}
@@ -383,29 +391,41 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                 <button
                   onClick={() => onSelectTailorResume(role, company, jobDescription)}
-                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all"
+                  className="w-full sm:flex-1 py-3 px-4 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+                  style={{ backgroundColor: 'var(--brand-600)' }}
                 >
                   <Sparkles className="w-4 h-4" />
-                  Tailor ATS Resume for {company}
+                  Tailor Resume for {company}
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
 
                 <button
                   onClick={() => onNavigateToReferrals(company)}
-                  className="w-full sm:w-auto py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                  className="w-full sm:w-auto py-3 px-4 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+                  style={{
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-primary)',
+                  }}
                 >
-                  Find Warm Referrals
+                  Find Referrals
                 </button>
               </div>
             </div>
           ) : (
-            <div className="h-full min-h-[380px] p-8 rounded-2xl bg-slate-900/40 border border-slate-800/80 border-dashed flex flex-col items-center justify-center text-center space-y-3">
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400">
-                <Target className="w-8 h-8 text-emerald-400/80" />
+            <div
+              className="h-full min-h-[380px] p-8 rounded-xl flex flex-col items-center justify-center text-center space-y-3"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                border: '2px dashed var(--border-primary)',
+              }}
+            >
+              <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
+                <Target className="w-8 h-8" style={{ color: 'var(--text-tertiary)' }} />
               </div>
-              <h3 className="text-sm font-semibold text-slate-200">No Active Job Analysis</h3>
-              <p className="text-xs text-slate-400 max-w-sm">
-                Select one of the preset jobs or paste your own job description to calculate code-verified GraphRAG fit and generate tailored outreach.
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>No Active Analysis</h3>
+              <p className="text-xs max-w-sm" style={{ color: 'var(--text-secondary)' }}>
+                Select a preset or paste a job description to calculate your match score.
               </p>
             </div>
           )}

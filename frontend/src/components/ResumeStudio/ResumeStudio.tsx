@@ -60,13 +60,13 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         getAuthHeaders()
       );
       setResumeData(data);
-      onSuccess(`Tailored ATS Resume synthesized with ${data.ats_score}% ATS score!`);
+      onSuccess(`Resume tailored — ATS score: ${data.ats_score}%`);
       if (data.ats_score >= 85) {
         confetti({
-          particleCount: 60,
-          spread: 60,
+          particleCount: 50,
+          spread: 50,
           origin: { y: 0.6 },
-          colors: ['#f59e0b', '#10b981', '#6366f1']
+          colors: ['#2563EB', '#059669', '#D97706']
         });
       }
     } catch (err: any) {
@@ -83,16 +83,16 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Top Controls Bar (Hidden in Print) */}
-      <div className="no-print flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
+      <div className="no-print flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl card">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="p-1.5 rounded-lg" style={{ backgroundColor: 'var(--brand-50)', color: 'var(--brand-600)' }}>
               <FileText className="w-4 h-4" />
             </span>
-            <h2 className="text-lg font-bold text-slate-100">Layout-Preserving ATS Resume Studio</h2>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Resume Studio</h2>
           </div>
-          <p className="text-xs text-slate-400">
-            Groq Llama 3.3 dynamic STAR bullet synthesis backed by live GitHub AST code evidence
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            AI-powered ATS-optimized resume builder with code evidence
           </p>
         </div>
 
@@ -100,80 +100,102 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           <button
             onClick={handleTailorResume}
             disabled={loading}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-emerald-600 hover:from-amber-500 hover:to-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-amber-600/20 flex items-center gap-2 transition-all"
+            className="px-4 py-2.5 text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition-all"
+            style={{ backgroundColor: 'var(--brand-600)' }}
           >
             {loading ? <Cpu className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            Re-Synthesize ATS Bullets
+            Re-Generate
           </button>
 
           <button
             onClick={handlePrint}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700"
+            className="px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-primary)',
+            }}
           >
-            <Printer className="w-4 h-4 text-emerald-400" />
-            Print / Save as PDF
+            <Printer className="w-4 h-4" />
+            Print / PDF
           </button>
         </div>
       </div>
 
-      {/* Target Parameters Drawer (Hidden in Print) */}
-      <div className="no-print p-4 rounded-2xl bg-slate-900/70 border border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+      {/* Target Parameters (Hidden in Print) */}
+      <div
+        className="no-print p-4 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-3 text-xs"
+        style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}
+      >
         <div>
-          <label className="block font-medium text-slate-400 mb-1">Target Role</label>
+          <label className="block font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Target Role</label>
           <input
             type="text"
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className="w-full px-3 py-1.5 bg-slate-950/70 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-amber-500/50"
+            className="input-base w-full text-sm"
           />
         </div>
         <div>
-          <label className="block font-medium text-slate-400 mb-1">Target Company</label>
+          <label className="block font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company</label>
           <input
             type="text"
             value={company}
             onChange={(e) => setCompany(e.target.value)}
-            className="w-full px-3 py-1.5 bg-slate-950/70 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-amber-500/50"
+            className="input-base w-full text-sm"
           />
         </div>
       </div>
 
-      {/* Resume Document Paper Container */}
+      {/* Resume Document */}
       <div className="w-full max-w-4xl mx-auto">
         {loading && !resumeData ? (
-          <div className="p-16 text-center space-y-3 bg-slate-900/50 border border-slate-800 rounded-2xl">
-            <Cpu className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
-            <p className="text-sm font-semibold text-slate-200">
-              Synthesizing Evidence-Backed STAR Bullets with Groq Llama 3.3...
+          <div
+            className="p-16 text-center space-y-3 rounded-xl"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}
+          >
+            <Cpu className="w-8 h-8 animate-spin mx-auto" style={{ color: 'var(--brand-600)' }} />
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+              Generating tailored resume...
             </p>
-            <p className="text-xs text-slate-500">
-              Querying GitHub AST nodes and matching keywords for {company}...
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              Analyzing skills and matching keywords for {company}
             </p>
           </div>
         ) : resumeData ? (
-          <div className="resume-paper p-8 sm:p-12 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl space-y-6 text-slate-200">
+          <div
+            className="resume-paper p-8 sm:p-12 rounded-xl shadow-card space-y-6"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border-primary)',
+              color: 'var(--text-primary)',
+            }}
+          >
             {/* Resume Header */}
-            <div className="border-b border-slate-700 pb-5 space-y-1">
+            <div className="pb-5 space-y-1" style={{ borderBottom: '1px solid var(--border-primary)' }}>
               <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-white tracking-tight">{activeProfile.name}</h1>
-                <div className="no-print flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold font-mono">
+                <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                  {activeProfile.name}
+                </h1>
+                <div className="no-print badge-success flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold font-mono">
                   <Award className="w-3.5 h-3.5" />
-                  ATS Match: {resumeData.ats_score}%
+                  ATS: {resumeData.ats_score}%
                 </div>
               </div>
 
-              <p className="text-xs font-semibold text-emerald-400 font-mono">
-                {role} | Specialization: Distributed Systems, Fast APIs & GraphRAG
+              <p className="text-xs font-semibold font-mono" style={{ color: 'var(--brand-600)' }}>
+                {role} | Distributed Systems, APIs & GraphRAG
               </p>
 
-              <div className="flex flex-wrap gap-4 text-xs text-slate-400 pt-1">
+              <div className="flex flex-wrap gap-4 text-xs pt-1" style={{ color: 'var(--text-secondary)' }}>
                 <span>Email: mohitupraity@gmail.com</span>
                 <span>•</span>
                 <a
                   href="https://github.com/mohitUpraity"
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-emerald-400 underline"
+                  className="underline"
+                  style={{ color: 'var(--brand-600)' }}
                 >
                   github.com/mohitUpraity
                 </a>
@@ -184,46 +206,55 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
             {/* Executive Summary */}
             <div className="space-y-1.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
+              <h3 className="text-xs font-bold uppercase tracking-wider font-mono" style={{ color: 'var(--text-secondary)' }}>
                 Professional Summary
               </h3>
-              <p className="text-xs text-slate-300 leading-relaxed">{resumeData.summary}</p>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{resumeData.summary}</p>
             </div>
 
-            {/* Evidence-Backed Technical Projects */}
+            {/* Technical Projects */}
             <div className="space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono flex items-center gap-2">
-                <FolderGit2 className="w-4 h-4 text-indigo-400" />
-                Featured AST Projects & Code Evidence
+              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                <FolderGit2 className="w-4 h-4" style={{ color: 'var(--brand-600)' }} />
+                Featured Projects
               </h3>
 
               <div className="space-y-4">
                 {resumeData.highlighted_projects?.map((proj, idx) => (
-                  <div key={idx} className="space-y-1.5 border-l-2 border-indigo-500/40 pl-3">
+                  <div key={idx} className="space-y-1.5 pl-3" style={{ borderLeft: `2px solid var(--brand-600)` }}>
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      <h4 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                         {proj.title}
                         {proj.repo_url && (
                           <a
                             href={proj.repo_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="no-print inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-mono px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20"
+                            className="no-print inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded"
+                            style={{
+                              backgroundColor: 'var(--brand-50)',
+                              color: 'var(--brand-600)',
+                              border: '1px solid var(--brand-100)',
+                            }}
                           >
                             <Github className="w-3 h-3" />
-                            [Code Evidence ↗]
+                            Code ↗
                           </a>
                         )}
                       </h4>
                     </div>
 
-                    <p className="text-xs text-slate-400">{proj.description}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{proj.description}</p>
 
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {proj.tech_stack?.map((tech, tIdx) => (
                         <span
                           key={tIdx}
-                          className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-300"
+                          className="px-2 py-0.5 rounded text-[10px] font-mono"
+                          style={{
+                            backgroundColor: 'var(--bg-tertiary)',
+                            color: 'var(--text-secondary)',
+                          }}
                         >
                           {tech}
                         </span>
@@ -231,7 +262,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                     </div>
 
                     {proj.bullets && (
-                      <ul className="list-disc list-inside space-y-1 pt-1 text-xs text-slate-300">
+                      <ul className="list-disc list-inside space-y-1 pt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
                         {proj.bullets.map((b, bIdx) => (
                           <li key={bIdx} className="leading-relaxed">
                             {b}
@@ -244,17 +275,17 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               </div>
             </div>
 
-            {/* Tailored Experience Bullets */}
+            {/* Experience Bullets */}
             <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-emerald-400" />
-                STAR-Synthesized Technical Contributions
+              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                <Briefcase className="w-4 h-4" style={{ color: 'var(--success-600)' }} />
+                Technical Contributions
               </h3>
 
-              <ul className="space-y-2.5 text-xs text-slate-300">
+              <ul className="space-y-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                 {resumeData.experience_bullets?.map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2 leading-relaxed">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5" style={{ backgroundColor: 'var(--brand-600)' }} />
                     <div className="flex-1">
                       <span>{item.bullet}</span>
                       {item.code_evidence_url && (
@@ -262,9 +293,10 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                           href={item.code_evidence_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="no-print inline-flex items-center gap-1 ml-2 text-[10px] font-mono text-cyan-400 hover:text-cyan-300 underline"
+                          className="no-print inline-flex items-center gap-1 ml-2 text-[10px] font-mono underline"
+                          style={{ color: 'var(--brand-600)' }}
                         >
-                          verified code ↗
+                          verified ↗
                         </a>
                       )}
                     </div>
@@ -273,18 +305,23 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               </ul>
             </div>
 
-            {/* Core Skills Matrix */}
-            <div className="space-y-2 border-t border-slate-800 pt-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-amber-400" />
-                Target Alignment Skills
+            {/* Skills */}
+            <div className="space-y-2 pt-4" style={{ borderTop: '1px solid var(--border-primary)' }}>
+              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+                <Code2 className="w-4 h-4" style={{ color: 'var(--warning-600)' }} />
+                Skills
               </h3>
 
               <div className="flex flex-wrap gap-2">
                 {resumeData.highlighted_skills?.map((skill, idx) => (
                   <span
                     key={idx}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-medium text-slate-200"
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                    style={{
+                      backgroundColor: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-primary)',
+                    }}
                   >
                     {skill}
                   </span>

@@ -29,63 +29,75 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       label: 'Knowledge Graph',
       sublabel: 'Skills & Project Topology',
       icon: Network,
-      color: 'emerald',
-      badge: 'D3 Physics',
     },
     {
       id: 'matcher' as ActiveTab,
-      label: 'AI Job Matchmaker',
-      sublabel: 'Groq Llama 3.3 Scoring',
+      label: 'Job Matchmaker',
+      sublabel: 'AI-Powered Scoring',
       icon: Target,
-      color: 'cyan',
-      badge: 'Sub-Sec AI',
     },
     {
       id: 'referrals' as ActiveTab,
-      label: 'Referral Outreach Hub',
-      sublabel: '797+ Verified Network',
+      label: 'Referral Hub',
+      sublabel: 'Network Outreach',
       icon: Send,
-      color: 'indigo',
-      badge: '1-Click Note',
     },
     {
       id: 'resume' as ActiveTab,
-      label: 'ATS Resume Studio',
-      sublabel: 'Evidence-Backed Bullets',
+      label: 'Resume Studio',
+      sublabel: 'ATS-Optimized Builder',
       icon: FileText,
-      color: 'amber',
-      badge: 'ATS 95%+',
     },
   ];
 
   return (
-    <aside className="w-full lg:w-72 shrink-0 flex flex-col justify-between p-4 bg-slate-950/60 border-r border-slate-800/80 min-h-[calc(100vh-61px)]">
+    <aside
+      className="w-full lg:w-60 shrink-0 flex flex-col justify-between p-4 min-h-[calc(100vh-57px)]"
+      style={{
+        backgroundColor: 'var(--bg-primary)',
+        borderRight: '1px solid var(--border-primary)',
+      }}
+    >
       {/* Top Section: User Profile Card & Navigation */}
       <div className="space-y-4">
         {/* Active Profile Card */}
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl group-hover:bg-emerald-500/10 transition-all" />
-          
+        <div
+          className="p-3 rounded-lg"
+          style={{
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+          }}
+        >
           <div className="flex items-center gap-3">
             <div className="relative">
               <img
                 src={activeProfile.avatar}
                 alt={activeProfile.name}
-                className="w-11 h-11 rounded-xl object-cover ring-2 ring-emerald-500/30 shadow-md"
+                className="w-10 h-10 rounded-lg object-cover"
+                style={{ border: '2px solid var(--border-primary)' }}
               />
-              <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full" />
+              <span
+                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full"
+                style={{
+                  backgroundColor: 'var(--success-600)',
+                  border: '2px solid var(--bg-primary)',
+                }}
+              />
             </div>
 
             <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-semibold text-slate-100 truncate flex items-center gap-1.5">
+              <h4 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
                 {activeProfile.name}
               </h4>
-              <p className="text-[11px] text-slate-400 truncate">{activeProfile.role}</p>
+              <p className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
+                {activeProfile.role}
+              </p>
               <a
                 href={`https://github.com/${activeProfile.githubUser}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] text-emerald-400 hover:text-emerald-300 font-mono mt-0.5"
+                className="inline-flex items-center gap-1 text-[10px] font-mono mt-0.5"
+                style={{ color: 'var(--brand-600)' }}
               >
                 <Code2 className="w-3 h-3" />
                 @{activeProfile.githubUser}
@@ -96,7 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         </div>
 
         {/* Navigation Items */}
-        <nav className="space-y-1.5">
+        <nav className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -104,75 +116,81 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-xl text-left transition-all relative ${
-                  isActive
-                    ? 'bg-slate-900 text-white border border-slate-700/80 shadow-lg'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-                }`}
+                className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-all relative"
+                style={{
+                  backgroundColor: isActive ? 'var(--brand-50)' : 'transparent',
+                  color: isActive ? 'var(--brand-600)' : 'var(--text-secondary)',
+                  fontWeight: isActive ? 600 : 500,
+                }}
               >
                 {isActive && (
-                  <span className="absolute left-0 top-2 bottom-2 w-1 bg-emerald-500 rounded-r-full" />
+                  <span
+                    className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full"
+                    style={{ backgroundColor: 'var(--brand-600)' }}
+                  />
                 )}
-                
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`p-2 rounded-lg ${
-                      isActive
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-slate-900 text-slate-500'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="block text-xs font-semibold">{item.label}</span>
-                    <span className="block text-[10px] text-slate-400">{item.sublabel}</span>
-                  </div>
-                </div>
 
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                  {item.badge}
-                </span>
+                <div
+                  className="p-1.5 rounded"
+                  style={{
+                    backgroundColor: isActive ? 'var(--brand-100)' : 'var(--bg-tertiary)',
+                    color: isActive ? 'var(--brand-600)' : 'var(--text-tertiary)',
+                  }}
+                >
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold">{item.label}</span>
+                  <span className="block text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                    {item.sublabel}
+                  </span>
+                </div>
               </button>
             );
           })}
         </nav>
       </div>
 
-      {/* Bottom Section: System Engine Status */}
-      <div className="pt-4 border-t border-slate-800/80 space-y-2">
-        <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/60 text-[11px] space-y-2">
-          <div className="flex items-center justify-between text-slate-400">
+      {/* Bottom Section: System Status */}
+      <div className="pt-4 space-y-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
+        <div
+          className="p-3 rounded-lg text-[11px] space-y-2"
+          style={{
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-primary)',
+          }}
+        >
+          <div className="flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+              <Cpu className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
               LLM Engine
             </span>
-            <span className="font-mono text-emerald-400 font-medium">Groq Llama 3.3 70B</span>
+            <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>Groq Llama 3.3</span>
           </div>
 
-          <div className="flex items-center justify-between text-slate-400">
+          <div className="flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5 text-cyan-400" />
+              <Database className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
               Graph DB
             </span>
-            <span className="font-mono text-cyan-400 font-medium">Neo4j Aura Cloud</span>
+            <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>Neo4j Aura</span>
           </div>
 
-          <div className="flex items-center justify-between text-slate-400">
+          <div className="flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}>
             <span className="flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-indigo-400" />
+              <Shield className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
               Security
             </span>
-            <span className="font-mono text-indigo-400 font-medium">Multi-Tenant Scoped</span>
+            <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>Multi-Tenant</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-2 text-[10px] text-slate-500">
+        <div className="flex items-center justify-between px-2 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
           <span className="flex items-center gap-1">
-            <Activity className="w-3 h-3 text-emerald-400 animate-pulse" />
-            Backend Online (:8000)
+            <Activity className="w-3 h-3" style={{ color: 'var(--success-600)' }} />
+            Backend Online
           </span>
-          <span className="font-mono">v5.0-react</span>
+          <span className="font-mono">v5.0</span>
         </div>
       </div>
     </aside>

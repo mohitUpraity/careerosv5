@@ -90,7 +90,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
         getAuthHeaders()
       );
       setPitchResult(res);
-      onSuccess(`AI ${pitchType === 'linkedin' ? 'LinkedIn Note' : 'InMail'} generated!`);
+      onSuccess(`${pitchType === 'linkedin' ? 'LinkedIn Note' : 'InMail'} generated!`);
     } catch (err: any) {
       onError(err.message || 'Failed to generate outreach pitch');
     } finally {
@@ -104,10 +104,10 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
     setCopied(true);
     onSuccess('Copied to clipboard!');
     confetti({
-      particleCount: 40,
-      spread: 50,
+      particleCount: 30,
+      spread: 40,
       origin: { y: 0.7 },
-      colors: ['#6366f1', '#10b981']
+      colors: ['#2563EB', '#059669']
     });
     setTimeout(() => setCopied(false), 2000);
   };
@@ -115,16 +115,16 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl card">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <span className="p-1.5 rounded-lg" style={{ backgroundColor: 'var(--brand-50)', color: 'var(--brand-600)' }}>
               <Users className="w-4 h-4" />
             </span>
-            <h2 className="text-lg font-bold text-slate-100">Referral Outreach Hub</h2>
+            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Referral Hub</h2>
           </div>
-          <p className="text-xs text-slate-400">
-            Search 797+ verified first-degree contacts & generate warm referral notes with Groq Llama 3.3
+          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            Search your network and generate personalized outreach messages
           </p>
         </div>
 
@@ -137,11 +137,16 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                 setSearchQuery(comp === 'All' ? '' : comp);
                 loadConnections(comp === 'All' ? '' : comp);
               }}
-              className={`px-3 py-1 rounded-xl text-xs font-medium transition-all ${
-                (comp === 'All' && !searchQuery) || searchQuery.toLowerCase() === comp.toLowerCase()
-                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                  : 'bg-slate-950/60 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
+              className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+              style={{
+                backgroundColor: (comp === 'All' && !searchQuery) || searchQuery.toLowerCase() === comp.toLowerCase()
+                  ? 'var(--brand-50)' : 'transparent',
+                color: (comp === 'All' && !searchQuery) || searchQuery.toLowerCase() === comp.toLowerCase()
+                  ? 'var(--brand-600)' : 'var(--text-secondary)',
+                border: `1px solid ${(comp === 'All' && !searchQuery) || searchQuery.toLowerCase() === comp.toLowerCase()
+                  ? 'var(--brand-100)' : 'var(--border-primary)'}`,
+                fontWeight: (comp === 'All' && !searchQuery) || searchQuery.toLowerCase() === comp.toLowerCase() ? 600 : 500,
+              }}
             >
               {comp}
             </button>
@@ -151,35 +156,35 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
 
       {/* Main Content: Split Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Searchable Contacts List */}
-        <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4 flex flex-col h-[640px]">
-          {/* Search Bar */}
+        {/* Left: Contacts List */}
+        <div className="lg:col-span-5 p-5 rounded-xl card space-y-4 flex flex-col h-[640px]">
           <form onSubmit={handleSearchSubmit} className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name, company, position..."
-              className="w-full pl-10 pr-20 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50"
+              className="input-base w-full pl-10 pr-20 text-sm"
             />
             <button
               type="submit"
-              className="absolute right-1.5 top-1.5 bottom-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all"
+              className="absolute right-1.5 top-1.5 bottom-1.5 px-3 text-white rounded text-xs font-medium transition-all"
+              style={{ backgroundColor: 'var(--brand-600)' }}
             >
               Search
             </button>
           </form>
 
-          {/* List of Contacts */}
+          {/* Contact List */}
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {loadingContacts ? (
               <div className="py-12 text-center space-y-2">
-                <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                <p className="text-xs text-slate-400">Filtering contacts...</p>
+                <div className="w-6 h-6 border-2 rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--brand-500)', borderTopColor: 'transparent' }} />
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>Filtering contacts...</p>
               </div>
             ) : contacts.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-500">
+              <div className="py-12 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
                 No contacts found matching "{searchQuery}".
               </div>
             ) : (
@@ -189,29 +194,29 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                   <div
                     key={contact.id}
                     onClick={() => setSelectedContact(contact)}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      isSelected
-                        ? 'bg-indigo-950/40 border-indigo-500/50 shadow-md'
-                        : 'bg-slate-950/40 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/60'
-                    }`}
+                    className="p-3 rounded-lg cursor-pointer transition-all"
+                    style={{
+                      backgroundColor: isSelected ? 'var(--brand-50)' : 'transparent',
+                      border: `1px solid ${isSelected ? 'var(--brand-100)' : 'var(--border-primary)'}`,
+                    }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-semibold text-slate-200 truncate flex items-center gap-1.5">
+                        <h4 className="text-xs font-semibold truncate flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
                           {contact.name}
                           {contact.alumni_match && (
                             <span title="Alumni Network Match">
-                              <GraduationCap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <GraduationCap className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--warning-600)' }} />
                             </span>
                           )}
                         </h4>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5">{contact.position}</p>
-                        <p className="text-[10px] text-indigo-400 font-medium truncate flex items-center gap-1 mt-1">
+                        <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--text-secondary)' }}>{contact.position}</p>
+                        <p className="text-[10px] font-medium truncate flex items-center gap-1 mt-1" style={{ color: 'var(--brand-600)' }}>
                           <Building2 className="w-3 h-3" />
                           {contact.company}
                         </p>
                       </div>
-                      <span className="text-[9px] font-mono text-slate-500 shrink-0">1st Conn</span>
+                      <span className="badge-neutral text-[9px] font-mono shrink-0">1st</span>
                     </div>
                   </div>
                 );
@@ -220,20 +225,23 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
           </div>
         </div>
 
-        {/* Right: Pitch Generator & Details */}
+        {/* Right: Pitch Generator */}
         <div className="lg:col-span-7 space-y-6">
           {selectedContact ? (
             <div className="space-y-6">
-              {/* Selected Contact Hero Card */}
-              <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+              {/* Selected Contact Card */}
+              <div className="p-5 rounded-xl card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-bold text-base shadow-md">
+                  <div
+                    className="w-11 h-11 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+                    style={{ backgroundColor: 'var(--brand-600)' }}
+                  >
                     {selectedContact.name.substring(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-100">{selectedContact.name}</h3>
-                    <p className="text-xs text-slate-300">{selectedContact.position}</p>
-                    <p className="text-xs text-indigo-400 font-medium flex items-center gap-1 mt-0.5">
+                    <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{selectedContact.name}</h3>
+                    <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{selectedContact.position}</p>
+                    <p className="text-xs font-medium flex items-center gap-1 mt-0.5" style={{ color: 'var(--brand-600)' }}>
                       <Building2 className="w-3.5 h-3.5" />
                       {selectedContact.company}
                     </p>
@@ -245,42 +253,54 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                     href={selectedContact.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0"
+                    style={{
+                      backgroundColor: 'var(--brand-50)',
+                      color: 'var(--brand-600)',
+                      border: '1px solid var(--brand-100)',
+                    }}
                   >
                     <Linkedin className="w-3.5 h-3.5" />
-                    LinkedIn Profile
-                    <ExternalLink className="w-3 h-3 text-indigo-400 ml-1" />
+                    LinkedIn
+                    <ExternalLink className="w-3 h-3 ml-1" />
                   </a>
                 )}
               </div>
 
-              {/* Pitch Format & Generator Controls */}
-              <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+              {/* Pitch Generator Controls */}
+              <div className="p-5 rounded-xl card space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-400" />
-                    AI Outreach Generator (Groq Llama 3.3)
+                  <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                    <Sparkles className="w-4 h-4" style={{ color: 'var(--brand-600)' }} />
+                    Outreach Generator
                   </span>
 
-                  {/* Format Pills */}
-                  <div className="flex items-center p-1 bg-slate-950/80 border border-slate-800 rounded-xl text-xs">
+                  {/* Format Toggle */}
+                  <div
+                    className="flex items-center p-0.5 rounded-lg text-xs"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)' }}
+                  >
                     <button
                       onClick={() => setPitchType('linkedin')}
-                      className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                        pitchType === 'linkedin'
-                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                      className="px-3 py-1 rounded font-medium transition-all"
+                      style={{
+                        backgroundColor: pitchType === 'linkedin' ? 'var(--bg-primary)' : 'transparent',
+                        color: pitchType === 'linkedin' ? 'var(--brand-600)' : 'var(--text-secondary)',
+                        boxShadow: pitchType === 'linkedin' ? '0 1px 2px var(--shadow-color)' : 'none',
+                        fontWeight: pitchType === 'linkedin' ? 600 : 500,
+                      }}
                     >
                       300-Char Note
                     </button>
                     <button
                       onClick={() => setPitchType('inmail')}
-                      className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                        pitchType === 'inmail'
-                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
+                      className="px-3 py-1 rounded font-medium transition-all"
+                      style={{
+                        backgroundColor: pitchType === 'inmail' ? 'var(--bg-primary)' : 'transparent',
+                        color: pitchType === 'inmail' ? 'var(--brand-600)' : 'var(--text-secondary)',
+                        boxShadow: pitchType === 'inmail' ? '0 1px 2px var(--shadow-color)' : 'none',
+                        fontWeight: pitchType === 'inmail' ? 600 : 500,
+                      }}
                     >
                       InMail / Email
                     </button>
@@ -288,74 +308,97 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Your Target Role
                   </label>
                   <input
                     type="text"
                     value={targetRole}
                     onChange={(e) => setTargetRole(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    className="input-base w-full text-sm"
                   />
                 </div>
 
                 <button
                   onClick={handleGeneratePitch}
                   disabled={generatingPitch}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all"
+                  className="w-full py-2.5 px-4 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+                  style={{ backgroundColor: 'var(--brand-600)' }}
                 >
                   {generatingPitch ? (
                     <>
                       <Cpu className="w-4 h-4 animate-spin" />
-                      Generating Hyper-Personalized Pitch...
+                      Generating...
                     </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      Generate Personalized {pitchType === 'linkedin' ? 'LinkedIn Note' : 'InMail Pitch'}
+                      Generate {pitchType === 'linkedin' ? 'LinkedIn Note' : 'InMail'}
                     </>
                   )}
                 </button>
               </div>
 
-              {/* Pitch Output Card */}
+              {/* Pitch Output */}
               {pitchResult && (
-                <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 relative group animate-fade-in shadow-xl">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                    <span className="text-[11px] font-mono text-indigo-400 font-semibold uppercase">
+                <div className="p-5 rounded-xl card space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between pb-2" style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                    <span className="text-[11px] font-mono font-semibold uppercase" style={{ color: 'var(--brand-600)' }}>
                       {pitchType === 'linkedin'
-                        ? `LinkedIn Connection Note (${pitchResult.content.length}/300 chars)`
-                        : 'Full InMail / Email Referral Pitch'}
+                        ? `LinkedIn Note (${pitchResult.content.length}/300)`
+                        : 'InMail / Email Pitch'}
                     </span>
 
                     <button
                       onClick={handleCopyPitch}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: 'var(--success-50)',
+                        color: 'var(--success-600)',
+                        border: '1px solid var(--success-100)',
+                      }}
                     >
-                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copied ? 'Copied!' : 'Copy to Clipboard'}
+                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copied ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
 
                   {pitchResult.subject && (
-                    <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-200 font-semibold">
-                      <span className="text-slate-400 font-normal">Subject: </span>
+                    <div
+                      className="p-2.5 rounded-lg text-xs font-semibold"
+                      style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-primary)',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>Subject: </span>
                       {pitchResult.subject}
                     </div>
                   )}
 
-                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                  <div
+                    className="p-4 rounded-lg text-sm leading-relaxed font-sans whitespace-pre-wrap"
+                    style={{
+                      backgroundColor: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-primary)',
+                    }}
+                  >
                     {pitchResult.content}
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="h-[400px] p-8 rounded-2xl bg-slate-900/40 border border-slate-800/80 border-dashed flex flex-col items-center justify-center text-center space-y-3">
-              <Users className="w-8 h-8 text-indigo-400/80" />
-              <h3 className="text-sm font-semibold text-slate-200">No Contact Selected</h3>
-              <p className="text-xs text-slate-400 max-w-sm">
-                Select a contact from the left network directory to draft tailored outreach with Groq AI.
+            <div
+              className="h-[400px] p-8 rounded-xl flex flex-col items-center justify-center text-center space-y-3"
+              style={{ backgroundColor: 'var(--bg-primary)', border: '2px dashed var(--border-primary)' }}
+            >
+              <Users className="w-8 h-8" style={{ color: 'var(--text-tertiary)' }} />
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>No Contact Selected</h3>
+              <p className="text-xs max-w-sm" style={{ color: 'var(--text-secondary)' }}>
+                Select a contact from your network to draft personalized outreach.
               </p>
             </div>
           )}
