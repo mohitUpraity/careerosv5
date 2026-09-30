@@ -13,6 +13,46 @@ class GitHubService:
     BASE_URL = "https://api.github.com"
 
     @classmethod
+    def _get_effective_token(cls, token: Optional[str] = None) -> Optional[str]:
+        """
+        Dynamically resolves the GitHub token in priority order:
+        1. Explicitly passed token from client request
+        2. Config settings (settings.GITHUB_PERSONAL_ACCESS_TOKEN)
+        3. Environment variables (GITHUB_PERSONAL_ACCESS_TOKEN, GITHUB_TOKEN, GITHUB_PAT)
+        4. Direct parse from .env files on disk (handles servers started before .env was saved)
+        """
+        if token and token.strip() and token.strip().lower() not in ["string", "none", "null", "undefined", ""]:
+            return token.strip()
+            
+        if settings.GITHUB_PERSONAL_ACCESS_TOKEN and settings.GITHUB_PERSONAL_ACCESS_TOKEN.strip():
+            return settings.GITHUB_PERSONAL_ACCESS_TOKEN.strip()
+            
+        env_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN") or os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PAT")
+        if env_token and env_token.strip():
+            return env_token.strip()
+            
+        # Fallback: parse .env files directly from disk
+        for candidate_path in [
+            os.path.join(os.getcwd(), ".env"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".env"),
+            ".env"
+        ]:
+            if os.path.exists(candidate_path):
+                try:
+                    with open(candidate_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("GITHUB_PERSONAL_ACCESS_TOKEN=") or line.startswith("GITHUB_TOKEN="):
+                                key, val = line.split("=", 1)
+                                cleaned_val = val.strip().strip("'\"")
+                                if cleaned_val and cleaned_val.lower() not in ["string", "none", "null", "undefined", ""]:
+                                    return cleaned_val
+                except Exception:
+                    pass
+        return None
+
+    @classmethod
     async def fetch_user_repositories(
         cls, 
         username: str, 
@@ -25,16 +65,14 @@ class GitHubService:
         If max_repos == 0 (or >= 1000), crawls ALL available repositories across all pages.
         Supports optional fork inclusion and parallelized language/README extraction.
         """
-        effective_token = token
-        if not effective_token or effective_token.strip().lower() in ["string", "none", "null", "undefined", ""]:
-            effective_token = settings.GITHUB_PERSONAL_ACCESS_TOKEN or os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PAT")
+        effective_token = cls._get_effective_token(token)
 
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "CareerOS-v5-Ingestion"
         }
-        if effective_token and effective_token.strip() and effective_token.strip().lower() not in ["string", "none", "null", "undefined", ""]:
-            headers["Authorization"] = f"Bearer {effective_token.strip()}"
+        if effective_token:
+            headers["Authorization"] = f"Bearer {effective_token}"
 
         raw_repo_list = []
         page = 1
@@ -145,12 +183,13 @@ class GitHubService:
         """
         Quickly queries the GitHub user metadata to discover their total public repo count.
         """
+        effective_token = cls._get_effective_token(token)
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "CareerOS-v5-Ingestion"
         }
-        if token and token.strip() and token.strip().lower() not in ["string", "none", "null", "undefined"]:
-            headers["Authorization"] = f"Bearer {token.strip()}"
+        if effective_token:
+            headers["Authorization"] = f"Bearer {effective_token}"
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
