@@ -9,6 +9,8 @@ import { ResumeStudio } from './components/ResumeStudio/ResumeStudio';
 import { BenchmarkLab } from './components/BenchmarkLab/BenchmarkLab';
 import { StartFreshModal } from './components/StartFreshModal';
 import { SyncGitHubModal } from './components/SyncGitHubModal';
+import { SyncResumeModal } from './components/SyncResumeModal';
+import { SyncLinkedInModal } from './components/SyncLinkedInModal';
 import { ExtensionDownloadModal } from './components/ExtensionDownloadModal';
 import { Toast, ToastMessage } from './components/Toast';
 import { apiService, ProfileAnalysis } from './services/api';
@@ -20,6 +22,8 @@ const MainLayout: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isSyncGitHubModalOpen, setIsSyncGitHubModalOpen] = useState(false);
+  const [isSyncResumeModalOpen, setIsSyncResumeModalOpen] = useState(false);
+  const [isSyncLinkedInModalOpen, setIsSyncLinkedInModalOpen] = useState(false);
   const [isExtensionModalOpen, setIsExtensionModalOpen] = useState(false);
 
   // App data state
@@ -89,6 +93,8 @@ const MainLayout: React.FC = () => {
         analysis={analysis}
         onOpenResetModal={() => setIsResetModalOpen(true)}
         onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
+        onOpenSyncResume={() => setIsSyncResumeModalOpen(true)}
+        onOpenSyncLinkedIn={() => setIsSyncLinkedInModalOpen(true)}
         onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
         onRefreshData={loadProfileData}
         loading={loading}
@@ -154,6 +160,29 @@ const MainLayout: React.FC = () => {
       <SyncGitHubModal
         isOpen={isSyncGitHubModalOpen}
         onClose={() => setIsSyncGitHubModalOpen(false)}
+        onSyncSuccess={() => {
+          loadProfileData();
+        }}
+        onSuccessToast={(msg) => addToast('success', msg)}
+        onErrorToast={(msg) => addToast('error', msg)}
+      />
+
+      {/* Sync Master Resume Modal */}
+      <SyncResumeModal
+        isOpen={isSyncResumeModalOpen}
+        onClose={() => setIsSyncResumeModalOpen(false)}
+        onUploadSuccess={() => {
+          loadProfileData();
+        }}
+        onSuccessToast={(msg) => addToast('success', msg)}
+        onErrorToast={(msg) => addToast('error', msg)}
+      />
+
+      {/* Sync LinkedIn Modal */}
+      <SyncLinkedInModal
+        isOpen={isSyncLinkedInModalOpen}
+        onClose={() => setIsSyncLinkedInModalOpen(false)}
+        onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
         onSyncSuccess={() => {
           loadProfileData();
         }}

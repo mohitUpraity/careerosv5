@@ -130,27 +130,42 @@ class Neo4jService:
 
         nodes_merged = 0
 
-        # 1. Update User basic info
+        # 1. Update User basic info and Golden Blueprint snapshot
         contact = blueprint.contact
+        blueprint_json_str = blueprint.model_dump_json() if hasattr(blueprint, "model_dump_json") else json.dumps(blueprint)
         user_query = """
         MERGE (u:User {id: $user_id})
         ON CREATE SET u.full_name = $full_name,
                       u.email = $email,
                       u.phone = $phone,
+                      u.location = $location,
                       u.linkedin_url = $linkedin,
                       u.github_url = $github,
-                      u.created_at = datetime()
+                      u.summary = $summary,
+                      u.blueprint_json = $blueprint_json,
+                      u.created_at = datetime(),
+                      u.updated_at = datetime()
         ON MATCH SET u.full_name = $full_name,
-                     u.linkedin_url = $linkedin
+                     u.email = $email,
+                     u.phone = $phone,
+                     u.location = $location,
+                     u.linkedin_url = $linkedin,
+                     u.github_url = $github,
+                     u.summary = $summary,
+                     u.blueprint_json = $blueprint_json,
+                     u.updated_at = datetime()
         RETURN u.id AS id;
         """
         await neo4j_client.execute_query(user_query, {
             "user_id": user_id,
-            "full_name": contact.full_name,
-            "email": contact.email,
-            "phone": contact.phone,
-            "linkedin": contact.linkedin_url,
-            "github": contact.github_url
+            "full_name": contact.full_name or "",
+            "email": contact.email or "",
+            "phone": contact.phone or "",
+            "location": getattr(contact, "location", "") or "",
+            "linkedin": contact.linkedin_url or "",
+            "github": contact.github_url or "",
+            "summary": getattr(blueprint, "summary", "") or "",
+            "blueprint_json": blueprint_json_str
         })
         nodes_merged += 1
 
@@ -220,6 +235,57 @@ class Neo4jService:
             nodes_merged += len(all_skills)
 
         return nodes_merged
+
+    @classmethod
+    async def get_user_resume_blueprint(cls, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves the user's saved Golden Base Resume Blueprint JSON from Neo4j.
+        """
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return None
+
+        query = """
+        MATCH (u:User {id: $user_id})
+        RETURN u.blueprint_json AS blueprint_json,
+               u.full_name AS full_name,
+               u.email AS email,
+               u.phone AS phone,
+               u.location AS location,
+               u.linkedin_url AS linkedin_url,
+               u.github_url AS github_url,
+               u.summary AS summary;
+        """
+        try:
+            res = await neo4j_client.execute_query(query, {"user_id": user_id})
+            if res and len(res) > 0:
+                record = res[0]
+                bp_str = record.get("blueprint_json")
+                if bp_str:
+                    try:
+                        return json.loads(bp_str)
+                    except Exception:
+                        pass
+                # Fallback to reconstructing contact if blueprint_json is empty
+                if record.get("full_name"):
+                    return {
+                        "contact": {
+                            "full_name": record.get("full_name") or "",
+                            "email": record.get("email") or "",
+                            "phone": record.get("phone") or "",
+                            "location": record.get("location") or "",
+                            "linkedin_url": record.get("linkedin_url") or "",
+                            "github_url": record.get("github_url") or ""
+                        },
+                        "summary": record.get("summary") or "",
+                        "experience": [],
+                        "education": [],
+                        "projects": [],
+                        "skills": []
+                    }
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to fetch user resume blueprint for {user_id}: {e}")
+            return None
 
     @classmethod
     async def upsert_user_linkedin_connections(

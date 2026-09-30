@@ -141,128 +141,93 @@ Return ONLY a valid JSON object with the exact structure below (no markdown fenc
         return joined
 
     def _advanced_heuristic_parser(self, text: str, raw_text: str) -> ResumeBlueprint:
-        # 1. Contact info
+        """
+        Dynamically extracts contact info, education, experience, projects, and skills from unstructured text
+        without any hardcoded fallbacks or mock data.
+        """
+        # 1. Contact info extraction
         email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
-        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\d{10}', text)
-        github_match = re.search(r'github\.com/([\w\-]+)', text, re.IGNORECASE)
-        linkedin_match = re.search(r'linkedin\.com/in/([\w\-]+)', text, re.IGNORECASE)
+        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,13}', text)
+        github_match = re.search(r'(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)', text, re.IGNORECASE)
+        linkedin_match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)', text, re.IGNORECASE)
 
-        # Name extraction (usually before Software Engineer / Title)
-        name = "Mohit Prasad Upraity"
-        name_search = re.search(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})', text)
-        if name_search and not any(w in name_search.group(1).lower() for w in ["summary", "skills", "experience"]):
-            name = name_search.group(1)
+        # Name extraction: look at the top lines of text
+        name = ""
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        for line in lines[:5]:
+            if len(line.split()) <= 4 and not re.search(r'@|phone|email|github|linkedin|resume|curriculum|profile', line, re.IGNORECASE):
+                # Candidate names are usually capitalized title case
+                if re.match(r'^[A-Z][a-zA-Z\s\.\'-]+$', line):
+                    name = line
+                    break
 
-        # 2. Education extraction
+        if not name:
+            name_search = re.search(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})', text)
+            if name_search and not any(w in name_search.group(1).lower() for w in ["summary", "skills", "experience", "education", "projects"]):
+                name = name_search.group(1)
+
+        # 2. Dynamic Education extraction
         education = []
-        edu_match = re.search(r'([A-Za-z\s]+(?:College|University|Institute|IIT|NIT|IIIT)[A-Za-z\s,]*)', text, re.IGNORECASE)
-        college_name = edu_match.group(1).strip() if edu_match else "Anand Engineering College"
-        
-        # Clean college name
-        if "Anand Engineering College" in text:
-            college_name = "Anand Engineering College"
-            education.append(EducationEntry(
-                university="Anand Engineering College",
-                degree="B.E. in Computer Science Engineering",
-                field_of_study="Computer Science",
-                start_date="2023",
-                end_date="2027"
-            ))
-        else:
-            education.append(EducationEntry(
-                university=college_name[:40],
-                degree="Bachelor of Technology in Computer Science",
-                field_of_study="Computer Science",
-                start_date="2023",
-                end_date="2027"
-            ))
+        edu_matches = re.finditer(r'([A-Za-z\s,\.-]+(?:College|University|Institute|IIT|NIT|IIIT|Academy|School)[A-Za-z\s,\.-]*)', text, re.IGNORECASE)
+        seen_colleges = set()
+        for m in edu_matches:
+            col = m.group(1).strip()
+            # Clean length
+            clean_col = col.split("\n")[0].strip()[:60]
+            if clean_col.lower() not in seen_colleges and len(clean_col) > 5:
+                seen_colleges.add(clean_col.lower())
+                education.append(EducationEntry(
+                    university=clean_col,
+                    degree="Degree / Studies",
+                    field_of_study="Computer Science / Engineering",
+                    start_date="",
+                    end_date=""
+                ))
 
-        # 3. Experience extraction
+        # 3. Dynamic Experience extraction
         experience = []
-        if "DRDO" in text:
+        # Look for bullet points in raw text
+        raw_bullets = re.findall(r'(?:^|\n)\s*[•\-\*]\s*([^\n\r]+)', raw_text)
+        if raw_bullets:
+            # Group bullets into experience entry
             experience.append(ExperienceEntry(
-                company="DRDO – ADRDE, Agra",
-                role="Cybersecurity / AI Intern",
-                start_date="Feb 2026",
-                end_date="Jun 2026",
-                bullets=[
-                    "Engineered a Next Generation Firewall (NGFW) prototype to monitor simulated network traffic and detect anomalous packets in real time.",
-                    "Built AI-assisted traffic analysis and intrusion detection mechanisms to flag suspicious network behavior.",
-                    "Developed deep packet inspection modules for anomaly detection, strengthening secure network monitoring."
-                ]
-            ))
-        if "SUREXA" in text:
-            experience.append(ExperienceEntry(
-                company="SUREXA IT Solutions",
-                role="ML Research Intern",
-                start_date="Apr 2026",
+                company="Professional Experience",
+                role="Software Engineer",
+                start_date="",
                 end_date="Present",
                 is_current=True,
-                bullets=[
-                    "Developed and optimized a machine learning pipeline for automated risk prediction, analyzing data patterns to forecast potential risks.",
-                    "Conducted literature reviews of state-of-the-art AI/ML research to inform methodology decisions for upcoming pipeline projects."
-                ]
-            ))
-        if "Novonixsoft" in text:
-            experience.append(ExperienceEntry(
-                company="Novonixsoft",
-                role="Software Engineer",
-                start_date="May 2025",
-                end_date="Present",
-                is_current=True,
-                bullets=[
-                    "Built and shipped 5+ web application modules using React, Node.js, and Firebase.",
-                    "Implemented authentication systems and integrated REST APIs across production features."
-                ]
+                bullets=raw_bullets[:6]
             ))
 
-        if not experience:
-            experience.append(ExperienceEntry(
-                company="Software Engineering Experience",
-                role="Software Engineer",
-                start_date="2023",
-                end_date="Present",
-                bullets=["Developed scalable web platforms and AI-assisted backend pipelines."]
-            ))
-
-        # 4. Projects extraction
+        # 4. Dynamic Projects extraction
         projects = []
-        if "AgriFarm" in text:
-            projects.append(ProjectEntry(
-                name="AgriFarm AI",
-                tech_stack="React, Next.js, Firebase, IoT Sensors",
-                bullets=[
-                    "Engineered full-stack AI/IoT platform with React/Next.js and connected IoT sensors for real-time soil monitoring and automated crop alerts.",
-                    "Integrated 3+ IoT sensors with cloud APIs to deliver live farm insights through responsive web interface."
-                ]
-            ))
-        if "LawBot360" in text:
-            projects.append(ProjectEntry(
-                name="LawBot360",
-                tech_stack="NLP, Python, FastAPI",
-                bullets=["Built real-time conversational AI legal assistant with contract analysis capabilities."]
-            ))
-        if "SkillSync" in text:
-            projects.append(ProjectEntry(
-                name="SkillSync 2.0",
-                tech_stack="AI, React, Node.js",
-                bullets=["Developed AI-powered platform connecting recruiters with candidates by bridging skill gaps in hiring pipelines."]
-            ))
+        proj_headings = re.findall(r'(?:Project|Projects)\s*[:\-]?\s*([A-Za-z0-9\s_-]+)', text, re.IGNORECASE)
+        for ph in proj_headings[:3]:
+            cleaned_p = ph.strip()[:40]
+            if len(cleaned_p) > 3:
+                projects.append(ProjectEntry(
+                    name=cleaned_p,
+                    tech_stack="",
+                    bullets=[]
+                ))
 
-        # 5. Skills extraction
+        # 5. Dynamic Skills extraction
         known_skills_vocab = [
             ("Python", "Languages"), ("JavaScript", "Languages"), ("TypeScript", "Languages"),
-            ("HTML", "Languages"), ("CSS", "Languages"), ("React.js", "Frameworks"),
-            ("React", "Frameworks"), ("Next.js", "Frameworks"), ("Node.js", "Frameworks"),
-            ("Express.js", "Frameworks"), ("FastAPI", "Frameworks"), ("MongoDB", "Databases"),
-            ("PostgreSQL", "Databases"), ("MySQL", "Databases"), ("Firebase", "Databases"),
-            ("Docker", "DevOps & Cloud"), ("Git", "DevOps & Cloud"), ("Supabase", "Databases"),
+            ("Java", "Languages"), ("C++", "Languages"), ("C#", "Languages"), ("Go", "Languages"),
+            ("Rust", "Languages"), ("HTML", "Languages"), ("CSS", "Languages"), ("SQL", "Languages"),
+            ("React.js", "Frameworks"), ("React", "Frameworks"), ("Next.js", "Frameworks"), 
+            ("Vue", "Frameworks"), ("Node.js", "Frameworks"), ("Express.js", "Frameworks"), 
+            ("FastAPI", "Frameworks"), ("Django", "Frameworks"), ("Flask", "Frameworks"),
+            ("Spring Boot", "Frameworks"), ("MongoDB", "Databases"), ("PostgreSQL", "Databases"), 
+            ("MySQL", "Databases"), ("Firebase", "Databases"), ("Redis", "Databases"),
+            ("Docker", "DevOps & Cloud"), ("Kubernetes", "DevOps & Cloud"), ("Git", "DevOps & Cloud"), 
+            ("AWS", "DevOps & Cloud"), ("GCP", "DevOps & Cloud"), ("Supabase", "Databases"),
             ("Neo4j", "Databases"), ("Postman", "DevOps & Cloud"), ("Vercel", "DevOps & Cloud"),
             ("NLP", "AI/ML & Security"), ("RAG", "AI/ML & Security"), ("LLMs", "AI/ML & Security"),
-            ("Agentic AI", "AI/ML & Security"), ("Network Security", "AI/ML & Security"),
-            ("TCP/IP", "AI/ML & Security"), ("Wireshark", "AI/ML & Security"),
-            ("Intrusion Detection", "AI/ML & Security"), ("Kali Linux", "AI/ML & Security"),
-            ("Next Generation Firewall", "AI/ML & Security")
+            ("Agentic AI", "AI/ML & Security"), ("PyTorch", "AI/ML & Security"), ("TensorFlow", "AI/ML & Security"),
+            ("Network Security", "AI/ML & Security"), ("TCP/IP", "AI/ML & Security"), ("Wireshark", "AI/ML & Security"),
+            ("Intrusion Detection", "AI/ML & Security"), ("Linux", "DevOps & Cloud")
         ]
 
         categorized_skills: Dict[str, List[str]] = {}
@@ -275,16 +240,19 @@ Return ONLY a valid JSON object with the exact structure below (no markdown fenc
             for cat, s_list in categorized_skills.items()
         ]
 
+        summary_match = re.search(r'(?:Summary|About|Professional Summary)\s*[:\-]?\s*([^\n\r]+(?:\n[^\n\r]+){1,3})', raw_text, re.IGNORECASE)
+        summary_text = summary_match.group(1).strip() if summary_match else ""
+
         return ResumeBlueprint(
             contact=ContactInfo(
                 full_name=name,
-                email=email_match.group(0) if email_match else "mohitupraity123@gmail.com",
-                phone=phone_match.group(0) if phone_match else "+91-9568548130",
-                location="Agra / Bangalore, India",
-                github_url=f"github.com/{github_match.group(1)}" if github_match else "github.com/mohitupraity",
-                linkedin_url=f"linkedin.com/in/{linkedin_match.group(1)}" if linkedin_match else "linkedin.com/in/mohitUpraity"
+                email=email_match.group(0) if email_match else "",
+                phone=phone_match.group(0) if phone_match else "",
+                location="",
+                github_url=f"github.com/{github_match.group(1)}" if github_match else "",
+                linkedin_url=f"linkedin.com/in/{linkedin_match.group(1)}" if linkedin_match else ""
             ),
-            summary="Full-stack Software Engineer with hands-on experience building production web applications (React, Node.js, Firebase, PostgreSQL) and specialized work in AI systems, Next Generation Firewalls at DRDO ADRDE, and 4x Hackathon Winner.",
+            summary=summary_text,
             experience=experience,
             education=education,
             projects=projects,
@@ -353,33 +321,17 @@ Return JSON with tailored bullet points:
                         if new_proj.get("name", "").lower() in orig_p.name.lower() or orig_p.name.lower() in new_proj.get("name", "").lower():
                             if new_proj.get("bullets"):
                                 orig_p.bullets = new_proj["bullets"]
-        else:
-            # High-fidelity keyword optimization fallback
-            target_role = job_info.get("job_title", "Software Engineer")
-            target_comp = job_info.get("company_name", "Target Company")
-            if tailored_exp:
-                for exp in tailored_exp:
-                    if "DRDO" in exp.company or "ADRDE" in exp.company:
-                        exp.bullets = [
-                            f"Engineered high-performance packet inspection and AI risk detection modules, aligning with {target_role} requirements at {target_comp}.",
-                            "Optimized backend throughput by 42% utilizing async Python pipelines, Linux iptables, and deep packet inspection."
-                        ]
-                    elif "SUREXA" in exp.company:
-                        exp.bullets = [
-                            f"Developed distributed ML inference services and REST APIs supporting high concurrency for {target_comp}-aligned production workflows.",
-                            "Implemented automated telemetry pipelines and data ingestion reducing processing latency by 35%."
-                        ]
 
         top_skills_list = []
         for s in base_blueprint.skills:
             if s.skills:
                 top_skills_list.extend(s.skills[:2])
 
-        skills_str = ", ".join(top_skills_list[:4]) if top_skills_list else "Python, FastAPI, React, Docker"
+        skills_str = ", ".join(top_skills_list[:4]) if top_skills_list else "Full Stack Engineering"
 
         return ResumeBlueprint(
             contact=base_blueprint.contact,
-            summary=f"Software Engineer specialized in {job_info.get('job_title', 'Backend & Full Stack Development')} with proven AST code evidence across {skills_str}, tailored for high-impact contributions at {job_info.get('company_name', 'target organizations')}.",
+            summary=base_blueprint.summary or f"Software Engineer specialized in {job_info.get('job_title', 'Software Engineering')} with proven code evidence across {skills_str}, tailored for high-impact contributions at {job_info.get('company_name', 'target organizations')}.",
             experience=tailored_exp,
             education=base_blueprint.education,
             projects=tailored_proj,

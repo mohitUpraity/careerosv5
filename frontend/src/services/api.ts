@@ -94,6 +94,34 @@ export const apiService = {
     return await res.json();
   },
 
+  async getMasterResume(headers: Record<string, string>): Promise<{
+    status: string;
+    has_master_resume: boolean;
+    blueprint: any | null;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/resume/master`, { headers });
+    if (!res.ok) throw new Error(`Failed to load master resume (${res.status})`);
+    return await res.json();
+  },
+
+  async uploadResumePdf(file: File, headers: Record<string, string>): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const reqHeaders = { ...headers };
+    delete reqHeaders['Content-Type'];
+
+    const res = await fetch(`${API_BASE}/api/v1/ingest/resume`, {
+      method: 'POST',
+      headers: reqHeaders,
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Resume upload failed (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async resetProfile(headers: Record<string, string>): Promise<{ status: string; message: string }> {
     const res = await fetch(`${API_BASE}/api/v1/profile/reset`, {
       method: 'POST',

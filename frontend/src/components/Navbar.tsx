@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   UserCheck,
   Github,
-  Download
+  Download,
+  FileText,
+  Linkedin
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ProfileAnalysis } from '../services/api';
@@ -22,6 +24,8 @@ interface NavbarProps {
   analysis: ProfileAnalysis | null;
   onOpenResetModal: () => void;
   onOpenSyncGitHub: () => void;
+  onOpenSyncResume?: () => void;
+  onOpenSyncLinkedIn?: () => void;
   onOpenExtensionModal?: () => void;
   onRefreshData: () => void;
   loading: boolean;
@@ -31,6 +35,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   analysis,
   onOpenResetModal,
   onOpenSyncGitHub,
+  onOpenSyncResume,
+  onOpenSyncLinkedIn,
   onOpenExtensionModal,
   onRefreshData,
   loading,
@@ -153,6 +159,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
                 Beta
               </span>
+            </button>
+          )}
+
+          {onOpenSyncResume && (
+            <button
+              onClick={onOpenSyncResume}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
+              title="Upload Master Resume PDF to parse identity and skills"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sync Resume</span>
+            </button>
+          )}
+
+          {onOpenSyncLinkedIn && (
+            <button
+              onClick={onOpenSyncLinkedIn}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
+              title="Sync LinkedIn connections & referral network"
+            >
+              <Linkedin className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sync LinkedIn</span>
             </button>
           )}
 

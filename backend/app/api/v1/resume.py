@@ -1,10 +1,18 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from app.core.security import get_current_user
 from app.services.resume_service import ResumeService
-from app.schemas.resume_blueprint import ResumeBlueprint
+from app.services.neo4j_service import neo4j_service
+from app.schemas.resume_blueprint import (
+    ResumeBlueprint,
+    ContactInfo,
+    ExperienceEntry,
+    EducationEntry,
+    ProjectEntry,
+    SkillCategory
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +26,21 @@ class ResumeTailorRequest(BaseModel):
     target_company: Optional[str] = None
     blueprint: Optional[Dict[str, Any]] = None
 
+@router.get("/master", response_model=Dict[str, Any])
+async def get_master_resume(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Returns the user's active Golden Master Base Resume Blueprint from Neo4j.
+    """
+    user_id = current_user["id"]
+    blueprint = await neo4j_service.get_user_resume_blueprint(user_id)
+    return {
+        "status": "success",
+        "has_master_resume": blueprint is not None,
+        "blueprint": blueprint
+    }
+
 @router.post("/parse", response_model=Dict[str, Any])
 async def parse_resume_file(
     file: Optional[UploadFile] = File(None),
@@ -25,7 +48,8 @@ async def parse_resume_file(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
-    Parses an uploaded PDF or raw text resume into a structured JSON Resume Blueprint.
+    Parses an uploaded PDF or raw text resume into a structured JSON Resume Blueprint
+    and automatically saves it as the user's Golden Master Base Resume.
     """
     user_id = current_user["id"]
     try:
@@ -42,6 +66,10 @@ async def parse_resume_file(
             raise HTTPException(status_code=400, detail="Must provide either a PDF file or raw_text")
 
         blueprint = await resume_service.parse_resume_to_blueprint(content)
+        
+        # Save as user's Master Blueprint in Neo4j
+        await neo4j_service.upsert_user_resume_blueprint(user_id=user_id, blueprint=blueprint)
+
         return {
             "status": "success",
             "blueprint": blueprint.model_dump()
@@ -56,7 +84,8 @@ async def tailor_resume(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
-    Tailors resume STAR bullets to a target job description while preserving layout blueprint.
+    Tailors resume STAR bullets to a target job description using the user's real Master Blueprint
+    or real synced GitHub project graph in Neo4j.
     """
     user_id = current_user["id"]
     try:
@@ -64,11 +93,50 @@ async def tailor_resume(
         if payload.blueprint:
             base_blueprint = ResumeBlueprint(**payload.blueprint)
         else:
-            # Generate default blueprint based on candidate's verified graph data
-            base_blueprint = resume_service._advanced_heuristic_parser(
-                text="Mohit Upraity Software Engineer DRDO SUREXA Novonixsoft AgriFarm LawBot360 Anand Engineering College",
-                raw_text=""
-            )
+            # 1. Check if user already uploaded a Master Blueprint in Neo4j
+            saved_bp = await neo4j_service.get_user_resume_blueprint(user_id)
+            if saved_bp:
+                try:
+                    base_blueprint = ResumeBlueprint(**saved_bp)
+                except Exception:
+                    pass
+
+            # 2. If no saved blueprint, synthesize dynamically from User's real GitHub projects in Neo4j
+            if not base_blueprint:
+                user_projects = await neo4j_service.get_user_synced_projects(user_id)
+                project_entries = []
+                for p in user_projects[:4]:
+                    project_entries.append(ProjectEntry(
+                        name=p.get("name", "Software Project"),
+                        tech_stack=p.get("primary_language", "Software"),
+                        repo_url=p.get("repo_url", ""),
+                        bullets=[f"Developed and architected {p.get('name')} with automated workflows and clean system design."]
+                    ))
+
+                candidate_name = current_user.get("user_metadata", {}).get("full_name") or current_user.get("name") or "Software Engineer"
+                candidate_email = current_user.get("email") or ""
+
+                base_blueprint = ResumeBlueprint(
+                    contact=ContactInfo(
+                        full_name=candidate_name,
+                        email=candidate_email,
+                        phone="",
+                        location="",
+                        github_url="",
+                        linkedin_url=""
+                    ),
+                    summary=f"Software Engineer experienced in full stack application development and scalable systems.",
+                    experience=[],
+                    education=[],
+                    projects=project_entries,
+                    skills=[
+                        SkillCategory(
+                            category="Core Technical Skills",
+                            skills=[p.get("primary_language") for p in user_projects if p.get("primary_language")]
+                        )
+                    ] if user_projects else [],
+                    raw_text=""
+                )
 
         job_info = {
             "job_description": payload.job_description,
@@ -93,14 +161,14 @@ async def tailor_resume(
             highlighted_projects.append({
                 "title": proj.name,
                 "description": proj.bullets[0] if proj.bullets else f"High-impact software engineering project leveraging {proj.tech_stack}",
-                "tech_stack": [s.strip() for s in proj.tech_stack.split(",") if s.strip()] if proj.tech_stack else ["Python", "FastAPI"],
-                "repo_url": proj.repo_url or f"https://github.com/mohitUpraity/{proj.name.lower().replace(' ', '-')}",
+                "tech_stack": [s.strip() for s in proj.tech_stack.split(",") if s.strip()] if proj.tech_stack else ["Software Engineering"],
+                "repo_url": proj.repo_url or "",
                 "bullets": proj.bullets
             })
 
         return {
             "status": "success",
-            "candidate_name": tailored_bp.contact.full_name or "Mohit Upraity",
+            "candidate_name": tailored_bp.contact.full_name or "Candidate",
             "target_role": payload.target_role or "Software Engineer",
             "target_company": payload.target_company or "Target Company",
             "ats_score": 94,
