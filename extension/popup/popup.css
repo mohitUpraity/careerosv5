@@ -1,25 +1,53 @@
+/* ==========================================================================
+   CareerOS Co-Pilot — Stripe / Notion Inspired Light Design System
+   ========================================================================== */
+
 :root {
-  --bg-base: #0a0d14;
-  --bg-surface: #111520;
-  --bg-surface-hover: #161c2b;
-  --bg-elevated: #1a2234;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-focus: #3b82f6;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  --accent-primary: #2563eb;
-  --accent-primary-hover: #1d4ed8;
-  --accent-primary-light: rgba(37, 99, 235, 0.15);
-  --accent-success: #10b981;
-  --accent-success-light: rgba(16, 185, 129, 0.12);
-  --accent-warning: #f59e0b;
-  --accent-danger: #ef4444;
+  /* Canvas & Surfaces */
+  --bg-app: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #f1f5f9;
+  
+  /* Borders */
+  --border-subtle: #e2e8f0;
+  --border-card: #e2e8f0;
+  --border-input: #cbd5e1;
+  --border-focus: #4f46e5;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --text-primary: #0f172a;    /* Slate-900: Deep authoritative navy ink */
+  --text-secondary: #475569;  /* Slate-600: Readable, clear body */
+  --text-tertiary: #64748b;   /* Slate-500: Subtitles & labels */
+  --text-muted: #94a3b8;      /* Slate-400: Placeholders */
+
+  /* Stripe-Style Atmospheric Accents */
+  --accent-brand: #4f46e5;    /* Indigo-600 */
+  --accent-brand-hover: #4338ca;
+  --accent-brand-subtle: #eef2ff;
+  --accent-btn-bg: #0f172a;   /* Premium dark-slate button */
+  --accent-btn-hover: #1e293b;
+  --accent-btn-text: #ffffff;
+
+  /* Semantic Feedback */
+  --status-online-bg: #ecfdf5;
+  --status-online-border: #a7f3d0;
+  --status-online-text: #047857;
+  --status-online-dot: #10b981;
+
+  --status-offline-bg: #fef2f2;
+  --status-offline-border: #fecaca;
+  --status-offline-text: #b91c1c;
+
+  /* Radii & Multi-Layer Atmospheric Shadows */
   --radius-sm: 6px;
-  --radius-md: 9px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-btn: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-floating: 0 4px 12px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 * {
@@ -29,13 +57,14 @@
 }
 
 body {
-  width: 350px;
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: var(--bg-base);
+  width: 356px;
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   user-select: none;
 }
 
@@ -46,7 +75,10 @@ body {
   gap: 12px;
 }
 
-/* Header */
+/* ==========================================================================
+   Header & Brand
+   ========================================================================== */
+
 .header {
   display: flex;
   align-items: center;
@@ -57,41 +89,55 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
 }
 
 .brand-logo {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #1e293b, #0f172a);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f172a;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #60a5fa;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
 }
 
 .brand-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+}
+
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .brand-title {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
-  line-height: 1.1;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.brand-badge {
-  font-size: 9.5px;
+.badge-tag {
+  font-size: 9px;
   font-weight: 600;
+  font-family: var(--font-mono);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.brand-sub {
+  font-size: 10.5px;
   color: var(--text-tertiary);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 400;
 }
 
 /* Status Pill */
@@ -101,51 +147,46 @@ body {
   gap: 5px;
   padding: 3px 8px;
   border-radius: 9999px;
-  background: var(--accent-success-light);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: var(--status-online-bg);
+  border: 1px solid var(--status-online-border);
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent-success);
+  color: var(--status-online-text);
 }
 
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: var(--accent-success);
-  box-shadow: 0 0 8px var(--accent-success);
-  animation: pulse 2.5s infinite ease-in-out;
+  background-color: var(--status-online-dot);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
 .status-indicator.error {
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.25);
-  color: var(--accent-danger);
+  background: var(--status-offline-bg);
+  border-color: var(--status-offline-border);
+  color: var(--status-offline-text);
 }
 
 .status-indicator.error .status-dot {
-  background-color: var(--accent-danger);
-  box-shadow: none;
-  animation: none;
+  background-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.85); }
-}
+/* ==========================================================================
+   Cards & Layout Components
+   ========================================================================== */
 
-/* Base Card Style */
 .card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
   padding: 12px;
-  position: relative;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-card);
 }
 
 /* Profile Card */
-.field-group {
+.profile-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -158,17 +199,17 @@ body {
 }
 
 .field-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
 }
 
 .sync-timestamp {
-  font-size: 10.5px;
-  color: var(--text-secondary);
-  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
 }
 
 .select-wrapper {
@@ -179,26 +220,26 @@ body {
 .custom-select {
   width: 100%;
   appearance: none;
-  background: #0d111a;
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
   color: var(--text-primary);
-  padding: 8px 28px 8px 10px;
+  padding: 7px 30px 7px 10px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
+  font-family: var(--font-sans);
   cursor: pointer;
   outline: none;
   transition: all 0.15s ease;
 }
 
 .custom-select:hover {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: #101522;
+  border-color: #94a3b8;
 }
 
 .custom-select:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
 .select-chevron {
@@ -212,7 +253,10 @@ body {
   align-items: center;
 }
 
-/* Action Buttons */
+/* ==========================================================================
+   Action Buttons
+   ========================================================================== */
+
 .actions-group {
   display: flex;
   flex-direction: column;
@@ -224,17 +268,18 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
   text-align: left;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-sans);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.action-icon {
-  width: 32px;
-  height: 32px;
+.btn-icon-box {
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -242,90 +287,111 @@ body {
   flex-shrink: 0;
 }
 
-.action-content {
+.btn-content {
   flex: 1;
   min-width: 0;
 }
 
-.action-title {
+.btn-title {
   font-size: 12.5px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
-.action-sub {
+.btn-desc {
   font-size: 10.5px;
-  color: var(--text-secondary);
-  margin-top: 2px;
+  margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.action-arrow {
-  color: var(--text-tertiary);
+.btn-arrow {
   display: flex;
   align-items: center;
   transition: transform 0.15s ease;
 }
 
-.action-btn:hover .action-arrow {
+/* Primary Button (Stripe Deep Slate) */
+.btn-primary {
+  background: var(--accent-btn-bg);
+  color: var(--accent-btn-text);
+  box-shadow: var(--shadow-btn);
+}
+
+.btn-primary .btn-icon-box {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.btn-primary .btn-desc {
+  color: #94a3b8;
+}
+
+.btn-primary .btn-arrow {
+  color: #64748b;
+}
+
+.btn-primary:hover {
+  background: var(--accent-btn-hover);
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.15);
+}
+
+.btn-primary:hover .btn-arrow {
   transform: translateX(2px);
-  color: #fff;
+  color: #ffffff;
 }
 
-/* Primary CTA Button (Master Sync) */
-.primary-action {
-  background: linear-gradient(180deg, #1e293b, #0f172a);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.primary-action .action-icon {
-  background: rgba(37, 99, 235, 0.2);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.primary-action:hover {
-  background: linear-gradient(180deg, #25334c, #131d33);
-  border-color: rgba(96, 165, 250, 0.4);
-}
-
-.primary-action:active {
+.btn-primary:active {
   transform: translateY(1px);
 }
 
-/* Secondary CTA Button (Delta Sync) */
-.secondary-action {
-  background: var(--bg-surface);
-  border-color: var(--border-subtle);
+/* Secondary Button (Clean White Card) */
+.btn-secondary {
+  background: var(--bg-card);
+  border-color: var(--border-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.btn-secondary .btn-icon-box {
+  background: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.btn-secondary .btn-desc {
+  color: var(--text-tertiary);
+}
+
+.btn-secondary .btn-arrow {
+  color: var(--text-muted);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: #cbd5e1;
+}
+
+.btn-secondary:hover .btn-arrow {
+  transform: translateX(2px);
   color: var(--text-primary);
 }
 
-.secondary-action .action-icon {
-  background: rgba(148, 163, 184, 0.1);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-subtle);
-}
-
-.secondary-action:hover {
-  background: var(--bg-surface-hover);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.secondary-action:active {
+.btn-secondary:active {
   transform: translateY(1px);
 }
 
-/* Progress Stepper */
+/* ==========================================================================
+   Sync Progress Stepper
+   ========================================================================== */
+
 .progress-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #0f1420;
-  border-color: rgba(59, 130, 246, 0.3);
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
 .progress-meta {
@@ -337,20 +403,20 @@ body {
 .progress-title {
   font-size: 11.5px;
   font-weight: 600;
-  color: #93c5fd;
+  color: var(--text-primary);
 }
 
 .progress-val {
   font-size: 11px;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
-  color: #60a5fa;
+  font-family: var(--font-mono);
+  color: var(--accent-brand);
 }
 
 .progress-track {
   width: 100%;
   height: 4px;
-  background: #1e293b;
+  background: #e2e8f0;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -358,9 +424,9 @@ body {
 .progress-fill {
   width: 0%;
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  background: var(--accent-brand);
   border-radius: 2px;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .stepper-pipeline {
@@ -375,7 +441,7 @@ body {
   gap: 8px;
   font-size: 11px;
   color: var(--text-tertiary);
-  transition: color 0.2s ease;
+  transition: color 0.15s ease;
 }
 
 .step-indicator {
@@ -384,30 +450,27 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.step-icon-wrapper svg {
-  display: block;
+  flex-shrink: 0;
 }
 
 .icon-spin {
   display: none !important;
-  animation: spin 1s linear infinite;
-  color: #60a5fa;
+  animation: spin 0.9s linear infinite;
+  color: var(--accent-brand);
 }
 
 .icon-done {
   display: none !important;
-  color: var(--accent-success);
+  color: #059669;
 }
 
 .icon-idle {
   display: block;
-  color: var(--text-tertiary);
+  color: #cbd5e1;
 }
 
 .stepper-step.active {
-  color: #93c5fd;
+  color: var(--accent-brand);
   font-weight: 600;
 }
 
@@ -426,14 +489,18 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Active Context Card */
+/* ==========================================================================
+   Active Context Card
+   ========================================================================== */
+
 .card-header-mini {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-tertiary);
   margin-bottom: 6px;
 }
@@ -445,18 +512,18 @@ body {
 
 .context-empty {
   font-style: italic;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
 }
 
 .context-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .context-title {
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -470,13 +537,13 @@ body {
 
 .btn-mini {
   margin-top: 6px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   border-radius: var(--radius-sm);
-  background: #1e293b;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #93c5fd;
+  background: var(--accent-btn-bg);
+  border: 1px solid transparent;
+  color: #ffffff;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -485,12 +552,13 @@ body {
 }
 
 .btn-mini:hover {
-  background: #25334c;
-  border-color: #3b82f6;
-  color: #fff;
+  background: var(--accent-btn-hover);
 }
 
-/* Toast Banner */
+/* ==========================================================================
+   Toast Feedback Banner
+   ========================================================================== */
+
 .toast-banner {
   display: flex;
   align-items: center;
@@ -499,25 +567,26 @@ body {
   border-radius: var(--radius-sm);
   font-size: 11.5px;
   font-weight: 500;
-  animation: slideUp 0.2s ease-out;
+  box-shadow: var(--shadow-card);
+  animation: slideUp 0.18s ease-out;
 }
 
 .toast-banner.success {
-  background: var(--accent-success-light);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
 }
 
 .toast-banner.error {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #f87171;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
 }
 
 .toast-banner.loading {
-  background: var(--accent-primary-light);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #93c5fd;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #4338ca;
 }
 
 .toast-icon {
@@ -530,7 +599,7 @@ body {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -538,19 +607,22 @@ body {
   display: none !important;
 }
 
-/* Footer */
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+
 .footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   padding-top: 2px;
 }
 
 .footer-link {
   color: var(--text-tertiary);
   text-decoration: none;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -559,10 +631,10 @@ body {
 }
 
 .footer-link:hover {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .footer-sep {
-  color: rgba(255, 255, 255, 0.1);
-  font-size: 10px;
+  color: var(--border-subtle);
+  font-size: 12px;
 }

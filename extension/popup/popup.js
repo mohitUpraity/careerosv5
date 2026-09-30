@@ -1,5 +1,5 @@
 /**
- * CareerOS Popup Controller - Clean, Modern Graph Co-Pilot Interface
+ * CareerOS Popup Controller - Clean, Stripe/Notion-Inspired Light Interface
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -65,7 +65,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           contextBody.innerHTML = `
             <div class="context-item">
               <div class="context-title">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 ${escapeHtml(response.data.name || 'Candidate Profile')}
               </div>
               <div class="context-sub">${escapeHtml(response.data.headline || '')}</div>
@@ -75,12 +75,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           contextBody.innerHTML = `
             <div class="context-item">
               <div class="context-title">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                 ${escapeHtml(response.data.title)} @ ${escapeHtml(response.data.company)}
               </div>
               <button id="quickMatchBtn" class="btn-mini">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                Run Match & Generate Referral Pitch
+                Run Match & Referral Pitch
               </button>
             </div>
           `;
@@ -89,7 +89,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           contextBody.innerHTML = `
             <div class="context-item">
               <div class="context-title">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 Connections (${response.data.length} visible)
               </div>
               <div class="context-sub">Ready to map into Neo4j graph cluster.</div>
