@@ -40,7 +40,7 @@ export const SyncGitHubModal: React.FC<SyncGitHubModalProps> = ({
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
-  const [username, setUsername] = useState<string>(activeProfile.githubUser || 'mohitUpraity');
+  const [username, setUsername] = useState<string>(activeProfile.githubUser || '');
   const [token, setToken] = useState<string>('');
   const [syncScope, setSyncScope] = useState<SyncScopeType>('unsynced');
   const [customCount, setCustomCount] = useState<number>(30);
@@ -260,7 +260,7 @@ export const SyncGitHubModal: React.FC<SyncGitHubModalProps> = ({
                     disabled={isSyncing}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="mohitUpraity"
+                    placeholder="e.g. torvalds"
                     className={`w-full pl-24 pr-4 py-2.5 text-xs rounded-xl border font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all ${
                       isDark 
                         ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder:text-slate-500' 

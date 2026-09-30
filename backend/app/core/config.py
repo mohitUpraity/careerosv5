@@ -30,8 +30,12 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = ""
     NEO4J_DATABASE: str = "a68e0c1f"
 
-    # GitHub Defaults
-    GITHUB_DEFAULT_USER: str = "mohitUpraity"
+
+    # Keep-Alive & Self-Pinger (Prevents Render Free Tier Cold Sleep)
+    KEEP_ALIVE_URL: Optional[str] = None
+    RENDER_EXTERNAL_URL: Optional[str] = None
+    KEEP_ALIVE_INTERVAL_SECONDS: int = 600  # 10 minutes (Render spins down after 15 mins)
+
 
     model_config = SettingsConfigDict(
         env_file=[

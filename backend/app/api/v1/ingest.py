@@ -18,22 +18,25 @@ router = APIRouter(prefix="/ingest", tags=["Data Ingestion"])
 
 @router.get("/github/status")
 async def get_github_sync_status(
-    username: str = Query("mohitUpraity"),
+    username: str = Query(...),
     token: Optional[str] = Query(None),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Returns total public repositories on GitHub vs currently synced repositories in Neo4j.
     """
+    if not username or not username.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="GitHub username is required")
+
     user_id = current_user["id"]
     synced_projects = await neo4j_service.get_user_synced_projects(user_id)
     synced_names = {str(p.get("name", "")).lower() for p in synced_projects if p.get("name")}
     
-    total_public_repos = await github_service.get_user_public_repo_count(username=username, token=token)
+    total_public_repos = await github_service.get_user_public_repo_count(username=username.strip(), token=token)
     
     return {
         "status": "success",
-        "username": username,
+        "username": username.strip(),
         "total_github_repos": total_public_repos,
         "synced_projects_count": len(synced_projects),
         "unsynced_repos_count": max(0, total_public_repos - len(synced_projects)),
@@ -50,9 +53,15 @@ async def ingest_github_repositories(
     and merges the graph topology into Neo4j scoped to the authenticated user.
     Supports syncing all repos (max_repos=0) and incremental syncing of only unsynced repos.
     """
-    username = payload.username or "mohitUpraity"
+    username = (payload.username or "").strip()
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GitHub username is required for repository synchronization"
+        )
     user_id = current_user["id"]
     user_email = current_user.get("email", "")
+
 
     logger.info(f"Initiating GitHub ingestion for user {user_id} (GitHub: {username}, max_repos: {payload.max_repos}, only_unsynced: {payload.only_unsynced})")
 
