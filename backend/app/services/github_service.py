@@ -1,8 +1,11 @@
 import asyncio
 import httpx
 import logging
-from typing import List, Dict, Any, Optional
+import os
 import base64
+from typing import List, Dict, Any, Optional
+from fastapi import HTTPException
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +25,16 @@ class GitHubService:
         If max_repos == 0 (or >= 1000), crawls ALL available repositories across all pages.
         Supports optional fork inclusion and parallelized language/README extraction.
         """
+        effective_token = token
+        if not effective_token or effective_token.strip().lower() in ["string", "none", "null", "undefined", ""]:
+            effective_token = settings.GITHUB_PERSONAL_ACCESS_TOKEN or os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PAT")
+
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "CareerOS-v5-Ingestion"
         }
-        if token and token.strip() and token.strip().lower() not in ["string", "none", "null", "undefined"]:
-            headers["Authorization"] = f"Bearer {token.strip()}"
+        if effective_token and effective_token.strip() and effective_token.strip().lower() not in ["string", "none", "null", "undefined", ""]:
+            headers["Authorization"] = f"Bearer {effective_token.strip()}"
 
         raw_repo_list = []
         page = 1
@@ -44,7 +51,19 @@ class GitHubService:
                     logger.error(f"Network error fetching repos for {username} on page {page}: {e}")
                     break
 
-                if response.status_code != 200:
+                if response.status_code == 403 or response.status_code == 429:
+                    logger.warning(f"GitHub API Rate Limit reached for {username}")
+                    raise HTTPException(
+                        status_code=429,
+                        detail="GitHub API Rate Limit reached for unauthenticated requests. Please enter a GitHub Personal Access Token in the Sync modal to unlock 5,000 req/hr."
+                    )
+                elif response.status_code == 404:
+                    logger.warning(f"GitHub user {username} not found")
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"GitHub account '@{username}' was not found on GitHub. Please check for typos."
+                    )
+                elif response.status_code != 200:
                     logger.error(f"Failed to fetch repos for {username} (page {page}, status {response.status_code}): {response.text}")
                     break
 

@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     NEO4J_PASSWORD: str = ""
     NEO4J_DATABASE: str = "a68e0c1f"
 
+    # GitHub Access
+    GITHUB_PERSONAL_ACCESS_TOKEN: Optional[str] = None
+
 
     # Keep-Alive & Self-Pinger (Prevents Render Free Tier Cold Sleep)
     KEEP_ALIVE_URL: Optional[str] = None
