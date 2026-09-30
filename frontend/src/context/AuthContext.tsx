@@ -33,6 +33,7 @@ interface AuthContextType {
   idToken: string | null;
   activeProfile: ProfileMode;
   isLoggedIn: boolean;
+  authLoading: boolean;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   switchProfile: (profileType: 'candidate' | 'coworker') => void;
@@ -41,10 +42,20 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const ANONYMOUS_PROFILE: ProfileMode = {
+  id: '',
+  name: 'Candidate',
+  role: 'Software Engineer',
+  type: 'candidate',
+  avatar: '',
+  githubUser: ''
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [idToken, setIdToken] = useState<string | null>(null);
-  const [activeProfile, setActiveProfile] = useState<ProfileMode>(DEFAULT_CANDIDATE);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [activeProfile, setActiveProfile] = useState<ProfileMode>(ANONYMOUS_PROFILE);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -53,20 +64,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const token = await firebaseUser.getIdToken();
           setIdToken(token);
-          // Update candidate profile name/avatar from Google
-          setActiveProfile(prev => ({
-            ...prev,
+          setActiveProfile({
             id: firebaseUser.uid,
-            name: firebaseUser.displayName || prev.name,
-            avatar: firebaseUser.photoURL || prev.avatar,
-          }));
+            name: firebaseUser.displayName || 'Candidate',
+            role: 'Software Engineer',
+            type: 'candidate',
+            avatar: firebaseUser.photoURL || '',
+            githubUser: ''
+          });
         } catch (err) {
           console.error('Failed to get Firebase ID token:', err);
         }
       } else {
         setUser(null);
         setIdToken(null);
+        setActiveProfile(ANONYMOUS_PROFILE);
       }
+      setAuthLoading(false);
     });
 
     return () => unsubscribe();
@@ -80,11 +94,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIdToken(token);
       setActiveProfile({
         id: result.user.uid,
-        name: result.user.displayName || 'Authenticated User',
-        role: 'Full Stack & AI Engineer',
+        name: result.user.displayName || 'Candidate',
+        role: 'Software Engineer',
         type: 'candidate',
-        avatar: result.user.photoURL || 'https://github.com/mohitUpraity.png',
-        githubUser: 'mohitUpraity'
+        avatar: result.user.photoURL || '',
+        githubUser: ''
       });
     } catch (error: any) {
       console.error('Google Sign-In Error:', error);
@@ -96,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await signOut(auth);
     setUser(null);
     setIdToken(null);
-    setActiveProfile(DEFAULT_CANDIDATE);
+    setActiveProfile(ANONYMOUS_PROFILE);
   };
 
   const switchProfile = (profileType: 'candidate' | 'coworker') => {
@@ -104,14 +118,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         setActiveProfile({
           id: user.uid,
-          name: user.displayName || 'Mohit Upraity',
-          role: 'AI / Distributed Systems Engineer',
+          name: user.displayName || 'Candidate',
+          role: 'Software Engineer',
           type: 'candidate',
-          avatar: user.photoURL || 'https://github.com/mohitUpraity.png',
-          githubUser: 'mohitUpraity'
+          avatar: user.photoURL || '',
+          githubUser: ''
         });
       } else {
-        setActiveProfile(DEFAULT_CANDIDATE);
+        setActiveProfile(ANONYMOUS_PROFILE);
       }
     } else {
       setActiveProfile(COWORKER_BENCHMARK);
@@ -121,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const getAuthHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'x-user-id': activeProfile.id,
+      'x-user-id': activeProfile.id || 'anonymous',
     };
     if (idToken) {
       headers['Authorization'] = `Bearer ${idToken}`;
@@ -136,6 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         idToken,
         activeProfile,
         isLoggedIn: !!user,
+        authLoading,
         loginWithGoogle,
         logout,
         switchProfile,
@@ -146,6 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </AuthContext.Provider>
   );
 };
+
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);

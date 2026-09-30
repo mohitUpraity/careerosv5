@@ -4,8 +4,13 @@ Thumbs.db
 
 # Environment variables
 .env
-.env.local
+.env.*
 *.env
+*.env.*
+.env.production
+.env.development
+.env.local
+.env.preview
 
 # Python
 __pycache__/
