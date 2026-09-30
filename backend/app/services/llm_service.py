@@ -23,37 +23,41 @@ class LLMService:
         """
         # 1. Try Groq API (Primary Engine)
         if settings.GROQ_API_KEY:
-            try:
-                selected_model = model or settings.GROQ_MODEL or "llama-3.3-70b-versatile"
-                headers = {
-                    "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": selected_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt + "\nYou must output strictly valid JSON with no markdown formatting or commentary."},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": temperature,
-                    "response_format": {"type": "json_object"}
-                }
+            for g_model in [model or settings.GROQ_MODEL or "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
+                try:
+                    headers = {
+                        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": g_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt + "\nYou must output strictly valid JSON with no markdown formatting or commentary."},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": temperature,
+                        "response_format": {"type": "json_object"}
+                    }
 
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    resp = await client.post(cls.GROQ_URL, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        content = data["choices"][0]["message"]["content"]
-                        clean_content = content.strip().replace("```json", "").replace("```", "").strip()
-                        return json.loads(clean_content)
-                    else:
-                        logger.warning(f"Groq API returned status {resp.status_code}: {resp.text}")
-            except Exception as e:
-                logger.warning(f"Groq chat completion failed: {e}. Falling back to Gemini/Heuristics.")
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        resp = await client.post(cls.GROQ_URL, headers=headers, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            content = data["choices"][0]["message"]["content"]
+                            clean_content = content.strip().replace("```json", "").replace("```", "").strip()
+                            return json.loads(clean_content)
+                except Exception as e:
+                    logger.warning(f"Groq model {g_model} chat failed: {e}")
 
-        # 2. Fallback to Gemini if configured
+        # 2. Fallback to Gemini if configured (High rate-limit Flash & Lite models)
         if settings.GEMINI_API_KEY:
-            for gem_model_name in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]:
+            for gem_model_name in [
+                "gemini-2.0-flash-lite",
+                "gemini-1.5-flash-8b",
+                "gemini-1.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-pro"
+            ]:
                 try:
                     import google.generativeai as genai
                     import asyncio
