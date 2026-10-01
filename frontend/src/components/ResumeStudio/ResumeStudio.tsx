@@ -40,7 +40,11 @@ import {
   Download,
   Target,
   FileCode,
-  LayoutGrid
+  LayoutGrid,
+  BookmarkPlus,
+  ChevronDown,
+  FolderOpen,
+  Settings2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -63,6 +67,18 @@ interface ResumeStudioProps {
 }
 
 export type SectionKey = 'summary' | 'experience' | 'projects' | 'skills' | 'education' | 'achievements';
+
+// Interface for Multiple Saved Templates
+export interface SavedResumeTemplate {
+  id: string;
+  name: string;
+  blueprint: ResumeBlueprint;
+  style: TemplateStyle;
+  sectionOrder: SectionKey[];
+  visibleSections: { [key in SectionKey]: boolean };
+  createdAt: string;
+  updatedAt: string;
+}
 
 // Suggestion interface for Google Docs-like track changes
 interface AISuggestion {
@@ -170,8 +186,6 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   const { user, getAuthHeaders } = useAuth();
   
   // ================= Top Navigation Tabs =================
-  // 'master': Edit Permanent Master Template
-  // 'tailor': Optimize & Review for Specific Job Description
   const [activeTab, setActiveTab] = useState<'master' | 'tailor'>('master');
 
   // View & Mode States
@@ -179,6 +193,8 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   const [isStyleOpen, setIsStyleOpen] = useState<boolean>(false);
   const [isSectionManagerOpen, setIsSectionManagerOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+  const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
+  const [newTemplateNameInput, setNewTemplateNameInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [atsScore, setAtsScore] = useState<number | null>(null);
@@ -191,6 +207,10 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   // Tailored Resume Blueprint State (Job-Specific Copy)
   const [tailoredBlueprint, setTailoredBlueprint] = useState<ResumeBlueprint>(DEFAULT_STARTER_BLUEPRINT);
   const [suggestions, setSuggestions] = useState<{ [id: string]: AISuggestion }>({});
+
+  // Multiple Saved Templates Management
+  const [savedTemplates, setSavedTemplates] = useState<SavedResumeTemplate[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState<string>('master-default');
 
   // Section Ordering & Visibility State
   const [sectionOrder, setSectionOrder] = useState<SectionKey[]>([
@@ -231,10 +251,36 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   // Helper for adding new skill chips
   const [newSkillInput, setNewSkillInput] = useState<{ [categoryIdx: number]: string }>({});
 
-  // Fetch Master Resume on Mount
+  // Fetch Master Resume and Saved Templates on Mount
   useEffect(() => {
     fetchMasterResume();
-  }, []);
+    loadSavedTemplates();
+  }, [user]);
+
+  const getStorageKey = () => `careeros_saved_templates_${user?.uid || 'local'}`;
+
+  const loadSavedTemplates = () => {
+    try {
+      const stored = localStorage.getItem(getStorageKey());
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSavedTemplates(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load saved templates from localStorage:', e);
+    }
+  };
+
+  const persistSavedTemplates = (templates: SavedResumeTemplate[]) => {
+    setSavedTemplates(templates);
+    try {
+      localStorage.setItem(getStorageKey(), JSON.stringify(templates));
+    } catch (e) {
+      console.warn('Could not save templates to localStorage:', e);
+    }
+  };
 
   const fetchMasterResume = async () => {
     setLoading(true);
@@ -293,6 +339,66 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     }
   };
 
+  // ================= Multiple Saved Templates Management =================
+  const handleSaveCurrentAsNewTemplate = () => {
+    const trimmed = newTemplateNameInput.trim();
+    if (!trimmed) {
+      onError('Please enter a name for your template');
+      return;
+    }
+
+    const newTemplate: SavedResumeTemplate = {
+      id: `tmpl-${Date.now()}`,
+      name: trimmed,
+      blueprint: JSON.parse(JSON.stringify(activeBlueprint)),
+      style: { ...templateStyle },
+      sectionOrder: [...sectionOrder],
+      visibleSections: { ...visibleSections },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const updatedList = [...savedTemplates, newTemplate];
+    persistSavedTemplates(updatedList);
+    setActiveTemplateId(newTemplate.id);
+    setIsSaveTemplateModalOpen(false);
+    setNewTemplateNameInput('');
+    onSuccess(`Template "${trimmed}" saved successfully!`);
+  };
+
+  const handleSwitchTemplate = (templateId: string) => {
+    if (templateId === 'master-default') {
+      setActiveTemplateId('master-default');
+      setMasterBlueprint(masterBlueprint);
+      onSuccess('Switched to Master Default Template');
+      return;
+    }
+
+    const tmpl = savedTemplates.find(t => t.id === templateId);
+    if (tmpl) {
+      setActiveTemplateId(tmpl.id);
+      if (activeTab === 'master') {
+        setMasterBlueprint(tmpl.blueprint);
+      } else {
+        setTailoredBlueprint(tmpl.blueprint);
+      }
+      setTemplateStyle(tmpl.style);
+      setSectionOrder(tmpl.sectionOrder || ['summary', 'experience', 'projects', 'skills', 'education', 'achievements']);
+      setVisibleSections(tmpl.visibleSections || { summary: true, experience: true, projects: true, skills: true, education: true, achievements: true });
+      onSuccess(`Loaded template "${tmpl.name}"`);
+    }
+  };
+
+  const handleDeleteTemplate = (templateId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = savedTemplates.filter(t => t.id !== templateId);
+    persistSavedTemplates(updated);
+    if (activeTemplateId === templateId) {
+      setActiveTemplateId('master-default');
+    }
+    onSuccess('Template deleted');
+  };
+
   // ================= Section Reordering & Visibility Helpers =================
   const moveSectionUp = (key: SectionKey) => {
     const idx = sectionOrder.indexOf(key);
@@ -341,7 +447,6 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
       const tailoredBp: ResumeBlueprint | undefined = data.tailored_blueprint;
       if (tailoredBp) {
-        // Compute suggestions between master blueprint and tailored blueprint
         const newSuggestions: { [id: string]: AISuggestion } = {};
 
         // 1. Summary Diff
@@ -405,7 +510,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         setTailoredBlueprint(tailoredBp);
         setSuggestions(newSuggestions);
         setAtsScore(data.ats_score || 94);
-        setActiveTab('tailor'); // Automatically switch to Job Tailor tab
+        setActiveTab('tailor');
         onSuccess(`Tailored for ${company || 'role'}! ${Object.keys(newSuggestions).length} AI suggestions ready for your review (ATS Match: ${data.ats_score || 94}%).`);
         
         confetti({
@@ -1623,6 +1728,33 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
         {/* Action Controls for Current Active Tab */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Multi-Template Selector Dropdown */}
+          <div className="relative flex items-center">
+            <select
+              value={activeTemplateId}
+              onChange={(e) => handleSwitchTemplate(e.target.value)}
+              className="input-base text-xs font-semibold pr-8"
+              style={{ height: '34px' }}
+            >
+              <option value="master-default">Default Master Template</option>
+              {savedTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => setIsSaveTemplateModalOpen(true)}
+              className="ml-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+              title="Save current layout as a new reusable template"
+              style={{ borderColor: 'var(--border-primary)' }}
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 text-amber-500" />
+              <span>Save Template</span>
+            </button>
+          </div>
+
           {/* View Mode Toggle */}
           <div 
             className="flex items-center p-1 rounded-xl border"
@@ -1752,6 +1884,65 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Save Template Modal */}
+      {isSaveTemplateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div 
+            className="w-full max-w-md p-6 rounded-2xl border space-y-4 shadow-2xl"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookmarkPlus className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                  Save Custom Template Preset
+                </h3>
+              </div>
+              <button onClick={() => setIsSaveTemplateModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Save your current section order, typography, accent color, and custom content as a reusable template for specific job types (e.g. Backend, Research, Lead).
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                Template Name
+              </label>
+              <input
+                type="text"
+                value={newTemplateNameInput}
+                onChange={(e) => setNewTemplateNameInput(e.target.value)}
+                placeholder="e.g. DRDO & AI Research Focus / Startup Full-Stack"
+                className="input-base w-full text-xs"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveCurrentAsNewTemplate();
+                }}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setIsSaveTemplateModalOpen(false)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveCurrentAsNewTemplate}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm"
+              >
+                Save Template Preset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Section Reorder & Visibility Manager Drawer */}
       {isSectionManagerOpen && (
