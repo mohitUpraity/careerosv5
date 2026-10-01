@@ -41,6 +41,27 @@ async def get_master_resume(
         "blueprint": blueprint
     }
 
+@router.put("/master", response_model=Dict[str, Any])
+async def update_master_resume(
+    blueprint: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Saves inline edits made to the Master Resume Blueprint in Resume Studio.
+    """
+    user_id = current_user["id"]
+    try:
+        bp_obj = ResumeBlueprint(**blueprint)
+        await neo4j_service.upsert_user_resume_blueprint(user_id=user_id, blueprint=bp_obj)
+        return {
+            "status": "success",
+            "message": "Master resume updated successfully",
+            "blueprint": bp_obj.model_dump()
+        }
+    except Exception as e:
+        logger.error(f"Failed to update master resume for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/parse", response_model=Dict[str, Any])
 async def parse_resume_file(
     file: Optional[UploadFile] = File(None),

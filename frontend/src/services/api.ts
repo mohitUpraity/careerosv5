@@ -104,6 +104,26 @@ export const apiService = {
     return await res.json();
   },
 
+  async updateMasterResume(blueprint: any, headers: Record<string, string>): Promise<{
+    status: string;
+    message: string;
+    blueprint: any;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/resume/master`, {
+      method: 'PUT',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(blueprint),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to update master resume (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async uploadResumePdf(file: File, headers: Record<string, string>): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);

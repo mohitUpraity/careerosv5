@@ -84,6 +84,60 @@ export interface ResumeBullet {
   impact_score?: number;
 }
 
+export interface ContactInfo {
+  full_name: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedin_url?: string;
+  github_url?: string;
+  portfolio_url?: string;
+}
+
+export interface ExperienceEntry {
+  company: string;
+  role: string;
+  location?: string;
+  start_date?: string;
+  end_date?: string;
+  is_current?: boolean;
+  bullets: string[];
+}
+
+export interface EducationEntry {
+  university: string;
+  degree: string;
+  field_of_study?: string;
+  start_date?: string;
+  end_date?: string;
+  gpa?: string;
+}
+
+export interface ProjectEntry {
+  name: string;
+  tech_stack?: string;
+  repo_url?: string;
+  live_url?: string;
+  bullets: string[];
+}
+
+export interface SkillCategory {
+  category: string;
+  skills: string[];
+}
+
+export interface ResumeBlueprint {
+  contact: ContactInfo;
+  summary?: string;
+  experience: ExperienceEntry[];
+  education: EducationEntry[];
+  projects: ProjectEntry[];
+  skills: SkillCategory[];
+  certifications?: string[];
+  achievements?: string[];
+  raw_text?: string;
+}
+
 export interface TailoredResumeResponse {
   candidate_name: string;
   target_role: string;
@@ -99,6 +153,7 @@ export interface TailoredResumeResponse {
     bullets: string[];
   }>;
   highlighted_skills: string[];
+  tailored_blueprint?: ResumeBlueprint;
 }
 
 export interface UserProfile {
