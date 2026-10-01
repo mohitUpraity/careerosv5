@@ -64,7 +64,7 @@ LinkedIn Posts Content:
 
 class LinkedInPostsService:
     @classmethod
-    def parse_posts_from_csv(cls, csv_text: str) -> List[str]:
+    def parse_csv_posts(cls, csv_text: str) -> List[str]:
         """
         Parses LinkedIn official 'Shares.csv' or 'Posts.csv' data export.
         """
@@ -110,25 +110,39 @@ class LinkedInPostsService:
     async def merge_posts_knowledge_to_graph(cls, user_id: str, knowledge: Dict[str, Any]) -> int:
         """
         Merges extracted Hackathons, Achievements, Certifications, and Skills into Neo4j AuraDB.
+        Guarantees user node existence with MERGE.
         """
         if not neo4j_client.driver or not neo4j_client.is_connected:
             return 0
 
         merged_count = 0
 
+        # Ensure user anchor node exists
+        user_init_query = """
+        MERGE (u:User {id: $user_id})
+        ON CREATE SET u.full_name = 'Candidate',
+                      u.created_at = datetime()
+        RETURN u.id;
+        """
+        await neo4j_client.execute_query(user_init_query, {"user_id": user_id})
+
         # 1. Ingest Hackathons
         for hack in knowledge.get("hackathons", []):
-            if hack.get("name"):
+            h_name = (hack.get("name") or "").strip()
+            if h_name:
                 hack_query = """
-                MATCH (u:User {id: $user_id})
+                MERGE (u:User {id: $user_id})
                 MERGE (h:Hackathon {name: $name})
                 ON CREATE SET h.organizer = $organizer,
                               h.location = $location,
+                              h.title = $name,
                               h.created_at = datetime()
+                ON MATCH SET h.organizer = CASE WHEN $organizer <> '' THEN $organizer ELSE h.organizer END
                 MERGE (u)-[r:PARTICIPATED_IN]->(h)
                 ON CREATE SET r.project_built = $project,
                               r.highlights = $highlights,
                               r.date = $date
+                MERGE (u)-[:ACHIEVED]->(h)
                 WITH h, $organizer AS org_name
                 WHERE org_name <> ''
                 MERGE (c:Company {name: org_name})
@@ -137,7 +151,7 @@ class LinkedInPostsService:
                 """
                 await neo4j_client.execute_query(hack_query, {
                     "user_id": user_id,
-                    "name": hack["name"].strip(),
+                    "name": h_name,
                     "organizer": hack.get("organizer", "").strip(),
                     "location": hack.get("location", "").strip(),
                     "project": hack.get("project_built", ""),
@@ -148,20 +162,22 @@ class LinkedInPostsService:
 
         # 2. Ingest Achievements
         for ach in knowledge.get("achievements", []):
-            if ach.get("title"):
+            a_title = (ach.get("title") or "").strip()
+            if a_title:
                 ach_query = """
-                MATCH (u:User {id: $user_id})
-                MERGE (a:Achievement {title: $title})
-                ON CREATE SET a.organization = $org,
+                MERGE (u:User {id: $user_id})
+                MERGE (a:Achievement {name: $title})
+                ON CREATE SET a.title = $title,
+                              a.organization = $org,
                               a.description = $desc,
                               a.date = $date,
                               a.created_at = datetime()
                 MERGE (u)-[:ACHIEVED]->(a)
-                RETURN a.title;
+                RETURN a.name;
                 """
                 await neo4j_client.execute_query(ach_query, {
                     "user_id": user_id,
-                    "title": ach["title"].strip(),
+                    "title": a_title,
                     "org": ach.get("organization", "").strip(),
                     "desc": ach.get("description", "").strip(),
                     "date": ach.get("date", "")
@@ -170,9 +186,10 @@ class LinkedInPostsService:
 
         # 3. Ingest Certifications & Workshops
         for cert in knowledge.get("certifications_or_workshops", []):
-            if cert.get("name"):
+            c_name = (cert.get("name") or "").strip()
+            if c_name:
                 cert_query = """
-                MATCH (u:User {id: $user_id})
+                MERGE (u:User {id: $user_id})
                 MERGE (c:Certification {name: $name})
                 ON CREATE SET c.issuer = $issuer,
                               c.date = $date,
@@ -182,7 +199,7 @@ class LinkedInPostsService:
                 """
                 await neo4j_client.execute_query(cert_query, {
                     "user_id": user_id,
-                    "name": cert["name"].strip(),
+                    "name": c_name,
                     "issuer": cert.get("issuer", "").strip(),
                     "date": cert.get("date", "")
                 })
@@ -192,7 +209,7 @@ class LinkedInPostsService:
         skills = knowledge.get("extracted_skills", [])
         if skills:
             skill_query = """
-            MATCH (u:User {id: $user_id})
+            MERGE (u:User {id: $user_id})
             UNWIND $skills AS skill_name
             MERGE (s:Skill {name: skill_name})
             ON CREATE SET s.category = 'Technical'

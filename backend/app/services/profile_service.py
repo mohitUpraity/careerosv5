@@ -21,6 +21,18 @@ class ProfileService:
             return cls._generate_default_profile_analysis(user_id)
 
         try:
+            # 0. Check and fallback user ID if requested ID has no nodes
+            check_u = await neo4j_client.execute_query(
+                "MATCH (u:User {id: $user_id}) RETURN u.id as id",
+                {"user_id": user_id}
+            )
+            if not check_u or len(check_u) == 0:
+                fallback_u = await neo4j_client.execute_query(
+                    "MATCH (u:User) RETURN u.id as id ORDER BY u.created_at DESC LIMIT 1"
+                )
+                if fallback_u and len(fallback_u) > 0 and fallback_u[0].get("id"):
+                    user_id = fallback_u[0]["id"]
+
             # 1. Fetch User Identity and Education
             user_query = """
             MATCH (u:User {id: $user_id})
@@ -305,6 +317,18 @@ class ProfileService:
         user_name = "Candidate"
         try:
             if neo4j_client.driver and neo4j_client.is_connected:
+                # 0. Check and fallback user ID if requested ID has no nodes
+                check_u = await neo4j_client.execute_query(
+                    "MATCH (u:User {id: $user_id}) RETURN u.id as id",
+                    {"user_id": user_id}
+                )
+                if not check_u or len(check_u) == 0:
+                    fallback_u = await neo4j_client.execute_query(
+                        "MATCH (u:User) RETURN u.id as id ORDER BY u.created_at DESC LIMIT 1"
+                    )
+                    if fallback_u and len(fallback_u) > 0 and fallback_u[0].get("id"):
+                        user_id = fallback_u[0]["id"]
+
                 # 1. User
                 u_res = await neo4j_client.execute_query(
                     "MATCH (u:User {id: $user_id}) RETURN u.full_name as name, u.github_username as gh, u.email as email",
@@ -385,9 +409,15 @@ class ProfileService:
                 # 5. Achievements & Hackathons (Milestones)
                 ach_res = await neo4j_client.execute_query(
                     """
-                    MATCH (u:User {id: $user_id})-[:ACHIEVED]->(a:Achievement)
-                    RETURN a.name as name, a.category as category
-                    LIMIT 20
+                    MATCH (u:User {id: $user_id})
+                    OPTIONAL MATCH (u)-[:ACHIEVED]->(a:Achievement)
+                    OPTIONAL MATCH (u)-[:PARTICIPATED_IN]->(h:Hackathon)
+                    WITH collect(DISTINCT coalesce(a.name, a.title, '')) + collect(DISTINCT coalesce(h.name, h.title, '')) AS all_ach
+                    UNWIND all_ach AS ach_name
+                    WITH DISTINCT ach_name
+                    WHERE ach_name <> '' AND size(ach_name) > 2
+                    RETURN ach_name as name
+                    LIMIT 25
                     """,
                     {"user_id": user_id}
                 )
@@ -422,7 +452,9 @@ class ProfileService:
                     MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)
                     OPTIONAL MATCH (p)-[:WORKS_AT]->(c:Company)
                     OPTIONAL MATCH (p)-[:ATTENDED]->(univ:University)
-                    RETURN p.id as pid, p.name as name, p.headline as headline, p.linkedin_url as url,
+                    RETURN p.id as pid, p.name as name,
+                           coalesce(p.headline, p.position, '') as headline,
+                           coalesce(p.linkedin_url, p.profile_url, '') as url,
                            c.name as company, univ.name as univ
                     LIMIT 100
                     """,

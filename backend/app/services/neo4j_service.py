@@ -44,7 +44,7 @@ class Neo4jService:
         # 2. Upsert Projects and link Skills
         for proj in projects:
             proj_query = """
-            MATCH (u:User {id: $user_id})
+            MERGE (u:User {id: $user_id})
             MERGE (p:Project {id: $project_id})
             ON CREATE SET p.name = $name,
                           p.description = $description,
@@ -410,16 +410,20 @@ class Neo4jService:
             return len(connections)
 
         query = """
-        MATCH (u:User {id: $user_id})
+        MERGE (u:User {id: $user_id})
         UNWIND $connections AS conn
         MERGE (p:Person {id: conn.id})
         ON CREATE SET p.name = conn.name,
                       p.first_name = conn.first_name,
                       p.last_name = conn.last_name,
                       p.position = conn.position,
+                      p.headline = conn.position,
                       p.connected_on = conn.connected_on,
-                      p.profile_url = conn.profile_url
-        ON MATCH SET p.position = conn.position
+                      p.profile_url = conn.profile_url,
+                      p.linkedin_url = conn.profile_url
+        ON MATCH SET p.position = conn.position,
+                     p.headline = conn.position,
+                     p.linkedin_url = conn.profile_url
         MERGE (u)-[:CONNECTED_TO {source: 'linkedin'}]->(p)
         
         // Link Person to Company
