@@ -300,5 +300,31 @@ export const apiService = {
     const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(`Failed to load opportunities (${res.status})`);
     return await res.json();
+  },
+
+  async parseJobUrl(jobUrl: string, headers: Record<string, string>): Promise<{
+    status: string;
+    url: string;
+    parsed_job: {
+      title: string;
+      company: string;
+      location: string;
+      skills_required: string[];
+      job_description: string;
+    };
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/opportunities/parse-url`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ url: jobUrl })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to parse job URL (${res.status})`);
+    }
+    return await res.json();
   }
 };
