@@ -20,13 +20,13 @@ async def get_live_opportunities(
     category: Optional[str] = Query("all", description="all, jobs, internships, hackathons, opensource"),
     search: Optional[str] = Query(None, description="Search term for title, company, or skills"),
     remote_only: bool = Query(False, description="Filter for 100% remote or virtual opportunities"),
+    location_filter: Optional[str] = Query(None, description="Filter: India, Remote Worldwide, All"),
     sort_by: str = Query("match_score", description="match_score, deadline, newest"),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Returns real-time verified opportunities (Jobs, Internships, Hackathons, Open Source Fellowships)
-    fetched live from public developer APIs (Arbeitnow, Jobicy, RemoteOK, Devpost, Unstop)
-    and scored semantically against the user's verified skills in Neo4j.
+    fetched live from developer feeds and scored semantically against user profile & location preferences.
     """
     user_id = current_user["id"]
     try:
@@ -35,6 +35,7 @@ async def get_live_opportunities(
             category=category,
             search_query=search,
             remote_only=remote_only,
+            location_filter=location_filter,
             sort_by=sort_by
         )
 

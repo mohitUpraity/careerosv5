@@ -27,9 +27,12 @@ import {
   ShieldCheck,
   RefreshCw,
   Link2,
-  X
+  X,
+  SlidersHorizontal,
+  Check,
+  Plus
 } from 'lucide-react';
-import { Opportunity } from '../../types';
+import { Opportunity, UserPreferences } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -41,6 +44,38 @@ interface OpportunitiesRadarProps {
 }
 
 type CategoryTab = 'all' | 'jobs' | 'internships' | 'hackathons' | 'opensource';
+
+const DEFAULT_PREFERENCES: UserPreferences = {
+  target_country: 'India',
+  preferred_cities: ['Bengaluru', 'Noida / Delhi NCR', 'Hyderabad', 'Pune', 'Mumbai', 'Remote India'],
+  work_modes: ['Remote', 'Hybrid', 'Onsite'],
+  preferred_roles: ['Backend Engineer', 'Full Stack Developer', 'Software Engineer', 'AI/ML Engineer'],
+  opportunity_types: ['jobs', 'internships', 'hackathons', 'opensource'],
+  experience_level: 'Fresher / 0-3 yrs',
+  min_salary: '₹6-18 LPA / $25k+ Remote'
+};
+
+const INDIAN_CITIES = [
+  'Bengaluru',
+  'Noida / Delhi NCR',
+  'Gurugram',
+  'Hyderabad',
+  'Pune',
+  'Mumbai',
+  'Chennai',
+  'Remote India'
+];
+
+const AVAILABLE_ROLES = [
+  'Backend Engineer',
+  'Full Stack Developer',
+  'Software Engineer',
+  'AI/ML Engineer',
+  'Graph Intelligence Engineer',
+  'Frontend Developer',
+  'Cybersecurity & Systems',
+  'DevOps / Cloud'
+];
 
 export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   onTailorResume,
@@ -61,8 +96,15 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   const [activeCategory, setActiveCategory] = useState<CategoryTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<string>('India');
   const [sortBy, setSortBy] = useState<'match_score' | 'deadline' | 'newest'>('match_score');
   
+  // User Preferences State
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false);
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
+  const [customRoleInput, setCustomRoleInput] = useState('');
+
   // Smart Job URL Ingestion Modal
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
   const [jobUrlInput, setJobUrlInput] = useState('');
@@ -71,7 +113,9 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   // Bookmarked Opportunities
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
+  // Load user preferences on mount
   useEffect(() => {
+    loadUserPreferences();
     try {
       const saved = localStorage.getItem('careeros_bookmarked_opps');
       if (saved) {
@@ -80,8 +124,25 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
     } catch (e) {
       console.warn(e);
     }
+  }, []);
+
+  useEffect(() => {
     fetchOpportunities();
-  }, [activeCategory, remoteOnly, sortBy]);
+  }, [activeCategory, remoteOnly, locationFilter, sortBy]);
+
+  const loadUserPreferences = async () => {
+    try {
+      const res = await apiService.getUserPreferences(getAuthHeaders());
+      if (res.preferences) {
+        setUserPreferences(res.preferences);
+        if (res.preferences.target_country) {
+          setLocationFilter(res.preferences.target_country);
+        }
+      }
+    } catch (e) {
+      console.warn('Using default preferences:', e);
+    }
+  };
 
   const fetchOpportunities = async () => {
     setLoading(true);
@@ -91,6 +152,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
           category: activeCategory,
           search: searchQuery.trim() || undefined,
           remote_only: remoteOnly,
+          location_filter: locationFilter,
           sort_by: sortBy,
         },
         getAuthHeaders()
@@ -109,6 +171,23 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchOpportunities();
+  };
+
+  const handleSavePreferences = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPreferences(true);
+    try {
+      const res = await apiService.updateUserPreferences(userPreferences, getAuthHeaders());
+      setUserPreferences(res.preferences);
+      setLocationFilter(res.preferences.target_country || 'India');
+      setIsPreferencesModalOpen(false);
+      onSuccess('Career & Location preferences saved! Radar re-scored.');
+      fetchOpportunities();
+    } catch (err: any) {
+      onError(err.message || 'Failed to save preferences');
+    } finally {
+      setIsSavingPreferences(false);
+    }
   };
 
   const handleParseJobUrl = async (e: React.FormEvent) => {
@@ -154,6 +233,50 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
       } catch (e) {}
       return next;
     });
+  };
+
+  const togglePreferenceCity = (city: string) => {
+    setUserPreferences(prev => {
+      const exists = prev.preferred_cities.includes(city);
+      const updated = exists 
+        ? prev.preferred_cities.filter(c => c !== city)
+        : [...prev.preferred_cities, city];
+      return { ...prev, preferred_cities: updated };
+    });
+  };
+
+  const togglePreferenceRole = (role: string) => {
+    setUserPreferences(prev => {
+      const exists = prev.preferred_roles.includes(role);
+      const updated = exists 
+        ? prev.preferred_roles.filter(r => r !== role)
+        : [...prev.preferred_roles, role];
+      return { ...prev, preferred_roles: updated };
+    });
+  };
+
+  const toggleWorkMode = (mode: string) => {
+    setUserPreferences(prev => {
+      const exists = prev.work_modes.includes(mode);
+      const updated = exists 
+        ? prev.work_modes.filter(m => m !== mode)
+        : [...prev.work_modes, mode];
+      return { ...prev, work_modes: updated };
+    });
+  };
+
+  const addCustomRole = (e: React.KeyboardEvent | React.MouseEvent) => {
+    if ('key' in e && e.key !== 'Enter') return;
+    e.preventDefault();
+    const r = customRoleInput.trim();
+    if (!r) return;
+    if (!userPreferences.preferred_roles.includes(r)) {
+      setUserPreferences(prev => ({
+        ...prev,
+        preferred_roles: [...prev.preferred_roles, r]
+      }));
+    }
+    setCustomRoleInput('');
   };
 
   const getCategoryIcon = (cat: string) => {
@@ -207,22 +330,31 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
             <Compass className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
                 Live Opportunities & Semantic Match Radar
               </h2>
               <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                Live APIs (Arbeitnow, Jobicy, Unstop)
+                Live APIs (India, Unstop, Jobicy, GSoC)
               </span>
             </div>
             <p className="text-xs pt-1" style={{ color: 'var(--text-secondary)' }}>
-              Real-time verified developer jobs, internships, Unstop hackathons & open source fellowships scored live against your verified skills
+              Real-time verified developer jobs, internships, Unstop hackathons & open source fellowships filtered strictly for your location & career preferences.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Preferences Settings Button */}
+          <button
+            onClick={() => setIsPreferencesModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-all shadow-sm"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
+            <span>Profile Preferences</span>
+          </button>
+
           {/* Smart URL Ingest Button */}
           <button
             onClick={() => setIsUrlModalOpen(true)}
@@ -239,10 +371,258 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
             style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh Live Feeds</span>
+            <span>Refresh</span>
           </button>
         </div>
       </div>
+
+      {/* User Location Preference Active Bar */}
+      <div 
+        className="p-3.5 px-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-sm"
+        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-blue-600" />
+            Active Geographic Radar:
+          </span>
+          <div className="flex items-center gap-1.5">
+            {[
+              { id: 'India', label: '🇮🇳 India & Remote' },
+              { id: 'Remote Worldwide', label: '🌐 100% Global Remote' },
+              { id: 'All', label: '🌍 All Locations' }
+            ].map(loc => (
+              <button
+                key={loc.id}
+                onClick={() => setLocationFilter(loc.id)}
+                className={`px-3 py-1 rounded-lg font-bold transition-all border ${
+                  locationFilter === loc.id
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {loc.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 dark:text-gray-400">
+            Target Roles: <strong className="text-blue-600 dark:text-blue-400">{userPreferences.preferred_roles.slice(0, 2).join(', ')}{userPreferences.preferred_roles.length > 2 ? ` +${userPreferences.preferred_roles.length - 2}` : ''}</strong>
+          </span>
+          <button
+            onClick={() => setIsPreferencesModalOpen(true)}
+            className="text-blue-600 hover:underline font-semibold"
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+
+      {/* Career & Location Preferences Modal */}
+      {isPreferencesModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div 
+            className="w-full max-w-2xl p-6 rounded-2xl border space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border-primary)' }}>
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-blue-600" />
+                <div>
+                  <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                    Candidate Career & Location Preferences
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    Set your target country, cities, roles & expectations to filter 100% relevant opportunities.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsPreferencesModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePreferences} className="space-y-4 text-xs">
+              {/* Target Country */}
+              <div>
+                <label className="block font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                  1. Target Country & Location Mode
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'India', label: '🇮🇳 India & Global Remote', desc: 'Bengaluru, NCR, Pune + Remote' },
+                    { id: 'Remote Worldwide', label: '🌐 100% Global Remote', desc: 'Anywhere in the World' },
+                    { id: 'All', label: '🌍 All Locations', desc: 'Global, US, Europe, India' },
+                  ].map(item => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() => setUserPreferences(prev => ({ ...prev, target_country: item.id }))}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        userPreferences.target_country === item.id
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold shadow-sm ring-1 ring-blue-500'
+                          : 'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{item.label}</div>
+                      <div className="text-[11px] text-gray-500 pt-0.5">{item.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Indian Tech Hubs */}
+              {userPreferences.target_country === 'India' && (
+                <div>
+                  <label className="block font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                    2. Target Cities & Tech Hubs (India)
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INDIAN_CITIES.map(city => {
+                      const isSelected = userPreferences.preferred_cities.includes(city);
+                      return (
+                        <button
+                          type="button"
+                          key={city}
+                          onClick={() => togglePreferenceCity(city)}
+                          className={`px-3 py-1.5 rounded-lg border font-medium transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3" />}
+                          <span>{city}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Target Roles */}
+              <div>
+                <label className="block font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                  3. Target Engineering Roles & Domains
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {AVAILABLE_ROLES.map(role => {
+                    const isSelected = userPreferences.preferred_roles.includes(role);
+                    return (
+                      <button
+                        type="button"
+                        key={role}
+                        onClick={() => togglePreferenceRole(role)}
+                        className={`px-3 py-1.5 rounded-lg border font-medium transition-all flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3 h-3" />}
+                        <span>{role}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Add Custom Role */}
+                <div className="flex items-center gap-2 max-w-sm pt-1">
+                  <input
+                    type="text"
+                    placeholder="Add custom role (e.g. Distributed Systems)..."
+                    value={customRoleInput}
+                    onChange={(e) => setCustomRoleInput(e.target.value)}
+                    onKeyDown={addCustomRole}
+                    className="input-base flex-1 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomRole}
+                    className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold hover:bg-gray-300 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Work Modes & Experience */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                    4. Work Modes
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {['Remote', 'Hybrid', 'Onsite'].map(mode => {
+                      const isSelected = userPreferences.work_modes.includes(mode);
+                      return (
+                        <button
+                          type="button"
+                          key={mode}
+                          onClick={() => toggleWorkMode(mode)}
+                          className={`px-3 py-1.5 rounded-lg border font-medium transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3" />}
+                          <span>{mode}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
+                    5. Minimum Target CTC / Stipend
+                  </label>
+                  <input
+                    type="text"
+                    value={userPreferences.min_salary || ''}
+                    onChange={(e) => setUserPreferences(prev => ({ ...prev, min_salary: e.target.value }))}
+                    placeholder="e.g. ₹8 - 20 LPA or $30k+ Remote"
+                    className="input-base w-full text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsPreferencesModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPreferences}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md flex items-center gap-2"
+                >
+                  {isSavingPreferences ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving Preferences...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Save & Tailor Opportunities</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Smart Job URL Parsing Modal */}
       {isUrlModalOpen && (
@@ -364,7 +744,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by role, company, or tech keywords (e.g. FastAPI, Neo4j, Python, React)..."
+              placeholder="Search by role, company, or tech keywords (e.g. FastAPI, Neo4j, Python, React, Golang)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="input-base w-full pl-9 text-xs"
@@ -412,31 +792,40 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
         <div className="p-16 text-center space-y-3 rounded-2xl border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
           <Compass className="w-8 h-8 animate-spin mx-auto text-blue-600" />
           <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Scanning Live APIs (Arbeitnow, Jobicy, Unstop) & Computing Semantic Fit...
+            Scanning Verified Tech Feeds & Computing Semantic Fit for {locationFilter}...
           </p>
           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            Matching live requirements against your verified skills, projects, and defense prototypes
+            Matching live requirements against your verified skills, projects, and career preferences
           </p>
         </div>
       ) : opportunities.length === 0 ? (
         <div className="p-16 text-center space-y-3 rounded-2xl border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
           <AlertCircle className="w-8 h-8 mx-auto text-amber-500" />
           <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-            No opportunities matched your search filter
+            No opportunities matched your search filter for {locationFilter}
           </h3>
           <p className="text-xs max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
-            Try clearing the search query or selecting "All Opportunities" to see all live developer jobs, hackathons, and fellowships.
+            Try clearing your search keyword, switching to "All Locations", or adjusting your target roles in preferences.
           </p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setActiveCategory('all');
-              setRemoteOnly(false);
-            }}
-            className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 text-white"
-          >
-            Clear Filters
-          </button>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setActiveCategory('all');
+                setRemoteOnly(false);
+                setLocationFilter('India');
+              }}
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 text-white"
+            >
+              Reset to India & Remote
+            </button>
+            <button
+              onClick={() => setIsPreferencesModalOpen(true)}
+              className="px-4 py-2 text-xs font-semibold rounded-xl border border-gray-300 dark:border-gray-700"
+            >
+              Edit Preferences
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -446,97 +835,94 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
             return (
               <div
                 key={opp.id}
-                className="p-5 rounded-2xl border card-hover flex flex-col justify-between gap-4 transition-all"
+                className="p-5 rounded-2xl border card-hover flex flex-col justify-between gap-4 transition-all relative overflow-hidden"
                 style={{
                   backgroundColor: 'var(--bg-primary)',
                   borderColor: 'var(--border-primary)',
                 }}
               >
-                {/* Card Top: Type, Org, Match Score, Bookmark */}
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+                {/* Urgent indicator bar */}
+                {opp.is_urgent && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-amber-500 to-red-500 animate-pulse" />
+                )}
+
+                {/* Card Top: Title, Org, Badges & Bookmark */}
+                <div className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5 flex-1">
+                      <div className="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shrink-0 mt-0.5">
                         {getCategoryIcon(opp.category)}
-                      </span>
-                      <span className="text-[11px] font-bold font-mono uppercase px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                        {opp.opportunity_type}
-                      </span>
-                      {opp.verified && (
-                        <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-0.5">
-                          <ShieldCheck className="w-3.5 h-3.5" /> Verified
-                        </span>
-                      )}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold tracking-tight leading-snug line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+                          {opp.title}
+                        </h3>
+                        <div className="flex items-center gap-2 pt-1 flex-wrap text-xs">
+                          <span className="font-semibold flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
+                            <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                            {opp.organization}
+                          </span>
+                          <span className="text-gray-300 dark:text-gray-700">•</span>
+                          <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                            <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                            {opp.location}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      {getMatchScoreBadge(opp.match_score)}
-                      <button
-                        onClick={() => toggleBookmark(opp.id, opp.title)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                        title={isBookmarked ? 'Remove Bookmark' : 'Save Opportunity'}
-                      >
-                        {isBookmarked ? (
-                          <BookmarkCheck className="w-4 h-4 text-amber-500 fill-amber-500" />
-                        ) : (
-                          <Bookmark className="w-4 h-4 text-gray-400 hover:text-amber-500" />
-                        )}
-                      </button>
-                    </div>
+                    {/* Bookmark Button */}
+                    <button
+                      onClick={() => toggleBookmark(opp.id, opp.title)}
+                      className={`p-1.5 rounded-lg border transition-all ${
+                        isBookmarked
+                          ? 'bg-amber-50 text-amber-600 border-amber-300 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800'
+                          : 'text-gray-400 hover:text-gray-600 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800'
+                      }`}
+                      title={isBookmarked ? 'Remove Bookmark' : 'Bookmark Opportunity'}
+                    >
+                      {isBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+                    </button>
                   </div>
 
-                  {/* Title & Organization */}
-                  <div>
-                    <h3 className="text-base font-bold leading-snug" style={{ color: 'var(--text-primary)' }}>
-                      {opp.title}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-semibold pt-1" style={{ color: 'var(--text-secondary)' }}>
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                        {opp.organization}
-                      </span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                        {opp.location}
-                      </span>
-                    </div>
-                  </div>
+                  {/* Badges: Match Score, Opportunity Type, Reward */}
+                  <div className="flex items-center gap-2 flex-wrap pt-1">
+                    {getMatchScoreBadge(opp.match_score)}
+                    
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                      {opp.opportunity_type}
+                    </span>
 
-                  {/* Reward / Salary / Stipend Tag */}
-                  {opp.reward && (
-                    <div className="p-2.5 rounded-xl border bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40 flex items-center gap-2 text-xs">
-                      <Gift className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span className="font-bold text-emerald-900 dark:text-emerald-200">
+                    {opp.reward && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                        <Gift className="w-3 h-3 text-amber-600" />
                         {opp.reward}
                       </span>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  {/* Description */}
-                  <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-secondary)' }}>
+                  {/* Description Snippet */}
+                  <p className="text-xs leading-relaxed line-clamp-3" style={{ color: 'var(--text-secondary)' }}>
                     {opp.description}
                   </p>
 
-                  {/* Semantic Skills Tag Pill Matrix */}
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-gray-400">
-                      Semantic Skills Alignment
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {opp.matched_skills.map((skill, sIdx) => (
-                        <span
-                          key={sIdx}
-                          className="px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-0.5 border border-emerald-300 dark:border-emerald-800"
+                  {/* Skills Alignment Tags */}
+                  <div className="space-y-1 pt-1">
+                    <div className="text-[11px] font-semibold text-gray-500">Skills Alignment:</div>
+                    <div className="flex flex-wrap gap-1">
+                      {opp.matched_skills.map((skill, idx) => (
+                        <span 
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1"
                         >
-                          <CheckCircle2 className="w-2.5 h-2.5" />
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
                           {skill}
                         </span>
                       ))}
-                      {opp.missing_skills.map((skill, sIdx) => (
-                        <span
-                          key={sIdx}
-                          className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                      {opp.missing_skills.map((skill, idx) => (
+                        <span 
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                         >
                           {skill}
                         </span>
@@ -545,54 +931,53 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   </div>
                 </div>
 
-                {/* Card Bottom: Deadlines & Action Bridges */}
-                <div className="space-y-3 pt-3 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+                {/* Card Bottom: Deadline Countdown & Action Buttons */}
+                <div className="pt-3 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-3" style={{ borderColor: 'var(--border-primary)' }}>
                   {/* Deadline Indicator */}
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5 font-semibold">
-                      <Clock className={`w-3.5 h-3.5 ${opp.is_urgent ? 'text-red-500 animate-pulse' : 'text-blue-600'}`} />
-                      <span style={{ color: opp.is_urgent ? '#EF4444' : 'var(--text-secondary)' }}>
-                        {opp.is_urgent ? `⏳ Urgent: ${opp.days_left} Days Left` : `📅 Apply by ${opp.deadline_formatted}`}
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-mono text-gray-400">
-                      Via {opp.source_platform}
+                  <div className="flex items-center gap-1.5 text-xs font-semibold">
+                    <Clock className={`w-3.5 h-3.5 ${opp.is_urgent ? 'text-red-500 animate-pulse' : 'text-gray-400'}`} />
+                    <span className={opp.is_urgent ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-600 dark:text-gray-400'}>
+                      {opp.days_left === 0 ? 'Closes Today!' : `${opp.days_left} days left (${opp.deadline_formatted})`}
                     </span>
                   </div>
 
-                  {/* Action Buttons */}
+                  {/* Actions: Tailor Resume, Find Referral, Apply */}
                   <div className="flex items-center gap-2">
-                    <a
-                      href={opp.apply_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex-1 py-2 px-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm flex items-center justify-center gap-1.5 transition-all text-center"
-                    >
-                      <span>Direct Apply</span>
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                    </a>
-
+                    {/* Tailor Resume Button */}
                     <button
                       onClick={() => onTailorResume(
-                        opp.title,
-                        opp.organization,
-                        `${opp.title} at ${opp.organization}\n\nRequirements:\n${opp.skills_required.join(', ')}\n\nDetails:\n${opp.description}`
+                        opp.title, 
+                        opp.organization, 
+                        `${opp.title} at ${opp.organization}\n\nRequired Skills:\n${opp.skills_required.join(', ')}\n\nDescription:\n${opp.description}`
                       )}
-                      className="py-2 px-3 rounded-xl text-xs font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 flex items-center gap-1 transition-all"
-                      title="Auto-load this role and JD into Resume Studio"
+                      className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-all shadow-sm"
+                      title="Generate optimized resume tailored for this role in Resume Studio"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
                       <span>Tailor Resume</span>
                     </button>
 
+                    {/* Find Referral Button */}
                     <button
                       onClick={() => onFindReferral(opp.organization)}
-                      className="py-2 px-2.5 rounded-xl text-xs font-semibold border transition-all hover:bg-gray-100 dark:hover:bg-gray-800"
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-medium border hover:bg-gray-100 dark:hover:bg-gray-800 transition-all flex items-center gap-1"
                       style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
-                      title="Find Alumni & Connections for Referral"
+                      title={`Find alumni referral contacts at ${opp.organization}`}
                     >
-                      <Send className="w-3.5 h-3.5 text-blue-600" />
+                      <Send className="w-3 h-3 text-emerald-600" />
+                      <span>Referral</span>
                     </button>
+
+                    {/* Direct Apply / Official Portal Link */}
+                    <a
+                      href={opp.apply_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-1 shadow-sm transition-all"
+                    >
+                      <span>Apply</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </a>
                   </div>
                 </div>
               </div>

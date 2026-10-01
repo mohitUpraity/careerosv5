@@ -201,6 +201,17 @@ export interface UserProfile {
   isBenchmarkPeer?: boolean;
 }
 
+export interface UserPreferences {
+  target_country: string;
+  preferred_cities: string[];
+  work_modes: string[];
+  preferred_roles: string[];
+  opportunity_types: string[];
+  experience_level?: string;
+  min_salary?: string;
+}
+
+
 export interface BenchmarkPeer {
   id: string;
   name: string;

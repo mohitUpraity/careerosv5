@@ -65,19 +65,45 @@ async def get_connections(
         logger.error(f"Failed to fetch connections for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/reset", response_model=Dict[str, Any])
-async def reset_current_user_profile(
+@router.get("/preferences", response_model=Dict[str, Any])
+async def get_user_preferences(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
-    Safely purges ONLY the authenticated user's personal graph & repos.
+    Retrieves user's career & opportunity matching preferences (Target Country, Cities, Roles, Work Modes, Stipend/Salary).
     """
+    from app.services.neo4j_service import neo4j_service
     user_id = current_user["id"]
     try:
-        res = await profile_service.reset_user_profile_data(user_id=user_id)
-        return res
+        prefs = await neo4j_service.get_user_preferences(user_id=user_id)
+        return {
+            "status": "success",
+            "preferences": prefs
+        }
     except Exception as e:
-        logger.error(f"Failed to reset profile for user {user_id}: {e}")
+        logger.error(f"Failed to fetch preferences for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/preferences", response_model=Dict[str, Any])
+async def update_user_preferences(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Updates user's career & opportunity matching preferences in Neo4j.
+    """
+    from app.services.neo4j_service import neo4j_service
+    user_id = current_user["id"]
+    try:
+        updated = await neo4j_service.upsert_user_preferences(user_id=user_id, preferences=payload)
+        return {
+            "status": "success",
+            "message": "Career preferences successfully updated",
+            "preferences": updated
+        }
+    except Exception as e:
+        logger.error(f"Failed to update preferences for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 

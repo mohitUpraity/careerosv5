@@ -275,8 +275,40 @@ export const apiService = {
     return await res.json();
   },
 
+  async getUserPreferences(headers: Record<string, string>): Promise<{
+    status: string;
+    preferences: import('../types').UserPreferences;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/preferences`, { headers });
+    if (!res.ok) throw new Error(`Failed to load user preferences (${res.status})`);
+    return await res.json();
+  },
+
+  async updateUserPreferences(
+    preferences: import('../types').UserPreferences,
+    headers: Record<string, string>
+  ): Promise<{
+    status: string;
+    message: string;
+    preferences: import('../types').UserPreferences;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/preferences`, {
+      method: 'PUT',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(preferences),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to update preferences (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async getOpportunities(
-    params: { category?: string; search?: string; remote_only?: boolean; sort_by?: string } = {},
+    params: { category?: string; search?: string; remote_only?: boolean; location_filter?: string; sort_by?: string } = {},
     headers: Record<string, string> = {}
   ): Promise<{
     status: string;
@@ -294,6 +326,7 @@ export const apiService = {
     if (params.category && params.category !== 'all') query.append('category', params.category);
     if (params.search) query.append('search', params.search);
     if (params.remote_only) query.append('remote_only', 'true');
+    if (params.location_filter) query.append('location_filter', params.location_filter);
     if (params.sort_by) query.append('sort_by', params.sort_by);
 
     const url = `${API_BASE}/api/v1/opportunities?${query.toString()}`;
@@ -301,6 +334,7 @@ export const apiService = {
     if (!res.ok) throw new Error(`Failed to load opportunities (${res.status})`);
     return await res.json();
   },
+
 
   async parseJobUrl(jobUrl: string, headers: Record<string, string>): Promise<{
     status: string;

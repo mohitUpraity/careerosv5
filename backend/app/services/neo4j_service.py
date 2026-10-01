@@ -472,6 +472,71 @@ class Neo4jService:
             return None
 
     @classmethod
+    async def get_user_preferences(cls, user_id: str) -> Dict[str, Any]:
+        """
+        Retrieves the user's career and opportunity preferences from Neo4j.
+        Defaults to India & Global Remote target profile.
+        """
+        default_prefs = {
+            "target_country": "India",
+            "preferred_cities": ["Bengaluru", "Noida", "Delhi NCR", "Hyderabad", "Pune", "Mumbai", "Remote"],
+            "work_modes": ["Remote", "Hybrid", "Onsite"],
+            "preferred_roles": ["Backend Engineer", "Full Stack Developer", "Software Engineer", "AI/ML Engineer"],
+            "opportunity_types": ["jobs", "internships", "hackathons", "opensource"],
+            "experience_level": "Fresher / 0-3 yrs",
+            "min_salary": "₹6-15 LPA / $25k+ Remote"
+        }
+
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return default_prefs
+
+        query = """
+        MATCH (u:User {id: $user_id})
+        RETURN u.preferences_json AS preferences_json;
+        """
+        try:
+            res = await neo4j_client.execute_query(query, {"user_id": user_id})
+            if res and len(res) > 0:
+                raw_json = res[0].get("preferences_json")
+                if raw_json:
+                    try:
+                        saved = json.loads(raw_json)
+                        return {**default_prefs, **saved}
+                    except Exception:
+                        pass
+            return default_prefs
+        except Exception as e:
+            logger.warning(f"Failed to fetch user preferences for {user_id}: {e}")
+            return default_prefs
+
+    @classmethod
+    async def upsert_user_preferences(cls, user_id: str, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Persists updated user career & location preferences to the User node in Neo4j.
+        """
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return preferences
+
+        query = """
+        MERGE (u:User {id: $user_id})
+        ON CREATE SET u.created_at = datetime()
+        SET u.preferences_json = $preferences_json,
+            u.updated_at = datetime()
+        RETURN u.preferences_json AS preferences_json;
+        """
+        try:
+            pref_str = json.dumps(preferences)
+            await neo4j_client.execute_query(query, {
+                "user_id": user_id,
+                "preferences_json": pref_str
+            })
+            return preferences
+        except Exception as e:
+            logger.error(f"Failed to upsert user preferences for {user_id}: {e}")
+            return preferences
+
+
+    @classmethod
     async def upsert_user_linkedin_connections(
         cls,
         user_id: str,
