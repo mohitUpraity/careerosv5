@@ -4,12 +4,11 @@ import csv
 import json
 import logging
 from typing import Dict, Any, List, Optional
-try:
-    import google.generativeai as genai
-    if settings.GEMINI_API_KEY:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-except Exception:
-    genai = None
+from app.core.config import settings
+from app.core.database import neo4j_client
+from app.services.llm_service import llm_service
+
+logger = logging.getLogger(__name__)
 
 POSTS_EXTRACTION_PROMPT = """
 You are an expert Career Knowledge Extraction AI.
@@ -38,16 +37,15 @@ Output ONLY valid JSON matching this exact structure:
     {
       "name": "string",
       "description": "string",
-      "tech_stack": ["string"],
-      "repo_or_demo_url": "string"
+      "skills_used": ["string"]
     }
   ],
   "achievements": [
     {
       "title": "string",
       "organization": "string",
-      "date": "string",
-      "description": "string"
+      "description": "string",
+      "date": "string"
     }
   ],
   "certifications_or_workshops": [
@@ -61,12 +59,12 @@ Output ONLY valid JSON matching this exact structure:
 }
 
 LinkedIn Posts Content:
-\"\"\"{posts_content}\"\"\"
+{posts_content}
 """
 
 class LinkedInPostsService:
     @classmethod
-    def parse_csv_posts(cls, csv_text: str) -> List[str]:
+    def parse_posts_from_csv(cls, csv_text: str) -> List[str]:
         """
         Parses LinkedIn official 'Shares.csv' or 'Posts.csv' data export.
         """
@@ -74,7 +72,6 @@ class LinkedInPostsService:
         try:
             reader = csv.DictReader(csv_text.splitlines())
             for row in reader:
-                # Common LinkedIn export headers: 'ShareCommentary', 'Post Content', 'Content'
                 commentary = row.get("ShareCommentary") or row.get("Post Content") or row.get("Content") or row.get("text")
                 if commentary and len(commentary.strip()) > 15:
                     posts.append(commentary.strip())
@@ -86,36 +83,28 @@ class LinkedInPostsService:
     @classmethod
     async def extract_knowledge_from_posts(cls, posts_text: str) -> Dict[str, Any]:
         """
-        Uses Gemini 1.5 Flash to extract high-value career intelligence from unstructured posts.
+        Extracts high-value career intelligence from unstructured posts using Groq/Gemini LLM.
         """
-        if not settings.GEMINI_API_KEY:
-            logger.warning("GEMINI_API_KEY not configured. Returning fallback extraction.")
-            return {
-                "hackathons": [],
-                "projects": [],
-                "achievements": [],
-                "certifications_or_workshops": [],
-                "extracted_skills": []
-            }
+        fallback_data = {
+            "hackathons": [],
+            "projects": [],
+            "achievements": [],
+            "certifications_or_workshops": [],
+            "extracted_skills": []
+        }
+        
+        if not posts_text or not posts_text.strip():
+            return fallback_data
 
         try:
-            import asyncio
-            model = genai.GenerativeModel("gemini-1.5-flash")
             prompt = POSTS_EXTRACTION_PROMPT.replace("{posts_content}", posts_text[:20000])
-            
-            response = await asyncio.to_thread(model.generate_content, prompt)
-            clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-            data = json.loads(clean_text)
-            return data
+            data = await llm_service.generate_json(prompt)
+            if isinstance(data, dict):
+                return data
+            return fallback_data
         except Exception as e:
-            logger.error(f"Gemini posts knowledge extraction failed: {e}")
-            return {
-                "hackathons": [],
-                "projects": [],
-                "achievements": [],
-                "certifications_or_workshops": [],
-                "extracted_skills": []
-            }
+            logger.error(f"Posts knowledge extraction failed: {e}")
+            return fallback_data
 
     @classmethod
     async def merge_posts_knowledge_to_graph(cls, user_id: str, knowledge: Dict[str, Any]) -> int:
