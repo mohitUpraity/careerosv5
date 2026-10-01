@@ -193,7 +193,6 @@ class Neo4jService:
                OR toLower(univ.name) CONTAINS 'hack with'
                OR toLower(univ.name) CONTAINS 'potential'
                OR toLower(univ.name) CONTAINS 'software'
-               OR size(univ.name) < 4
             DETACH DELETE univ;
             """
             await neo4j_client.execute_query(cleanup_rogue_univs, {})

@@ -144,8 +144,10 @@ class ProfileService:
             # 8. Network & Alumni Reach Analysis
             network_reach_query = """
             MATCH (u:User {id: $user_id})
-            OPTIONAL MATCH (u)-[:CONNECTED_TO]->(p:Person)-[:WORKS_AT]->(c:Company)
-            OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)<-[:ATTENDED]-(alumni:Person)-[:WORKS_AT]->(alumni_comp:Company)
+            OPTIONAL MATCH (u)-[:CONNECTED_TO]->(p:Person)
+            OPTIONAL MATCH (p)-[:WORKS_AT]->(c:Company)
+            OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)<-[:ATTENDED]-(alumni:Person)
+            OPTIONAL MATCH (alumni)-[:WORKS_AT]->(alumni_comp:Company)
             RETURN count(DISTINCT p) AS total_connections,
                    collect(DISTINCT c.name) AS connection_companies,
                    count(DISTINCT alumni) AS total_alumni,
@@ -393,14 +395,16 @@ class ProfileService:
                       AND NOT toLower(univ.name) CONTAINS 'processed'
                       AND NOT toLower(univ.name) CONTAINS 'next.js'
                       AND NOT toLower(univ.name) CONTAINS 'hack with'
-                      AND size(univ.name) > 3
                     RETURN univ.name as name, r.degree as degree, r.field_of_study as field
                     """,
                     {"user_id": user_id}
                 )
                 for edu in edu_res:
-                    uid = f"univ_{edu['name']}"
-                    add_node(uid, edu["name"], "university", "University / College", {
+                    uname = (edu.get("name") or "").strip()
+                    if len(uname) < 4:
+                        continue
+                    uid = f"univ_{uname}"
+                    add_node(uid, uname, "university", "University / College", {
                         "degree": edu.get("degree", "Degree"),
                         "field": edu.get("field", "")
                     })
@@ -415,15 +419,18 @@ class ProfileService:
                     WITH collect(DISTINCT coalesce(a.name, a.title, '')) + collect(DISTINCT coalesce(h.name, h.title, '')) AS all_ach
                     UNWIND all_ach AS ach_name
                     WITH DISTINCT ach_name
-                    WHERE ach_name <> '' AND size(ach_name) > 2
+                    WHERE ach_name <> ''
                     RETURN ach_name as name
                     LIMIT 25
                     """,
                     {"user_id": user_id}
                 )
                 for ach in ach_res:
-                    aid = f"ach_{ach['name'][:30]}"
-                    add_node(aid, ach["name"], "achievement", "Milestone & Hackathon", {"val": 16})
+                    aname = (ach.get("name") or "").strip()
+                    if len(aname) < 3:
+                        continue
+                    aid = f"ach_{aname[:30]}"
+                    add_node(aid, aname, "achievement", "Milestone & Hackathon", {"val": 16})
                     add_link(f"user_{user_id}", aid, "ACHIEVED")
 
                 # 6. Direct Skills (from Resume and verified sources)
