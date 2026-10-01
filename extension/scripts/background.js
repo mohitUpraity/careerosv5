@@ -27,50 +27,49 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
-    const apiBase = await getApiBase();
-    if (request.action === "HEALTH_CHECK") {
-      fetch(`${apiBase}/health/`)
-        .then(res => res.json())
-        .then(data => sendResponse({ success: true, data, apiBase }))
-        .catch(err => sendResponse({ success: false, error: err.message, apiBase }));
+    try {
+      const apiBase = await getApiBase();
+      
+      if (request.action === "HEALTH_CHECK") {
+        try {
+          const res = await fetch(`${apiBase}/health`);
+          const data = await res.json();
+          sendResponse({ success: true, data, apiBase });
+        } catch (err) {
+          sendResponse({ success: false, error: err.message, apiBase });
+        }
+      } else if (request.action === "INGEST_POSTS_TEXT") {
+        const formData = new FormData();
+        formData.append("posts_text", request.postsText);
+
+        const res = await fetch(`${apiBase}/ingest/linkedin/posts`, {
+          method: "POST",
+          headers: {
+            "x-user-id": request.userId || "candidate-workspace"
+          },
+          body: formData
+        });
+        const data = await res.json();
+        sendResponse({ success: true, data });
+      } else if (request.action === "ANALYZE_JOB") {
+        const res = await fetch(`${apiBase}/matches/analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": request.userId || "candidate-workspace"
+          },
+          body: JSON.stringify({
+            job_description: request.jobDescription,
+            company_override: request.company,
+            role_override: request.title
+          })
+        });
+        const data = await res.json();
+        sendResponse({ success: true, data });
+      }
+    } catch (err) {
+      sendResponse({ success: false, error: err.message });
     }
   })();
   return true;
-});
-
-  if (request.action === "INGEST_POSTS_TEXT") {
-    const formData = new FormData();
-    formData.append("posts_text", request.postsText);
-
-    fetch(`${API_BASE_URL}/ingest/linkedin/posts`, {
-      method: "POST",
-      headers: {
-        "x-user-id": request.userId || "dev-user-0000-0000-0000-000000000001"
-      },
-      body: formData
-    })
-      .then(res => res.json())
-      .then(data => sendResponse({ success: true, data }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
-
-  if (request.action === "ANALYZE_JOB") {
-    fetch(`${API_BASE_URL}/matches/analyze`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-user-id": request.userId || "dev-user-0000-0000-0000-000000000001"
-      },
-      body: JSON.stringify({
-        job_description: request.jobDescription,
-        company_override: request.company,
-        role_override: request.title
-      })
-    })
-      .then(res => res.json())
-      .then(data => sendResponse({ success: true, data }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
 });

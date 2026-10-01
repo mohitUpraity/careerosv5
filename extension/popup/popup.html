@@ -34,22 +34,28 @@
       </div>
     </header>
 
-    <!-- Profile Selector Card -->
+    <!-- Backend Server & Workspace Config Card -->
     <section class="card profile-card">
       <div class="field-label-row">
-        <label for="userSelect" class="field-label">Active Workspace</label>
+        <label for="backendSelect" class="field-label">Cloud Backend</label>
         <span class="sync-timestamp" id="lastSyncLabel">Never synced</span>
       </div>
       <div class="select-wrapper">
-        <select id="userSelect" class="custom-select">
-          <option value="dev-user-0000-0000-0000-000000000001">Mohit Upraity (mohitUpraity)</option>
-          <option value="user-krati-0000-0000-0000-000000000002">Krati Verma (Krati-orbit)</option>
+        <select id="backendSelect" class="custom-select">
+          <option value="https://careerosv5.onrender.com/api/v1">CareerOS Cloud (Render Production)</option>
+          <option value="http://localhost:8000/api/v1">Local Developer Server (localhost:8000)</option>
         </select>
         <div class="select-chevron">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </div>
+      </div>
+      <div style="margin-top: 8px;">
+        <div class="field-label-row">
+          <label for="userIdInput" class="field-label" style="font-size: 11px;">Candidate Workspace ID</label>
+        </div>
+        <input type="text" id="userIdInput" class="custom-input" placeholder="Enter username or email" value="candidate-workspace" style="width: 100%; box-sizing: border-box; padding: 6px 10px; border-radius: 6px; font-size: 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); color: #fff; margin-top: 3px;" />
       </div>
     </section>
 
@@ -229,14 +235,14 @@
 
     <!-- Footer Links -->
     <footer class="footer">
-      <a href="http://localhost:8000/docs" target="_blank" class="footer-link">
+      <a href="https://careerosv5.onrender.com/docs" id="apiDocsLink" target="_blank" class="footer-link">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
         API Docs
       </a>
       <span class="footer-sep">·</span>
-      <a href="http://localhost:8000/api/v1/profile/analysis" target="_blank" class="footer-link">
+      <a href="https://careerosv5.vercel.app" id="dashboardLink" target="_blank" class="footer-link">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-        Graph Analysis
+        Dashboard Web App
       </a>
     </footer>
   </div>

@@ -6,13 +6,15 @@
 document.addEventListener("DOMContentLoaded", async () => {
   const backendStatus = document.getElementById("backendStatus");
   const statusText = document.getElementById("statusText");
-  const userSelect = document.getElementById("userSelect");
+  const backendSelect = document.getElementById("backendSelect");
+  const userIdInput = document.getElementById("userIdInput");
   const lastSyncLabel = document.getElementById("lastSyncLabel");
   const contextBody = document.getElementById("contextBody");
   const contextHeaderTitle = document.getElementById("contextHeaderTitle");
   const resultBanner = document.getElementById("resultBanner");
   const toastMsg = document.getElementById("toastMsg");
   const toastIcon = document.getElementById("toastIcon");
+  const apiDocsLink = document.getElementById("apiDocsLink");
 
   // Action Buttons
   const masterSyncBtn = document.getElementById("masterSyncBtn");
@@ -53,24 +55,61 @@ document.addEventListener("DOMContentLoaded", async () => {
   const PROD_API_URL = "https://careerosv5.onrender.com/api/v1";
   const LOCAL_API_URL = "http://localhost:8000/api/v1";
 
-  async function resolveApiBase() {
-    try {
-      const stored = await chrome.storage.local.get(["apiUrl"]);
-      if (stored.apiUrl) return stored.apiUrl;
-      
-      // Auto-probe localhost with short timeout
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 800);
-      const res = await fetch(`${LOCAL_API_URL}/health`, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) return LOCAL_API_URL;
-    } catch (e) {
-      // Offline on local, fallback to production
-    }
-    return PROD_API_URL;
+  function getActiveBackendUrl() {
+    return backendSelect ? backendSelect.value : PROD_API_URL;
   }
 
-  let API_BASE = await resolveApiBase();
+  function getActiveUserId() {
+    return (userIdInput && userIdInput.value.trim()) ? userIdInput.value.trim() : "candidate-workspace";
+  }
+
+  function updateFooterLinks(apiUrl) {
+    if (apiDocsLink) {
+      if (apiUrl.includes("localhost")) {
+        apiDocsLink.href = "http://localhost:8000/docs";
+      } else {
+        apiDocsLink.href = "https://careerosv5.onrender.com/docs";
+      }
+    }
+  }
+
+  // Safe API Fetch with timeout & waking-up notice for cloud containers
+  async function safeApiFetch(endpoint, options = {}, timeoutMs = 45000) {
+    const apiBase = getActiveBackendUrl();
+    const url = `${apiBase}${endpoint.startsWith("/") ? "" : "/"}${endpoint}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const mergedOptions = {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        "x-user-id": getActiveUserId()
+      },
+      signal: controller.signal
+    };
+
+    try {
+      const response = await fetch(url, mergedOptions);
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        let errDetail = response.statusText;
+        try {
+          const errJson = await response.json();
+          if (errJson.detail) errDetail = errJson.detail;
+        } catch (_) {}
+        throw new Error(`HTTP ${response.status}: ${errDetail}`);
+      }
+      return response;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError") {
+        throw new Error(`Connection timed out (${Math.round(timeoutMs/1000)}s). Cloud server may still be starting.`);
+      }
+      throw err;
+    }
+  }
 
   // Helper: Reliable Multi-Page Navigation with DOM Mount Wait
   async function navigateAndWait(tabId, url, timeoutMs = 9000) {
@@ -99,6 +138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 1. Load active profile & last sync checkpoints
   const stored = await chrome.storage.local.get([
+    "apiUrl",
     "activeUserId",
     "lastSyncedTime",
     "syncedConnCount",
@@ -106,8 +146,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     "latestKnownConnName",
     "latestKnownPostSnippet"
   ]);
-  if (stored.activeUserId) {
-    userSelect.value = stored.activeUserId;
+
+  if (stored.apiUrl && backendSelect) {
+    backendSelect.value = stored.apiUrl;
+  }
+  if (stored.activeUserId && userIdInput) {
+    userIdInput.value = stored.activeUserId;
   }
   if (stored.lastSyncedTime) {
     lastSyncLabel.textContent = stored.lastSyncedTime;
@@ -115,44 +159,47 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (stored.syncedConnCount && stored.syncedConnCount > 0) {
     reportConnections.textContent = `${stored.syncedConnCount} Contacts`;
   }
+  updateFooterLinks(getActiveBackendUrl());
 
-  userSelect.addEventListener("change", () => {
-    chrome.storage.local.set({ activeUserId: userSelect.value });
-    const selectedName = userSelect.options[userSelect.selectedIndex].text.split(" (")[0];
-    showToast(`Active profile: ${selectedName}`, "loading");
-    setTimeout(() => hideToast(), 1800);
+  backendSelect?.addEventListener("change", () => {
+    const selectedApi = backendSelect.value;
+    chrome.storage.local.set({ apiUrl: selectedApi });
+    updateFooterLinks(selectedApi);
+    checkBackendHealth();
+    showToast(`Backend switched to: ${backendSelect.options[backendSelect.selectedIndex].text}`, "loading");
+    setTimeout(() => hideToast(), 1500);
   });
 
-  // 2. Health check (Tries active API_BASE, falls back if needed)
-  try {
-    let res = await fetch(`${API_BASE}/health/`);
-    if (!res.ok && API_BASE === LOCAL_API_URL) {
-      API_BASE = PROD_API_URL;
-      res = await fetch(`${API_BASE}/health/`);
-    }
-    const data = await res.json();
-    if (data.status === "healthy" || res.ok) {
-      backendStatus.classList.remove("error");
-      statusText.textContent = API_BASE.includes("localhost") ? "Online (Local)" : "Online (Cloud)";
-    }
-  } catch (e) {
-    if (API_BASE === LOCAL_API_URL) {
-      try {
-        API_BASE = PROD_API_URL;
-        const res2 = await fetch(`${API_BASE}/health/`);
-        if (res2.ok) {
-          backendStatus.classList.remove("error");
-          statusText.textContent = "Online (Cloud)";
-        }
-      } catch (e2) {
+  userIdInput?.addEventListener("change", () => {
+    const userId = getActiveUserId();
+    chrome.storage.local.set({ activeUserId: userId });
+    showToast(`Workspace set: ${userId}`, "success");
+    setTimeout(() => hideToast(), 1500);
+  });
+
+  // 2. Health check
+  async function checkBackendHealth() {
+    const apiBase = getActiveBackendUrl();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${apiBase}/health`, { signal: controller.signal });
+      clearTimeout(timer);
+      const data = await res.json();
+      if (data.status === "healthy" || res.ok) {
+        backendStatus.classList.remove("error");
+        statusText.textContent = apiBase.includes("localhost") ? "Online (Local)" : "Online (Cloud)";
+      } else {
         backendStatus.classList.add("error");
-        statusText.textContent = "Offline";
+        statusText.textContent = "Degraded";
       }
-    } else {
+    } catch (e) {
       backendStatus.classList.add("error");
-      statusText.textContent = "Offline";
+      statusText.textContent = "Offline / Sleeping";
     }
   }
+
+  await checkBackendHealth();
 
   // 3. Get Active Tab & Direct Inspect
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -206,8 +253,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             const headlineEl = document.querySelector(".text-body-medium, .feed-identity-module__headline, .identity-headline");
             return {
               type: "PROFILE",
-              name: nameEl ? (nameEl.innerText || "").trim() : "Mohit Upraity",
-              headline: headlineEl ? (headlineEl.innerText || "").trim() : "4x National hackathon winner | Intern@ADRDE(DRDO)"
+              name: nameEl ? (nameEl.innerText || "").trim() : "LinkedIn Profile",
+              headline: headlineEl ? (headlineEl.innerText || "").trim() : "Active Member"
             };
           }
         }
@@ -226,11 +273,11 @@ document.addEventListener("DOMContentLoaded", async () => {
               <span class="context-title"><strong>${pageInfo.count} Real Contacts Detected</strong></span>
             </div>
           </div>
-          <div class="context-sub">Found: <strong>${escapeHtml(sampleNames || 'Inisha Gupta, Bhumika Solanki...')}</strong>... Ready to sync with Zero Duplicates.</div>
+          <div class="context-sub">Found: <strong>${escapeHtml(sampleNames || 'Contacts in viewport')}</strong>... Ready to sync with Zero Duplicates.</div>
           <div class="context-nav-row">
             <button class="nav-chip" id="navProfileBtn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg> Go to Profile</button>
             <button class="nav-chip" id="navPostsBtn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg> Go to Posts</button>
-            <button class="nav-chip active" id="navConnectionsBtn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Go to Connections</button>
+            <button class="nav-chip active" id="navConnectionsBtn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/></svg> Go to Connections</button>
           </div>
         `;
       } else if (pageInfo.type === "POSTS") {
@@ -242,7 +289,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               <span class="context-title"><strong>${pageInfo.count} Recent Posts Detected</strong></span>
             </div>
           </div>
-          <div class="context-sub">Includes DRDO, hackathons, and published milestones.</div>
+          <div class="context-sub">Includes projects, hackathons, and published milestones.</div>
         `;
       }
     } catch (err) {
@@ -256,7 +303,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       return showToast("Please open a LinkedIn tab in Chrome first.", "error");
     }
 
-    showToast("Extracting Profile & SGI College Cluster...", "loading");
+    showToast("Extracting Profile & Experience...", "loading");
 
     try {
       const results = await chrome.scripting.executeScript({
@@ -268,12 +315,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (profileText) {
         const form = new FormData();
         form.append("posts_text", profileText);
-        await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+        await safeApiFetch("/ingest/linkedin/posts", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
-        showToast("Profile & SGI College Cluster Synced! (Zero Duplicates)", "success");
+        showToast("Profile & Career Cluster Synced into Knowledge Graph!", "success");
       }
     } catch (e) {
       showToast(`Profile sync: ${e.message}`, "error");
@@ -291,7 +337,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/recent-activity/all/");
     }
 
-    showToast("Auto-scrolling & expanding full posts with AI...", "loading");
+    showToast("Auto-scrolling & extracting posts with AI...", "loading");
     
     try {
       const results = await chrome.scripting.executeScript({
@@ -355,7 +401,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (postsMap.size === prevCount && postsMap.size > 0) {
               noNew++;
               if (noNew >= 3) break;
-              // Smart Jiggle
               window.scrollBy({ top: -600, behavior: "smooth" });
               await new Promise(r => setTimeout(r, 400));
             } else {
@@ -367,7 +412,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             window.dispatchEvent(new Event("scroll", { bubbles: true }));
             window.dispatchEvent(new WheelEvent("wheel", { deltaY: 1200, bubbles: true }));
 
-            // Give LinkedIn network stream ample time (~1100ms) to fetch and render next batch
             await new Promise(r => setTimeout(r, 1100));
           }
 
@@ -392,9 +436,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (postsText) {
         const form = new FormData();
         form.append("posts_text", postsText);
-        const res = await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+        const res = await safeApiFetch("/ingest/linkedin/posts", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
         const d = await res.json();
@@ -410,7 +453,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // 6. Modular Action 3: Full Deep Scan (All 800+ Connections)
+  // 6. Modular Action 3: Full Deep Scan (All Connections)
   syncConnOnlyBtn?.addEventListener("click", async () => {
     if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
       return showToast("Please open a LinkedIn tab in Chrome first.", "error");
@@ -563,9 +606,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         const blob = new Blob([csvContent], { type: "text/csv" });
         const form = new FormData();
         form.append("file", blob, "Connections.csv");
-        await fetch(`${API_BASE}/ingest/linkedin`, {
+        await safeApiFetch("/ingest/linkedin", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
 
@@ -587,7 +629,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // 7. Multi-Page Autonomous Delta Sync (Connections Delta ➔ Posts Delta ➔ Instant Summary)
+  // 7. Multi-Page Autonomous Delta Sync
   async function runAutonomousDeltaSync() {
     if (!tab || !tab.id || !tab.url || !tab.url.includes("linkedin.com")) {
       return showToast("Please open a LinkedIn tab in Chrome first.", "error");
@@ -626,7 +668,6 @@ document.addEventListener("DOMContentLoaded", async () => {
               const name = (linkEl.innerText || "").trim().split("\n")[0];
               if (!name || name.length < 2 || name.toLowerCase().includes("view") || name.toLowerCase().includes("connections")) continue;
 
-              // Checkpoint hit! Stop immediately
               if ((knownUrl && href === knownUrl) || (knownName && name === knownName)) {
                 hitCheckpoint = true;
                 break;
@@ -682,9 +723,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         const blob = new Blob([csvContent], { type: "text/csv" });
         const form = new FormData();
         form.append("file", blob, "Connections.csv");
-        await fetch(`${API_BASE}/ingest/linkedin`, {
+        await safeApiFetch("/ingest/linkedin", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
       }
@@ -701,7 +741,6 @@ document.addEventListener("DOMContentLoaded", async () => {
           const seen = new Set();
           let hitCheckpoint = false;
 
-          // Expand see mores
           document.querySelectorAll("button.feed-shared-inline-show-more-text__see-more-less-toggle, button.see-more, [aria-label*='see more']").forEach(b => {
             try { b.click(); } catch(e) {}
           });
@@ -741,9 +780,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (newPosts.length > 0) {
         const form = new FormData();
         form.append("posts_text", newPosts.join("\n\n---\n\n"));
-        await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+        await safeApiFetch("/ingest/linkedin/posts", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
       }
@@ -782,7 +820,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     startProgress("Initiating Auto-Pilot Full Sync across Pages...");
 
     try {
-      // Step 1: Profile & SGI College Cluster
+      // Step 1: Profile & College Cluster
       updateStep(1, "active", 15, "1. Extracting Profile & College Cluster...");
       if (!tab.url.includes("/in/")) {
         await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/");
@@ -795,15 +833,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (profileText) {
         const form = new FormData();
         form.append("posts_text", profileText);
-        await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+        await safeApiFetch("/ingest/linkedin/posts", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
       }
-      updateStep(1, "done", 33, "1. Profile & SGI Cluster Synced");
+      updateStep(1, "done", 33, "1. Profile & Career Graph Synced");
 
-      // Step 2: Auto-Navigate to Connections & Deep Scan All 800+
+      // Step 2: Auto-Navigate to Connections & Deep Scan All
       updateStep(2, "active", 45, "2. Navigating & Deep-Scanning All Connections...");
       await navigateAndWait(tab.id, "https://www.linkedin.com/mynetwork/invite-connect/connections/");
       
@@ -883,13 +920,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const blob = new Blob([csvContent], { type: "text/csv" });
         const form = new FormData();
         form.append("file", blob, "Connections.csv");
-        await fetch(`${API_BASE}/ingest/linkedin`, {
+        await safeApiFetch("/ingest/linkedin", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
       }
-      updateStep(2, "done", 66, `2. Synced: ${connections.length} Real Contacts into SGI Graph`);
+      updateStep(2, "done", 66, `2. Synced: ${connections.length} Real Contacts into Graph`);
 
       // Step 3: Auto-Navigate to Posts Feed & Deep Scan
       updateStep(3, "active", 75, "3. Auto-navigating to Posts Feed & Extracting Milestones...");
@@ -945,13 +981,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (postsText) {
         const form = new FormData();
         form.append("posts_text", postsText);
-        await fetch(`${API_BASE}/ingest/linkedin/posts`, {
+        await safeApiFetch("/ingest/linkedin/posts", {
           method: "POST",
-          headers: { "x-user-id": userSelect.value },
           body: form
         });
       }
-      updateStep(3, "done", 100, `3. AI Extracted: ${postsList.length > 0 ? postsList.length + ' posts (DRDO & Hackathons)' : 'DRDO + Hackathons'}`);
+      updateStep(3, "done", 100, `3. AI Extracted: ${postsList.length > 0 ? postsList.length + ' posts (Milestones & Hackathons)' : 'Milestones Synced'}`);
 
       // Final Storage & Report Card
       const countStr = `${connections.length > 0 ? connections.length : (stored.syncedConnCount || 797)} Real Contacts`;
@@ -965,9 +1000,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       lastSyncLabel.textContent = `Today, ${nowStr}`;
 
-      reportCandidate.textContent = "Mohit Upraity";
-      reportRepos.textContent = "4 Repos Verified";
-      reportMilestones.textContent = "DRDO + Hackathons";
+      reportCandidate.textContent = getActiveUserId();
+      reportRepos.textContent = "Verified";
+      reportMilestones.textContent = "Synced";
       reportConnections.textContent = countStr;
       syncReportCard.classList.remove("hidden");
 
@@ -990,14 +1025,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       const form = new FormData();
       form.append("file", file);
 
-      const res = await fetch(`${API_BASE}/ingest/linkedin`, {
+      const res = await safeApiFetch("/ingest/linkedin", {
         method: "POST",
-        headers: { "x-user-id": userSelect.value },
         body: form
       });
       const data = await res.json();
 
-      const count = data.graph_nodes_merged || data.connections_processed || "All 842";
+      const count = data.graph_nodes_merged || data.connections_processed || "All";
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       chrome.storage.local.set({ 
         lastSyncedTime: `Today, ${nowStr}`,
