@@ -10,11 +10,12 @@ import {
   Shield, 
   ExternalLink,
   Code2,
-  GitCompare
+  GitCompare,
+  Compass
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export type ActiveTab = 'graph' | 'matcher' | 'benchmark' | 'referrals' | 'resume';
+export type ActiveTab = 'graph' | 'opportunities' | 'matcher' | 'benchmark' | 'referrals' | 'resume';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -30,6 +31,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       label: 'Knowledge Graph',
       sublabel: 'Skills & Project Topology',
       icon: Network,
+    },
+    {
+      id: 'opportunities' as ActiveTab,
+      label: 'Opportunities Radar',
+      sublabel: 'Jobs, Internships, Unstop',
+      icon: Compass,
     },
     {
       id: 'matcher' as ActiveTab,

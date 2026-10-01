@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Sidebar, ActiveTab } from './components/Sidebar';
 import { KnowledgeGraph } from './components/KnowledgeGraph/KnowledgeGraph';
+import { OpportunitiesRadar } from './components/OpportunitiesRadar/OpportunitiesRadar';
 import { JobMatchmaker } from './components/JobMatchmaker/JobMatchmaker';
 import { ReferralHub } from './components/ReferralHub/ReferralHub';
 import { ResumeStudio } from './components/ResumeStudio/ResumeStudio';
@@ -110,6 +111,15 @@ const MainLayout: React.FC = () => {
               graphData={graphData} 
               loading={loading} 
               onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
+            />
+          )}
+
+          {activeTab === 'opportunities' && (
+            <OpportunitiesRadar
+              onTailorResume={handleSelectTailorResume}
+              onFindReferral={handleNavigateToReferrals}
+              onError={(msg) => addToast('error', msg)}
+              onSuccess={(msg) => addToast('success', msg)}
             />
           )}
 

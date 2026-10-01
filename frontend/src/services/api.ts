@@ -273,5 +273,32 @@ export const apiService = {
     });
     if (!res.ok) throw new Error(`Failed to delete peer (${res.status})`);
     return await res.json();
+  },
+
+  async getOpportunities(
+    params: { category?: string; search?: string; remote_only?: boolean; sort_by?: string } = {},
+    headers: Record<string, string> = {}
+  ): Promise<{
+    status: string;
+    total: number;
+    category_counts: {
+      all: number;
+      jobs: number;
+      internships: number;
+      hackathons: number;
+      opensource: number;
+    };
+    opportunities: any[];
+  }> {
+    const query = new URLSearchParams();
+    if (params.category && params.category !== 'all') query.append('category', params.category);
+    if (params.search) query.append('search', params.search);
+    if (params.remote_only) query.append('remote_only', 'true');
+    if (params.sort_by) query.append('sort_by', params.sort_by);
+
+    const url = `${API_BASE}/api/v1/opportunities?${query.toString()}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Failed to load opportunities (${res.status})`);
+    return await res.json();
   }
 };

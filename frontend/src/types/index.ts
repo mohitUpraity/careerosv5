@@ -156,6 +156,43 @@ export interface TailoredResumeResponse {
   tailored_blueprint?: ResumeBlueprint;
 }
 
+export interface Opportunity {
+  id: string;
+  title: string;
+  organization: string;
+  category: 'jobs' | 'internships' | 'hackathons' | 'opensource';
+  opportunity_type: string;
+  location: string;
+  reward: string;
+  deadline_date: string;
+  deadline_formatted: string;
+  days_left: number;
+  is_urgent: boolean;
+  urgency_level: 'normal' | 'high' | 'critical';
+  source_platform: string;
+  apply_url: string;
+  skills_required: string[];
+  matched_skills: string[];
+  missing_skills: string[];
+  match_score: number;
+  description: string;
+  eligibility?: string;
+  verified?: boolean;
+}
+
+export interface OpportunitiesResponse {
+  status: string;
+  total: number;
+  category_counts: {
+    all: number;
+    jobs: number;
+    internships: number;
+    hackathons: number;
+    opensource: number;
+  };
+  opportunities: Opportunity[];
+}
+
 export interface UserProfile {
   id: string;
   name: string;
