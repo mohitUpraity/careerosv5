@@ -1,26 +1,42 @@
-/**
- * CareerOS Background Service Worker
- * Handles network requests to CareerOS Local Engine (http://localhost:8000).
- */
+const PROD_API_URL = "https://careerosv5.onrender.com/api/v1";
+const LOCAL_API_URL = "http://localhost:8000/api/v1";
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+async function getApiBase() {
+  try {
+    const stored = await chrome.storage.local.get(["apiUrl"]);
+    if (stored.apiUrl) return stored.apiUrl;
+    
+    // Auto-probe localhost with 800ms timeout
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 800);
+    const res = await fetch(`${LOCAL_API_URL}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) return LOCAL_API_URL;
+  } catch (e) {
+    // Fall back to production
+  }
+  return PROD_API_URL;
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("CareerOS Extension Installed & Ready.");
   chrome.storage.local.set({
-    activeUserId: "dev-user-0000-0000-0000-000000000001",
-    apiUrl: API_BASE_URL
+    apiUrl: PROD_API_URL
   });
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "HEALTH_CHECK") {
-    fetch(`${API_BASE_URL}/health/`)
-      .then(res => res.json())
-      .then(data => sendResponse({ success: true, data }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
+  (async () => {
+    const apiBase = await getApiBase();
+    if (request.action === "HEALTH_CHECK") {
+      fetch(`${apiBase}/health/`)
+        .then(res => res.json())
+        .then(data => sendResponse({ success: true, data, apiBase }))
+        .catch(err => sendResponse({ success: false, error: err.message, apiBase }));
+    }
+  })();
+  return true;
+});
 
   if (request.action === "INGEST_POSTS_TEXT") {
     const formData = new FormData();

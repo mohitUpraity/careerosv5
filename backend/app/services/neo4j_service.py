@@ -178,9 +178,25 @@ class Neo4jService:
             OPTIONAL MATCH (u)-[r1:HAS_SKILL {source: 'resume'}]->()
             OPTIONAL MATCH (u)-[r2:ATTENDED]->()
             OPTIONAL MATCH (u)-[r3:WORKED_AT]->()
-            DELETE r1, r2, r3;
+            OPTIONAL MATCH (u)-[r4:ACHIEVED]->()
+            DELETE r1, r2, r3, r4;
             """
             await neo4j_client.execute_query(purge_old_resume_rels, {"user_id": user_id})
+
+            # Clean up rogue university nodes created by previous broken extractions
+            cleanup_rogue_univs = """
+            MATCH (univ:University)
+            WHERE toLower(univ.name) CONTAINS 'prototype' 
+               OR toLower(univ.name) CONTAINS 'developed'
+               OR toLower(univ.name) CONTAINS 'processed'
+               OR toLower(univ.name) CONTAINS 'next.js'
+               OR toLower(univ.name) CONTAINS 'hack with'
+               OR toLower(univ.name) CONTAINS 'potential'
+               OR toLower(univ.name) CONTAINS 'software'
+               OR size(univ.name) < 4
+            DETACH DELETE univ;
+            """
+            await neo4j_client.execute_query(cleanup_rogue_univs, {})
         except Exception as pe:
             logger.warning(f"Note on purging old resume relationships: {pe}")
 
@@ -192,11 +208,19 @@ class Neo4jService:
                 if len(part) > 2:
                     forbidden_terms.add(part)
 
+        univ_valid_keywords = {"college", "university", "institute", "iit", "nit", "iiit", "school", "academy", "vidyalaya", "campus"}
+        invalid_univ_verbs = {"developed", "built", "engineered", "processed", "implemented", "created", "designed", "prototype", "for"}
+
         for edu in blueprint.education:
             raw_univ = (edu.university or "").strip()
             # Clean university string: remove degree suffixes and trailing punctuation
             clean_univ = re.split(r'\s*[-–—|,]\s*(?:B\.?Tech|Bachelor|Master|B\.?E|Degree|Engineering)', raw_univ, flags=re.IGNORECASE)[0].strip()
             clean_univ = re.sub(r'[\(\)\[\]]', '', clean_univ).strip()
+
+            # Must contain valid university keyword and NOT be a verb
+            if not any(k in clean_univ.lower() for k in univ_valid_keywords) or any(v in clean_univ.lower().split() for v in invalid_univ_verbs):
+                continue
+
             if clean_univ and len(clean_univ) > 3:
                 forbidden_terms.add(clean_univ.lower())
                 edu_query = """
@@ -249,7 +273,29 @@ class Neo4jService:
                 })
                 nodes_merged += 1
 
-        # 4. Upsert Skills from Resume (Strict Sanitization against name/institution/company/sentences)
+        # 4. Upsert Achievements & Hackathons (Milestones)
+        if hasattr(blueprint, "achievements") and blueprint.achievements:
+            ach_list = []
+            for a in blueprint.achievements:
+                clean_a = a.strip()
+                if clean_a and len(clean_a) > 3 and len(clean_a) < 100:
+                    ach_list.append(clean_a)
+            if ach_list:
+                ach_query = """
+                MATCH (u:User {id: $user_id})
+                UNWIND $achievements AS ach_title
+                MERGE (ach:Achievement {name: ach_title})
+                ON CREATE SET ach.category = 'Milestone / Hackathon'
+                MERGE (u)-[:ACHIEVED]->(ach)
+                RETURN count(ach) AS ach_count;
+                """
+                await neo4j_client.execute_query(ach_query, {
+                    "user_id": user_id,
+                    "achievements": ach_list
+                })
+                nodes_merged += len(ach_list)
+
+        # 5. Upsert Skills from Resume (Strict Sanitization against name/institution/company/sentences)
         all_skills = []
         invalid_skill_words = {
             "experience", "education", "project", "projects", "engineer", "software",

@@ -11,12 +11,12 @@ export interface ProfileMode {
 }
 
 const DEFAULT_CANDIDATE: ProfileMode = {
-  id: 'dev-user-0000-0000-0000-000000000001',
-  name: 'Mohit Upraity',
-  role: 'AI / Distributed Systems Engineer',
+  id: '',
+  name: 'Candidate',
+  role: 'Software Engineer',
   type: 'candidate',
-  avatar: 'https://github.com/mohitUpraity.png',
-  githubUser: 'mohitUpraity'
+  avatar: '',
+  githubUser: ''
 };
 
 const COWORKER_BENCHMARK: ProfileMode = {

@@ -50,7 +50,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   const reportMilestones = document.getElementById("reportMilestones");
   const reportConnections = document.getElementById("reportConnections");
 
-  const API_BASE = "http://localhost:8000/api/v1";
+  const PROD_API_URL = "https://careerosv5.onrender.com/api/v1";
+  const LOCAL_API_URL = "http://localhost:8000/api/v1";
+
+  async function resolveApiBase() {
+    try {
+      const stored = await chrome.storage.local.get(["apiUrl"]);
+      if (stored.apiUrl) return stored.apiUrl;
+      
+      // Auto-probe localhost with short timeout
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 800);
+      const res = await fetch(`${LOCAL_API_URL}/health`, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) return LOCAL_API_URL;
+    } catch (e) {
+      // Offline on local, fallback to production
+    }
+    return PROD_API_URL;
+  }
+
+  let API_BASE = await resolveApiBase();
 
   // Helper: Reliable Multi-Page Navigation with DOM Mount Wait
   async function navigateAndWait(tabId, url, timeoutMs = 9000) {
@@ -103,17 +123,35 @@ document.addEventListener("DOMContentLoaded", async () => {
     setTimeout(() => hideToast(), 1800);
   });
 
-  // 2. Health check
+  // 2. Health check (Tries active API_BASE, falls back if needed)
   try {
-    const res = await fetch(`${API_BASE}/health/`);
+    let res = await fetch(`${API_BASE}/health/`);
+    if (!res.ok && API_BASE === LOCAL_API_URL) {
+      API_BASE = PROD_API_URL;
+      res = await fetch(`${API_BASE}/health/`);
+    }
     const data = await res.json();
-    if (data.status === "healthy") {
+    if (data.status === "healthy" || res.ok) {
       backendStatus.classList.remove("error");
-      statusText.textContent = "Online";
+      statusText.textContent = API_BASE.includes("localhost") ? "Online (Local)" : "Online (Cloud)";
     }
   } catch (e) {
-    backendStatus.classList.add("error");
-    statusText.textContent = "Offline";
+    if (API_BASE === LOCAL_API_URL) {
+      try {
+        API_BASE = PROD_API_URL;
+        const res2 = await fetch(`${API_BASE}/health/`);
+        if (res2.ok) {
+          backendStatus.classList.remove("error");
+          statusText.textContent = "Online (Cloud)";
+        }
+      } catch (e2) {
+        backendStatus.classList.add("error");
+        statusText.textContent = "Offline";
+      }
+    } else {
+      backendStatus.classList.add("error");
+      statusText.textContent = "Offline";
+    }
   }
 
   // 3. Get Active Tab & Direct Inspect

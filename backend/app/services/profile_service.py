@@ -360,10 +360,16 @@ class ProfileService:
                     })
                     add_link(f"user_{user_id}", cid, "WORKED_AT", e.get("role", "Role"))
 
-                # 4. Education & Universities
+                # 4. Education & Universities (Sanitized)
                 edu_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[r:ATTENDED]->(univ:University)
+                    WHERE NOT toLower(univ.name) CONTAINS 'prototype'
+                      AND NOT toLower(univ.name) CONTAINS 'developed'
+                      AND NOT toLower(univ.name) CONTAINS 'processed'
+                      AND NOT toLower(univ.name) CONTAINS 'next.js'
+                      AND NOT toLower(univ.name) CONTAINS 'hack with'
+                      AND size(univ.name) > 3
                     RETURN univ.name as name, r.degree as degree, r.field_of_study as field
                     """,
                     {"user_id": user_id}
@@ -376,7 +382,21 @@ class ProfileService:
                     })
                     add_link(f"user_{user_id}", uid, "ATTENDED")
 
-                # 5. Direct Skills (from Resume and verified sources)
+                # 5. Achievements & Hackathons (Milestones)
+                ach_res = await neo4j_client.execute_query(
+                    """
+                    MATCH (u:User {id: $user_id})-[:ACHIEVED]->(a:Achievement)
+                    RETURN a.name as name, a.category as category
+                    LIMIT 20
+                    """,
+                    {"user_id": user_id}
+                )
+                for ach in ach_res:
+                    aid = f"ach_{ach['name'][:30]}"
+                    add_node(aid, ach["name"], "achievement", "Milestone & Hackathon", {"val": 16})
+                    add_link(f"user_{user_id}", aid, "ACHIEVED")
+
+                # 6. Direct Skills (from Resume and verified sources)
                 skill_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[:HAS_SKILL]->(s:Skill)
@@ -396,7 +416,7 @@ class ProfileService:
                     add_node(sid, sname, "skill", s.get("category") or "Technical Skill", {"verified": True})
                     add_link(f"user_{user_id}", sid, "HAS_SKILL")
 
-                # 6. Connections & Alumni Bridges
+                # 7. Connections & Alumni Bridges
                 conn_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)

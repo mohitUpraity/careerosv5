@@ -142,76 +142,158 @@ JSON Schema:
 
     def _advanced_heuristic_parser(self, text: str, raw_text: str) -> ResumeBlueprint:
         """
-        Dynamically extracts contact info, education, experience, projects, and skills from unstructured text
-        without any hardcoded fallbacks or mock data.
+        High-precision section-segmented line parser that accurately separates:
+        - Contact Info
+        - Education (Universities, Degrees, Dates)
+        - Work Experience (Companies, Roles, Bullets)
+        - Projects (Names, Tech Stacks, Bullets)
+        - Technical Skills (Languages, Frameworks, Databases, Tools)
+        - Achievements & Hackathons (Milestones, Awards)
+        Never mixes bullet text or project verbs into Education or Skills.
         """
-        # 1. Contact info extraction
-        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
-        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,13}', text)
-        github_match = re.search(r'(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)', text, re.IGNORECASE)
-        linkedin_match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)', text, re.IGNORECASE)
-
-        # Name extraction: look at the top lines of text
-        name = ""
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+
+        # 1. Contact info extraction
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_text)
+        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,13}', raw_text)
+        github_match = re.search(r'(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)', raw_text, re.IGNORECASE)
+        linkedin_match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)', raw_text, re.IGNORECASE)
+
+        name = ""
         for line in lines[:5]:
-            if len(line.split()) <= 4 and not re.search(r'@|phone|email|github|linkedin|resume|curriculum|profile', line, re.IGNORECASE):
-                # Candidate names are usually capitalized title case
+            if len(line.split()) <= 4 and not re.search(r'@|phone|email|github|linkedin|resume|curriculum|profile|developer|engineer', line, re.IGNORECASE):
                 if re.match(r'^[A-Z][a-zA-Z\s\.\'-]+$', line):
                     name = line
                     break
+        if not name and lines:
+            name = lines[0][:40]
 
-        if not name:
-            name_search = re.search(r'^([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})', text)
-            if name_search and not any(w in name_search.group(1).lower() for w in ["summary", "skills", "experience", "education", "projects"]):
-                name = name_search.group(1)
+        # 2. Segment lines into distinct sections
+        sections: Dict[str, List[str]] = {
+            "header": [],
+            "education": [],
+            "experience": [],
+            "projects": [],
+            "skills": [],
+            "achievements": [],
+            "summary": []
+        }
 
-        # 2. Dynamic Education extraction
+        current_sec = "header"
+        header_patterns = [
+            ("education", re.compile(r'^(?:EDUCATION|ACADEMIC|ACADEMICS|QUALIFICATIONS|EDUCATION\s*&\s*TRAINING)\b', re.IGNORECASE)),
+            ("experience", re.compile(r'^(?:EXPERIENCE|WORK\s+EXPERIENCE|PROFESSIONAL\s+EXPERIENCE|EMPLOYMENT|INTERNSHIPS|INTERNSHIP)\b', re.IGNORECASE)),
+            ("projects", re.compile(r'^(?:PROJECTS|KEY\s+PROJECTS|PERSONAL\s+PROJECTS|ACADEMIC\s+PROJECTS|TECHNICAL\s+PROJECTS)\b', re.IGNORECASE)),
+            ("skills", re.compile(r'^(?:TECHNICAL\s+SKILLS|SKILLS|SKILLS\s*&\s*TOOLS|CORE\s+COMPETENCIES|TECHNOLOGIES)\b', re.IGNORECASE)),
+            ("achievements", re.compile(r'^(?:ACHIEVEMENTS|HACKATHONS|HONORS\s*&\s*AWARDS|AWARDS|MILESTONES|EXTRACURRICULAR|ACCOMPLISHMENTS)\b', re.IGNORECASE)),
+            ("summary", re.compile(r'^(?:SUMMARY|PROFESSIONAL\s+SUMMARY|ABOUT\s+ME|OBJECTIVE|PROFILE)\b', re.IGNORECASE)),
+        ]
+
+        for line in lines:
+            matched_header = False
+            for sec_name, pat in header_patterns:
+                if pat.search(line) and len(line.split()) <= 4:
+                    current_sec = sec_name
+                    matched_header = True
+                    break
+            if not matched_header:
+                sections[current_sec].append(line)
+
+        # 3. Process Education Section (Strictly validated)
         education = []
-        edu_matches = re.finditer(r'([A-Za-z\s,\.-]+(?:College|University|Institute|IIT|NIT|IIIT|Academy|School)[A-Za-z\s,\.-]*)', text, re.IGNORECASE)
+        univ_keywords = {"college", "university", "institute", "iit", "nit", "iiit", "school", "academy", "vidyalaya", "campus"}
+        verb_blocklist = {"developed", "built", "engineered", "processed", "implemented", "created", "designed", "optimized", "managed", "prototype", "for", "with"}
+
         seen_colleges = set()
-        for m in edu_matches:
-            col = m.group(1).strip()
-            # Clean length
-            clean_col = col.split("\n")[0].strip()[:60]
-            if clean_col.lower() not in seen_colleges and len(clean_col) > 5:
-                seen_colleges.add(clean_col.lower())
-                education.append(EducationEntry(
-                    university=clean_col,
-                    degree="Degree / Studies",
-                    field_of_study="Computer Science / Engineering",
-                    start_date="",
-                    end_date=""
-                ))
+        for eline in sections["education"]:
+            # Must not be a bullet point or contain action verbs
+            if re.match(r'^[•\-\*\+]\s*', eline) or any(v in eline.lower().split()[:3] for v in verb_blocklist):
+                continue
+            
+            # Check for institution keywords on this specific line
+            has_univ_keyword = any(k in eline.lower() for k in univ_keywords)
+            if has_univ_keyword and len(eline) > 5 and len(eline) < 100:
+                clean_name = re.split(r'\s*[-–—|,]\s*(?:B\.?Tech|Bachelor|Master|B\.?E|Degree|Engineering|Diploma)', eline, flags=re.IGNORECASE)[0].strip()
+                clean_name = re.sub(r'[\(\)\[\]]', '', clean_name).strip()
+                
+                # Verify not polluted with code / frameworks
+                if any(tech in clean_name.lower() for tech in ["react", "next.js", "python", "node", "fastapi", "docker"]):
+                    continue
 
-        # 3. Dynamic Experience extraction
+                if clean_name.lower() not in seen_colleges and len(clean_name) > 4:
+                    seen_colleges.add(clean_name.lower())
+                    
+                    # Extract degree & year from the same or surrounding text
+                    deg_match = re.search(r'(B\.?Tech|Bachelor|Master|B\.?E|B\.?Sc|M\.?S|M\.?Tech|Diploma|High\s*School)[\w\s\.]*', eline, re.IGNORECASE)
+                    degree_str = deg_match.group(0).strip() if deg_match else "Bachelor of Technology"
+                    
+                    year_match = re.search(r'\b(20\d{2}\s*[-–—]\s*(?:20\d{2}|Present|\d{2}))\b|\b(20\d{2})\b', eline)
+                    year_str = year_match.group(0) if year_match else ""
+
+                    education.append(EducationEntry(
+                        university=clean_name[:60],
+                        degree=degree_str[:50],
+                        field_of_study="Computer Science & Engineering",
+                        start_date=year_str.split("-")[0].strip() if "-" in year_str else year_str,
+                        end_date=year_str.split("-")[1].strip() if "-" in year_str else year_str
+                    ))
+
+        # 4. Process Work Experience Section
         experience = []
-        # Look for bullet points in raw text
-        raw_bullets = re.findall(r'(?:^|\n)\s*[•\-\*]\s*([^\n\r]+)', raw_text)
-        if raw_bullets:
-            # Group bullets into experience entry
-            experience.append(ExperienceEntry(
-                company="Professional Experience",
-                role="Software Engineer",
-                start_date="",
-                end_date="Present",
-                is_current=True,
-                bullets=raw_bullets[:6]
-            ))
+        current_exp: Optional[ExperienceEntry] = None
+        for xline in sections["experience"]:
+            is_bullet = bool(re.match(r'^[•\-\*\+]\s*', xline))
+            if not is_bullet and len(xline.split()) <= 10 and not any(k in xline.lower() for k in ["languages:", "skills:", "tools:"]):
+                # New company/role line
+                parts = re.split(r'\s*[-–—|]\s*', xline)
+                comp = parts[0].strip()[:50]
+                role = parts[1].strip()[:40] if len(parts) > 1 else "Software Engineer"
+                dates = parts[2].strip() if len(parts) > 2 else ""
+                
+                if comp and len(comp) > 2:
+                    current_exp = ExperienceEntry(
+                        company=comp,
+                        role=role,
+                        start_date=dates,
+                        end_date="Present" if "present" in dates.lower() else dates,
+                        is_current="present" in dates.lower(),
+                        bullets=[]
+                    )
+                    experience.append(current_exp)
+            elif is_bullet and current_exp:
+                clean_b = re.sub(r'^[•\-\*\+]\s*', '', xline).strip()
+                if clean_b:
+                    current_exp.bullets.append(clean_b)
 
-        # 4. Dynamic Projects extraction
+        # 5. Process Projects Section
         projects = []
-        proj_headings = re.findall(r'(?:Project|Projects)\s*[:\-]?\s*([A-Za-z0-9\s_-]+)', text, re.IGNORECASE)
-        for ph in proj_headings[:3]:
-            cleaned_p = ph.strip()[:40]
-            if len(cleaned_p) > 3:
-                projects.append(ProjectEntry(
-                    name=cleaned_p,
-                    tech_stack="",
-                    bullets=[]
-                ))
+        current_proj: Optional[ProjectEntry] = None
+        for pline in sections["projects"]:
+            is_bullet = bool(re.match(r'^[•\-\*\+]\s*', pline))
+            if not is_bullet and len(pline.split()) <= 8 and not pline.lower().startswith("tech stack"):
+                parts = re.split(r'\s*[-–—|]\s*', pline)
+                pname = parts[0].strip()[:40]
+                stack = parts[1].strip()[:60] if len(parts) > 1 else ""
+                if pname and len(pname) > 2 and not any(w in pname.lower() for w in ["project", "projects", "overview"]):
+                    current_proj = ProjectEntry(
+                        name=pname,
+                        tech_stack=stack,
+                        bullets=[]
+                    )
+                    projects.append(current_proj)
+            elif is_bullet and current_proj:
+                clean_pb = re.sub(r'^[•\-\*\+]\s*', '', pline).strip()
+                if clean_pb:
+                    current_proj.bullets.append(clean_pb)
 
-        # 5. Dynamic Skills extraction
+        # 6. Process Achievements & Hackathons
+        achievements = []
+        for aline in sections["achievements"]:
+            clean_ach = re.sub(r'^[•\-\*\+]\s*', '', aline).strip()
+            if clean_ach and len(clean_ach) > 3 and len(clean_ach) < 120:
+                achievements.append(clean_ach)
+
+        # 7. Process Technical Skills
         known_skills_vocab = [
             ("Python", "Languages"), ("JavaScript", "Languages"), ("TypeScript", "Languages"),
             ("Java", "Languages"), ("C++", "Languages"), ("C#", "Languages"), ("Go", "Languages"),
@@ -232,7 +314,7 @@ JSON Schema:
 
         categorized_skills: Dict[str, List[str]] = {}
         for skill_name, category in known_skills_vocab:
-            if re.search(rf"\b{re.escape(skill_name)}\b", text, re.IGNORECASE):
+            if re.search(rf"\b{re.escape(skill_name)}\b", raw_text, re.IGNORECASE):
                 categorized_skills.setdefault(category, []).append(skill_name)
 
         skill_categories = [
@@ -240,8 +322,7 @@ JSON Schema:
             for cat, s_list in categorized_skills.items()
         ]
 
-        summary_match = re.search(r'(?:Summary|About|Professional Summary)\s*[:\-]?\s*([^\n\r]+(?:\n[^\n\r]+){1,3})', raw_text, re.IGNORECASE)
-        summary_text = summary_match.group(1).strip() if summary_match else ""
+        summary_text = " ".join(sections["summary"][:3]) if sections["summary"] else ""
 
         return ResumeBlueprint(
             contact=ContactInfo(
@@ -257,6 +338,7 @@ JSON Schema:
             education=education,
             projects=projects,
             skills=skill_categories,
+            achievements=achievements,
             raw_text=raw_text
         )
 
