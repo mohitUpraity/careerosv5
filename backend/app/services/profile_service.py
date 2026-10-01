@@ -452,6 +452,11 @@ class ProfileService:
                     add_link(f"user_{user_id}", aid, "ACHIEVED")
 
                 # 6. Direct Skills (from Resume and verified sources)
+                achievement_triggers = {
+                    "hackathon", "place", "winner", "award", "prize", "1st", "2nd", "3rd",
+                    "first", "second", "third", "presented", "demonstrated", "built", "championship",
+                    "sistec", "hackshodh", "csir-neeri", "deputy director"
+                }
                 skill_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[:HAS_SKILL]->(s:Skill)
@@ -464,6 +469,10 @@ class ProfileService:
                 for s in skill_res:
                     sname = (s.get("name") or "").strip()
                     if not sname or len(sname) > 30 or len(sname) < 2 or sname.lower() in invalid_comp_set:
+                        continue
+                    if any(w in sname.lower() for w in achievement_triggers) or len(sname.split()) > 3:
+                        continue
+                    if sname.lower() in ["code collaboration", "debugging & troubleshooting"]:
                         continue
                     if sname.lower() == user_name.lower() or sname.lower() in user_name_tokens:
                         continue

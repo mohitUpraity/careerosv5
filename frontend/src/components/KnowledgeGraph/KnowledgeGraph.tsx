@@ -20,7 +20,9 @@ import {
   GitBranch,
   RefreshCw,
   Eye,
-  EyeOff
+  EyeOff,
+  Trophy,
+  Award
 } from 'lucide-react';
 import { GraphData, GraphNode, GraphLink } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
@@ -74,6 +76,16 @@ export const CATEGORY_THEMES: Record<string, CategoryTheme> = {
     icon: CheckCircle2,
     radius: 14,
   },
+  Achievement: {
+    id: 'Achievement',
+    label: 'Milestones & Hackathons',
+    bg: '#F59E0B',
+    border: '#D97706',
+    pillBg: '#FFFBEB',
+    pillText: '#B45309',
+    icon: Trophy,
+    radius: 18,
+  },
   Company: {
     id: 'Company',
     label: 'Companies',
@@ -122,6 +134,7 @@ export const normalizeCategory = (type?: string, id?: string, category?: string)
 
   if (t === 'user' || t === 'candidate' || i.startsWith('user_')) return 'Candidate';
   if (t === 'project' || t === 'repo' || t === 'repository' || i.startsWith('proj_')) return 'Project';
+  if (t === 'achievement' || t === 'hackathon' || t === 'milestone' || t === 'award' || i.startsWith('ach_') || i.startsWith('hack_')) return 'Achievement';
   if (t === 'skill' || t === 'technical skill' || i.startsWith('skill_')) return 'Skill';
   if (t === 'company' || t === 'employer' || i.startsWith('comp_')) return 'Company';
   if (t === 'contact' || t === 'person' || t === 'alumni' || i.startsWith('contact_') || i.startsWith('person_')) return 'Contact';
@@ -162,7 +175,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
     return counts;
   }, [graphData]);
 
-  const categories = ['all', 'Candidate', 'Project', 'Skill', 'Company', 'Contact', 'Education'];
+  const categories = ['all', 'Candidate', 'Project', 'Skill', 'Achievement', 'Company', 'Contact', 'Education'];
 
   useEffect(() => {
     if (!graphData || !svgRef.current || !containerRef.current) return;

@@ -320,33 +320,49 @@ class Neo4jService:
             nodes_merged += 1
 
         # 4. Upsert Achievements & Hackathons (Milestones)
+        all_achievements = []
+        achievement_triggers = {
+            "hackathon", "place", "winner", "award", "prize", "1st", "2nd", "3rd",
+            "first", "second", "third", "presented", "demonstrated", "built", "championship",
+            "sistec", "hackshodh", "csir-neeri", "deputy director"
+        }
+
         if hasattr(blueprint, "achievements") and blueprint.achievements:
-            ach_list = []
             for a in blueprint.achievements:
                 clean_a = a.strip()
-                if clean_a and len(clean_a) > 3 and len(clean_a) < 100:
-                    ach_list.append(clean_a)
-            if ach_list:
-                ach_query = """
-                MATCH (u:User {id: $user_id})
-                UNWIND $achievements AS ach_title
-                MERGE (ach:Achievement {name: ach_title})
-                ON CREATE SET ach.category = 'Milestone / Hackathon'
-                MERGE (u)-[:ACHIEVED]->(ach)
-                RETURN count(ach) AS ach_count;
-                """
-                await neo4j_client.execute_query(ach_query, {
-                    "user_id": user_id,
-                    "achievements": ach_list
-                })
-                nodes_merged += len(ach_list)
+                if clean_a and len(clean_a) > 3 and len(clean_a) < 180:
+                    all_achievements.append(clean_a)
 
-        # 5. Upsert Skills from Resume (Strict Sanitization against name/institution/company/sentences)
+        # Check if any skill leaked in as an achievement
+        if hasattr(blueprint, "skills") and blueprint.skills:
+            for cat in blueprint.skills:
+                for s in cat.skills:
+                    if any(w in s.lower() for w in achievement_triggers) or len(s.split()) > 3:
+                        if len(s) > 4 and s.strip() not in all_achievements:
+                            all_achievements.append(s.strip())
+
+        if all_achievements:
+            ach_query = """
+            MATCH (u:User {id: $user_id})
+            UNWIND $achievements AS ach_title
+            MERGE (ach:Achievement {name: ach_title})
+            ON CREATE SET ach.category = 'Milestone & Hackathon'
+            MERGE (u)-[:ACHIEVED]->(ach)
+            RETURN count(ach) AS ach_count;
+            """
+            await neo4j_client.execute_query(ach_query, {
+                "user_id": user_id,
+                "achievements": all_achievements
+            })
+            nodes_merged += len(all_achievements)
+
+        # 5. Upsert Skills from Resume (Strict Sanitization against sentences, hackathons, and soft-skills)
         all_skills = []
         invalid_skill_words = {
             "experience", "education", "project", "projects", "engineer", "software",
             "developer", "student", "candidate", "resume", "summary", "profile", "curriculum",
-            "technologies", "technology", "skills", "languages", "frameworks", "tools", "email", "phone"
+            "technologies", "technology", "skills", "languages", "frameworks", "tools", "email", "phone",
+            "collaboration", "troubleshooting", "debugging"
         }
         seen_skill_names = set()
 
@@ -354,12 +370,14 @@ class Neo4jService:
             for s in cat.skills:
                 cleaned_skill = s.strip()
                 # Remove leading/trailing bullet symbols or dashes
-                cleaned_skill = re.sub(r'^[•\-\*\+:]\s*', '', cleaned_skill).strip()
+                cleaned_skill = re.sub(r'^[•\-\*\+●:]\s*', '', cleaned_skill).strip()
                 if not cleaned_skill:
                     continue
 
-                # Discard sentence-like skill strings or full names
-                if len(cleaned_skill) > 30 or len(cleaned_skill) < 2:
+                # Discard sentence-like skill strings, achievements, or long phrases
+                if any(w in cleaned_skill.lower() for w in achievement_triggers) or len(cleaned_skill.split()) > 3:
+                    continue
+                if len(cleaned_skill) > 25 or len(cleaned_skill) < 2:
                     continue
                 if cleaned_skill.lower() in forbidden_terms or any(t in cleaned_skill.lower().split() for t in forbidden_terms if len(t) > 3):
                     continue
@@ -387,6 +405,18 @@ class Neo4jService:
                 "skills": all_skills
             })
             nodes_merged += len(all_skills)
+
+        # 6. Purge rogue skill nodes in the DB that contain achievement text
+        try:
+            purge_rogue_skills = """
+            MATCH (s:Skill)
+            WHERE any(w IN ['hackathon', 'place', 'winner', 'award', 'prize', '1st', '2nd', '3rd', 'first', 'second', 'presented', 'demonstrated', 'built', 'sistec', 'lawbot', 'agrifarm'] WHERE toLower(s.name) CONTAINS w)
+               OR size(split(s.name, ' ')) > 4
+            DETACH DELETE s;
+            """
+            await neo4j_client.execute_query(purge_rogue_skills, {})
+        except Exception as se:
+            logger.warning(f"Note on purging rogue skills: {se}")
 
         return nodes_merged
 

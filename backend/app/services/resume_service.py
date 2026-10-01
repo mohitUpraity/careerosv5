@@ -193,7 +193,7 @@ JSON Schema:
 
         if parsed_data and isinstance(parsed_data, dict) and "contact" in parsed_data:
             try:
-                # Sanitize experience company names
+                # 1. Sanitize experience company names
                 valid_experiences = []
                 invalid_comp_words = {
                     "building", "deploying", "prototype", "systems", "winner", "next",
@@ -210,6 +210,47 @@ JSON Schema:
                     if len(comp) >= 3:
                         valid_experiences.append(exp_raw)
                 parsed_data["experience"] = valid_experiences
+
+                # 2. Strict separation of Skills vs Achievements / Milestones
+                extracted_achievements = list(parsed_data.get("achievements") or [])
+                cleaned_skill_categories = []
+                achievement_triggers = {
+                    "hackathon", "place", "winner", "award", "prize", "1st", "2nd", "3rd",
+                    "first", "second", "third", "presented", "demonstrated", "built", "championship",
+                    "sistec", "hackshodh", "csir-neeri"
+                }
+
+                for cat in parsed_data.get("skills", []):
+                    cat_name = cat.get("category", "Technical")
+                    clean_skills_for_cat = []
+                    for s in cat.get("skills", []):
+                        s_str = str(s).strip()
+                        # If a skill contains hackathon or achievement phrases, move to achievements!
+                        if any(w in s_str.lower() for w in achievement_triggers) or len(s_str.split()) > 3:
+                            if len(s_str) > 4 and s_str not in extracted_achievements:
+                                extracted_achievements.append(s_str)
+                            continue
+                        
+                        # Clean common verbose phrases into concise industry skill tokens
+                        s_lower = s_str.lower()
+                        if "rest api" in s_lower:
+                            s_str = "REST APIs"
+                        elif "git version" in s_lower or s_lower == "git":
+                            s_str = "Git"
+                        elif "code collaboration" in s_lower or "debugging" in s_lower:
+                            continue
+                        
+                        if s_str and len(s_str) >= 2 and len(s_str) <= 25:
+                            clean_skills_for_cat.append(s_str)
+
+                    if clean_skills_for_cat:
+                        cleaned_skill_categories.append({
+                            "category": cat_name,
+                            "skills": list(dict.fromkeys(clean_skills_for_cat))
+                        })
+
+                parsed_data["skills"] = cleaned_skill_categories
+                parsed_data["achievements"] = list(dict.fromkeys(extracted_achievements))
                 parsed_data["raw_text"] = normalized_text
                 return ResumeBlueprint(**parsed_data)
             except Exception as pe:
