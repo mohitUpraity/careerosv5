@@ -32,7 +32,15 @@ import {
   CheckCheck,
   Undo2,
   Wand2,
-  Layers
+  Layers,
+  ArrowUp,
+  ArrowDown,
+  EyeOff,
+  Copy,
+  Download,
+  Target,
+  FileCode,
+  LayoutGrid
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -53,6 +61,8 @@ interface ResumeStudioProps {
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
 }
+
+export type SectionKey = 'summary' | 'experience' | 'projects' | 'skills' | 'education' | 'achievements';
 
 // Suggestion interface for Google Docs-like track changes
 interface AISuggestion {
@@ -159,23 +169,46 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 }) => {
   const { user, getAuthHeaders } = useAuth();
   
+  // ================= Top Navigation Tabs =================
+  // 'master': Edit Permanent Master Template
+  // 'tailor': Optimize & Review for Specific Job Description
+  const [activeTab, setActiveTab] = useState<'master' | 'tailor'>('master');
+
   // View & Mode States
   const [isEditMode, setIsEditMode] = useState<boolean>(true);
-  const [isTailorOpen, setIsTailorOpen] = useState<boolean>(false);
   const [isStyleOpen, setIsStyleOpen] = useState<boolean>(false);
+  const [isSectionManagerOpen, setIsSectionManagerOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [atsScore, setAtsScore] = useState<number | null>(null);
 
-  // Master & Active Blueprint State
-  const [blueprint, setBlueprint] = useState<ResumeBlueprint>(DEFAULT_STARTER_BLUEPRINT);
-  const [masterBlueprint, setMasterBlueprint] = useState<ResumeBlueprint | null>(null);
+  // Master Resume Blueprint State (Permanent Base)
+  const [masterBlueprint, setMasterBlueprint] = useState<ResumeBlueprint>(DEFAULT_STARTER_BLUEPRINT);
   const [hasMasterResume, setHasMasterResume] = useState<boolean>(false);
-  const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [isMasterDirty, setIsMasterDirty] = useState<boolean>(false);
 
-  // Google Docs-style AI Diff Suggestions
+  // Tailored Resume Blueprint State (Job-Specific Copy)
+  const [tailoredBlueprint, setTailoredBlueprint] = useState<ResumeBlueprint>(DEFAULT_STARTER_BLUEPRINT);
   const [suggestions, setSuggestions] = useState<{ [id: string]: AISuggestion }>({});
+
+  // Section Ordering & Visibility State
+  const [sectionOrder, setSectionOrder] = useState<SectionKey[]>([
+    'summary',
+    'experience',
+    'projects',
+    'skills',
+    'education',
+    'achievements'
+  ]);
+  const [visibleSections, setVisibleSections] = useState<{ [key in SectionKey]: boolean }>({
+    summary: true,
+    experience: true,
+    projects: true,
+    skills: true,
+    education: true,
+    achievements: true,
+  });
 
   // Template Styling State (Font, Colors, Sizes, Spacing)
   const [templateStyle, setTemplateStyle] = useState<TemplateStyle>({
@@ -208,8 +241,8 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     try {
       const res = await apiService.getMasterResume(getAuthHeaders());
       if (res.has_master_resume && res.blueprint) {
-        setBlueprint(res.blueprint);
         setMasterBlueprint(res.blueprint);
+        setTailoredBlueprint(res.blueprint);
         setHasMasterResume(true);
       } else {
         setHasMasterResume(false);
@@ -221,32 +254,38 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     }
   };
 
-  // Mark state dirty when edited
-  const updateBlueprint = (newBp: ResumeBlueprint) => {
-    setBlueprint(newBp);
-    setIsDirty(true);
+  // Active Blueprint based on Tab
+  const activeBlueprint = activeTab === 'master' ? masterBlueprint : tailoredBlueprint;
+
+  const updateActiveBlueprint = (newBp: ResumeBlueprint) => {
+    if (activeTab === 'master') {
+      setMasterBlueprint(newBp);
+      setIsMasterDirty(true);
+    } else {
+      setTailoredBlueprint(newBp);
+    }
   };
 
   // Contact Field Updates
-  const updateContact = (field: keyof typeof blueprint.contact, value: string) => {
-    updateBlueprint({
-      ...blueprint,
+  const updateContact = (field: keyof typeof masterBlueprint.contact, value: string) => {
+    updateActiveBlueprint({
+      ...activeBlueprint,
       contact: {
-        ...blueprint.contact,
+        ...activeBlueprint.contact,
         [field]: value
       }
     });
   };
 
-  // Save Blueprint to Database
+  // Save Master Blueprint to Database
   const handleSaveMaster = async () => {
     setIsSaving(true);
     try {
-      const res = await apiService.updateMasterResume(blueprint, getAuthHeaders());
+      const res = await apiService.updateMasterResume(masterBlueprint, getAuthHeaders());
       setMasterBlueprint(res.blueprint);
       setHasMasterResume(true);
-      setIsDirty(false);
-      onSuccess('Master Resume saved and synchronized with database!');
+      setIsMasterDirty(false);
+      onSuccess('Master Base Resume saved and synchronized with database!');
     } catch (err: any) {
       onError(err.message || 'Failed to save master resume');
     } finally {
@@ -254,15 +293,32 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     }
   };
 
-  // Revert back to Master
-  const handleResetToMaster = () => {
-    if (masterBlueprint) {
-      setBlueprint(masterBlueprint);
-      setSuggestions({});
-      setIsDirty(false);
-      setAtsScore(null);
-      onSuccess('Reverted back to your Master Resume Blueprint');
-    }
+  // ================= Section Reordering & Visibility Helpers =================
+  const moveSectionUp = (key: SectionKey) => {
+    const idx = sectionOrder.indexOf(key);
+    if (idx <= 0) return;
+    const newOrder = [...sectionOrder];
+    const temp = newOrder[idx - 1];
+    newOrder[idx - 1] = newOrder[idx];
+    newOrder[idx] = temp;
+    setSectionOrder(newOrder);
+  };
+
+  const moveSectionDown = (key: SectionKey) => {
+    const idx = sectionOrder.indexOf(key);
+    if (idx === -1 || idx >= sectionOrder.length - 1) return;
+    const newOrder = [...sectionOrder];
+    const temp = newOrder[idx + 1];
+    newOrder[idx + 1] = newOrder[idx];
+    newOrder[idx] = temp;
+    setSectionOrder(newOrder);
+  };
+
+  const toggleSectionVisibility = (key: SectionKey) => {
+    setVisibleSections(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
   };
 
   // ================= AI Tailoring & Google Docs-style Diff Generator =================
@@ -285,15 +341,15 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
       const tailoredBp: ResumeBlueprint | undefined = data.tailored_blueprint;
       if (tailoredBp) {
-        // Compute granular suggestions between current blueprint and tailored blueprint
+        // Compute suggestions between master blueprint and tailored blueprint
         const newSuggestions: { [id: string]: AISuggestion } = {};
 
         // 1. Summary Diff
-        if (tailoredBp.summary && tailoredBp.summary !== blueprint.summary) {
+        if (tailoredBp.summary && tailoredBp.summary !== masterBlueprint.summary) {
           newSuggestions['summary'] = {
             id: 'summary',
             type: 'summary',
-            originalText: blueprint.summary || '',
+            originalText: masterBlueprint.summary || '',
             suggestedText: tailoredBp.summary,
             status: 'pending',
             reason: `Optimized summary for ${role} role and key requirements.`
@@ -301,11 +357,11 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         }
 
         // 2. Experience Bullets Diff
-        (tailoredBp.experience || []).forEach((tailoredExp, expIdx) => {
-          const currentExp = blueprint.experience?.[expIdx];
-          if (currentExp) {
-            (tailoredExp.bullets || []).forEach((tBullet, bIdx) => {
-              const origBullet = currentExp.bullets?.[bIdx];
+        (tailoredBp.experience || []).forEach((tExp, expIdx) => {
+          const mExp = masterBlueprint.experience?.[expIdx];
+          if (mExp) {
+            (tExp.bullets || []).forEach((tBullet, bIdx) => {
+              const origBullet = mExp.bullets?.[bIdx];
               if (origBullet && origBullet !== tBullet) {
                 const id = `exp-${expIdx}-${bIdx}`;
                 newSuggestions[id] = {
@@ -324,11 +380,11 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         });
 
         // 3. Project Bullets Diff
-        (tailoredBp.projects || []).forEach((tailoredProj, projIdx) => {
-          const currentProj = blueprint.projects?.[projIdx];
-          if (currentProj) {
-            (tailoredProj.bullets || []).forEach((tBullet, bIdx) => {
-              const origBullet = currentProj.bullets?.[bIdx];
+        (tailoredBp.projects || []).forEach((tProj, projIdx) => {
+          const mProj = masterBlueprint.projects?.[projIdx];
+          if (mProj) {
+            (tProj.bullets || []).forEach((tBullet, bIdx) => {
+              const origBullet = mProj.bullets?.[bIdx];
               if (origBullet && origBullet !== tBullet) {
                 const id = `proj-${projIdx}-${bIdx}`;
                 newSuggestions[id] = {
@@ -346,13 +402,11 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           }
         });
 
+        setTailoredBlueprint(tailoredBp);
         setSuggestions(newSuggestions);
         setAtsScore(data.ats_score || 94);
-        setIsTailorOpen(false);
-        setIsDirty(true);
-
-        const count = Object.keys(newSuggestions).length;
-        onSuccess(`Tailored for ${company || 'role'}! ${count} AI suggestions ready for your review (ATS Match: ${data.ats_score || 94}%).`);
+        setActiveTab('tailor'); // Automatically switch to Job Tailor tab
+        onSuccess(`Tailored for ${company || 'role'}! ${Object.keys(newSuggestions).length} AI suggestions ready for your review (ATS Match: ${data.ats_score || 94}%).`);
         
         confetti({
           particleCount: 50,
@@ -374,18 +428,18 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     if (!sug) return;
 
     if (sug.type === 'summary') {
-      updateBlueprint({ ...blueprint, summary: sug.suggestedText });
+      setTailoredBlueprint(prev => ({ ...prev, summary: sug.suggestedText }));
     } else if (sug.type === 'exp_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
-      const expList = [...(blueprint.experience || [])];
+      const expList = [...(tailoredBlueprint.experience || [])];
       if (expList[sug.parentIndex]?.bullets) {
         expList[sug.parentIndex].bullets[sug.bulletIndex] = sug.suggestedText;
-        updateBlueprint({ ...blueprint, experience: expList });
+        setTailoredBlueprint(prev => ({ ...prev, experience: expList }));
       }
     } else if (sug.type === 'proj_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
-      const projList = [...(blueprint.projects || [])];
+      const projList = [...(tailoredBlueprint.projects || [])];
       if (projList[sug.parentIndex]?.bullets) {
         projList[sug.parentIndex].bullets[sug.bulletIndex] = sug.suggestedText;
-        updateBlueprint({ ...blueprint, projects: projList });
+        setTailoredBlueprint(prev => ({ ...prev, projects: projList }));
       }
     }
 
@@ -395,8 +449,27 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     }));
   };
 
-  // Reject a single AI suggestion (keep original)
+  // Reject a single AI suggestion (keep original from master)
   const handleRejectSuggestion = (id: string) => {
+    const sug = suggestions[id];
+    if (!sug) return;
+
+    if (sug.type === 'summary') {
+      setTailoredBlueprint(prev => ({ ...prev, summary: sug.originalText }));
+    } else if (sug.type === 'exp_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
+      const expList = [...(tailoredBlueprint.experience || [])];
+      if (expList[sug.parentIndex]?.bullets) {
+        expList[sug.parentIndex].bullets[sug.bulletIndex] = sug.originalText;
+        setTailoredBlueprint(prev => ({ ...prev, experience: expList }));
+      }
+    } else if (sug.type === 'proj_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
+      const projList = [...(tailoredBlueprint.projects || [])];
+      if (projList[sug.parentIndex]?.bullets) {
+        projList[sug.parentIndex].bullets[sug.bulletIndex] = sug.originalText;
+        setTailoredBlueprint(prev => ({ ...prev, projects: projList }));
+      }
+    }
+
     setSuggestions(prev => ({
       ...prev,
       [id]: { ...prev[id], status: 'rejected' }
@@ -405,7 +478,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
   // Accept All Pending Suggestions
   const handleAcceptAllSuggestions = () => {
-    let newBp = { ...blueprint };
+    let newBp = { ...tailoredBlueprint };
 
     Object.values(suggestions).forEach(sug => {
       if (sug.status === 'pending') {
@@ -432,20 +505,20 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       updatedSugs[k] = { ...suggestions[k], status: 'accepted' };
     });
 
-    setBlueprint(newBp);
+    setTailoredBlueprint(newBp);
     setSuggestions(updatedSugs);
-    setIsDirty(true);
-    onSuccess('Accepted all AI suggestions!');
+    onSuccess('Accepted all AI suggestions for this tailored resume!');
   };
 
   // Reject All Pending Suggestions
   const handleRejectAllSuggestions = () => {
+    setTailoredBlueprint({ ...masterBlueprint });
     const updatedSugs: { [id: string]: AISuggestion } = {};
     Object.keys(suggestions).forEach(k => {
       updatedSugs[k] = { ...suggestions[k], status: 'rejected' };
     });
     setSuggestions(updatedSugs);
-    onSuccess('Kept all original content and rejected AI suggestions.');
+    onSuccess('Reverted all changes to match your Master Resume.');
   };
 
   const pendingSuggestionsCount = Object.values(suggestions).filter(s => s.status === 'pending').length;
@@ -453,6 +526,60 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   // Print to PDF
   const handlePrint = () => {
     window.print();
+  };
+
+  // Export as Markdown
+  const handleCopyMarkdown = () => {
+    const bp = activeBlueprint;
+    let md = `# ${bp.contact.full_name}\n`;
+    md += `${bp.contact.email} | ${bp.contact.phone} | ${bp.contact.location}\n`;
+    if (bp.contact.github_url) md += `GitHub: ${bp.contact.github_url} | `;
+    if (bp.contact.linkedin_url) md += `LinkedIn: ${bp.contact.linkedin_url}\n\n`;
+
+    if (bp.summary) {
+      md += `## Professional Summary\n${bp.summary}\n\n`;
+    }
+
+    if (bp.experience && bp.experience.length > 0) {
+      md += `## Work Experience\n`;
+      bp.experience.forEach(exp => {
+        md += `### ${exp.role} — ${exp.company} (${exp.start_date} - ${exp.end_date || 'Present'})\n`;
+        exp.bullets.forEach(b => {
+          md += `- ${b}\n`;
+        });
+        md += `\n`;
+      });
+    }
+
+    if (bp.projects && bp.projects.length > 0) {
+      md += `## Technical Projects\n`;
+      bp.projects.forEach(p => {
+        md += `### ${p.name} (${p.tech_stack})\n`;
+        p.bullets.forEach(b => {
+          md += `- ${b}\n`;
+        });
+        md += `\n`;
+      });
+    }
+
+    if (bp.skills && bp.skills.length > 0) {
+      md += `## Technical Skills\n`;
+      bp.skills.forEach(s => {
+        md += `**${s.category}**: ${s.skills.join(', ')}\n`;
+      });
+      md += `\n`;
+    }
+
+    if (bp.education && bp.education.length > 0) {
+      md += `## Education\n`;
+      bp.education.forEach(edu => {
+        md += `### ${edu.university} — ${edu.degree} (${edu.start_date} - ${edu.end_date})\n`;
+      });
+      md += `\n`;
+    }
+
+    navigator.clipboard.writeText(md);
+    onSuccess('Resume Markdown copied to clipboard!');
   };
 
   // --- Experience Actions ---
@@ -466,39 +593,39 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       is_current: true,
       bullets: ['Led development of core features contributing to system performance and team velocity.']
     };
-    updateBlueprint({
-      ...blueprint,
-      experience: [newEntry, ...(blueprint.experience || [])]
+    updateActiveBlueprint({
+      ...activeBlueprint,
+      experience: [newEntry, ...(activeBlueprint.experience || [])]
     });
   };
 
   const updateExperience = (idx: number, field: keyof ExperienceEntry, val: any) => {
-    const updated = [...(blueprint.experience || [])];
+    const updated = [...(activeBlueprint.experience || [])];
     updated[idx] = { ...updated[idx], [field]: val };
-    updateBlueprint({ ...blueprint, experience: updated });
+    updateActiveBlueprint({ ...activeBlueprint, experience: updated });
   };
 
   const deleteExperience = (idx: number) => {
-    const updated = (blueprint.experience || []).filter((_, i) => i !== idx);
-    updateBlueprint({ ...blueprint, experience: updated });
+    const updated = (activeBlueprint.experience || []).filter((_, i) => i !== idx);
+    updateActiveBlueprint({ ...activeBlueprint, experience: updated });
   };
 
   const addExpBullet = (expIdx: number) => {
-    const updated = [...(blueprint.experience || [])];
+    const updated = [...(activeBlueprint.experience || [])];
     updated[expIdx].bullets = [...(updated[expIdx].bullets || []), 'Engineered high-impact solution using modern engineering principles.'];
-    updateBlueprint({ ...blueprint, experience: updated });
+    updateActiveBlueprint({ ...activeBlueprint, experience: updated });
   };
 
   const updateExpBullet = (expIdx: number, bulletIdx: number, val: string) => {
-    const updated = [...(blueprint.experience || [])];
+    const updated = [...(activeBlueprint.experience || [])];
     updated[expIdx].bullets[bulletIdx] = val;
-    updateBlueprint({ ...blueprint, experience: updated });
+    updateActiveBlueprint({ ...activeBlueprint, experience: updated });
   };
 
   const deleteExpBullet = (expIdx: number, bulletIdx: number) => {
-    const updated = [...(blueprint.experience || [])];
+    const updated = [...(activeBlueprint.experience || [])];
     updated[expIdx].bullets = updated[expIdx].bullets.filter((_, i) => i !== bulletIdx);
-    updateBlueprint({ ...blueprint, experience: updated });
+    updateActiveBlueprint({ ...activeBlueprint, experience: updated });
   };
 
   // --- Project Actions ---
@@ -510,39 +637,39 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       live_url: '',
       bullets: ['Developed full-stack application featuring automated data sync and responsive design.']
     };
-    updateBlueprint({
-      ...blueprint,
-      projects: [newProj, ...(blueprint.projects || [])]
+    updateActiveBlueprint({
+      ...activeBlueprint,
+      projects: [newProj, ...(activeBlueprint.projects || [])]
     });
   };
 
   const updateProject = (idx: number, field: keyof ProjectEntry, val: any) => {
-    const updated = [...(blueprint.projects || [])];
+    const updated = [...(activeBlueprint.projects || [])];
     updated[idx] = { ...updated[idx], [field]: val };
-    updateBlueprint({ ...blueprint, projects: updated });
+    updateActiveBlueprint({ ...activeBlueprint, projects: updated });
   };
 
   const deleteProject = (idx: number) => {
-    const updated = (blueprint.projects || []).filter((_, i) => i !== idx);
-    updateBlueprint({ ...blueprint, projects: updated });
+    const updated = (activeBlueprint.projects || []).filter((_, i) => i !== idx);
+    updateActiveBlueprint({ ...activeBlueprint, projects: updated });
   };
 
   const addProjBullet = (projIdx: number) => {
-    const updated = [...(blueprint.projects || [])];
+    const updated = [...(activeBlueprint.projects || [])];
     updated[projIdx].bullets = [...(updated[projIdx].bullets || []), 'Implemented critical logic enhancing user throughput.'];
-    updateBlueprint({ ...blueprint, projects: updated });
+    updateActiveBlueprint({ ...activeBlueprint, projects: updated });
   };
 
   const updateProjBullet = (projIdx: number, bulletIdx: number, val: string) => {
-    const updated = [...(blueprint.projects || [])];
+    const updated = [...(activeBlueprint.projects || [])];
     updated[projIdx].bullets[bulletIdx] = val;
-    updateBlueprint({ ...blueprint, projects: updated });
+    updateActiveBlueprint({ ...activeBlueprint, projects: updated });
   };
 
   const deleteProjBullet = (projIdx: number, bulletIdx: number) => {
-    const updated = [...(blueprint.projects || [])];
+    const updated = [...(activeBlueprint.projects || [])];
     updated[projIdx].bullets = updated[projIdx].bullets.filter((_, i) => i !== bulletIdx);
-    updateBlueprint({ ...blueprint, projects: updated });
+    updateActiveBlueprint({ ...activeBlueprint, projects: updated });
   };
 
   // --- Skill Category Actions ---
@@ -551,38 +678,38 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       category: 'Specialized Tools',
       skills: ['Git', 'Docker']
     };
-    updateBlueprint({
-      ...blueprint,
-      skills: [...(blueprint.skills || []), newCat]
+    updateActiveBlueprint({
+      ...activeBlueprint,
+      skills: [...(activeBlueprint.skills || []), newCat]
     });
   };
 
   const updateSkillCategoryName = (catIdx: number, name: string) => {
-    const updated = [...(blueprint.skills || [])];
+    const updated = [...(activeBlueprint.skills || [])];
     updated[catIdx].category = name;
-    updateBlueprint({ ...blueprint, skills: updated });
+    updateActiveBlueprint({ ...activeBlueprint, skills: updated });
   };
 
   const deleteSkillCategory = (catIdx: number) => {
-    const updated = (blueprint.skills || []).filter((_, i) => i !== catIdx);
-    updateBlueprint({ ...blueprint, skills: updated });
+    const updated = (activeBlueprint.skills || []).filter((_, i) => i !== catIdx);
+    updateActiveBlueprint({ ...activeBlueprint, skills: updated });
   };
 
   const addSkillTag = (catIdx: number, tag: string) => {
     const trimmed = tag.trim();
     if (!trimmed) return;
-    const updated = [...(blueprint.skills || [])];
+    const updated = [...(activeBlueprint.skills || [])];
     if (!updated[catIdx].skills.includes(trimmed)) {
       updated[catIdx].skills = [...updated[catIdx].skills, trimmed];
-      updateBlueprint({ ...blueprint, skills: updated });
+      updateActiveBlueprint({ ...activeBlueprint, skills: updated });
     }
     setNewSkillInput({ ...newSkillInput, [catIdx]: '' });
   };
 
   const removeSkillTag = (catIdx: number, skillIdx: number) => {
-    const updated = [...(blueprint.skills || [])];
+    const updated = [...(activeBlueprint.skills || [])];
     updated[catIdx].skills = updated[catIdx].skills.filter((_, i) => i !== skillIdx);
-    updateBlueprint({ ...blueprint, skills: updated });
+    updateActiveBlueprint({ ...activeBlueprint, skills: updated });
   };
 
   // --- Education Actions ---
@@ -595,40 +722,40 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       end_date: '2024',
       gpa: ''
     };
-    updateBlueprint({
-      ...blueprint,
-      education: [...(blueprint.education || []), newEdu]
+    updateActiveBlueprint({
+      ...activeBlueprint,
+      education: [...(activeBlueprint.education || []), newEdu]
     });
   };
 
   const updateEducation = (idx: number, field: keyof EducationEntry, val: string) => {
-    const updated = [...(blueprint.education || [])];
+    const updated = [...(activeBlueprint.education || [])];
     updated[idx] = { ...updated[idx], [field]: val };
-    updateBlueprint({ ...blueprint, education: updated });
+    updateActiveBlueprint({ ...activeBlueprint, education: updated });
   };
 
   const deleteEducation = (idx: number) => {
-    const updated = (blueprint.education || []).filter((_, i) => i !== idx);
-    updateBlueprint({ ...blueprint, education: updated });
+    const updated = (activeBlueprint.education || []).filter((_, i) => i !== idx);
+    updateActiveBlueprint({ ...activeBlueprint, education: updated });
   };
 
   // --- Achievement Actions ---
   const addAchievement = () => {
-    updateBlueprint({
-      ...blueprint,
-      achievements: [...(blueprint.achievements || []), 'Recognized for technical excellence / Hackathon award.']
+    updateActiveBlueprint({
+      ...activeBlueprint,
+      achievements: [...(activeBlueprint.achievements || []), 'Recognized for technical excellence / Hackathon award.']
     });
   };
 
   const updateAchievement = (idx: number, val: string) => {
-    const updated = [...(blueprint.achievements || [])];
+    const updated = [...(activeBlueprint.achievements || [])];
     updated[idx] = val;
-    updateBlueprint({ ...blueprint, achievements: updated });
+    updateActiveBlueprint({ ...activeBlueprint, achievements: updated });
   };
 
   const deleteAchievement = (idx: number) => {
-    const updated = (blueprint.achievements || []).filter((_, i) => i !== idx);
-    updateBlueprint({ ...blueprint, achievements: updated });
+    const updated = (activeBlueprint.achievements || []).filter((_, i) => i !== idx);
+    updateActiveBlueprint({ ...activeBlueprint, achievements: updated });
   };
 
   // Styling helper classes based on templateStyle
@@ -656,548 +783,31 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     }
   };
 
-  return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Controls Toolbar (Hidden in Print) */}
-      <div 
-        className="no-print flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl border shadow-sm transition-all"
-        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/80 dark:text-blue-400">
-            <FileText className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-                Master ATS Resume Studio
-              </h2>
-              {hasMasterResume ? (
-                <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Master Synced
-                </span>
-              ) : (
-                <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 flex items-center gap-1">
-                  Default Template
-                </span>
-              )}
-              {isDirty && (
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                  Unsaved Changes
-                </span>
-              )}
-            </div>
-            <p className="text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
-              Google Docs-style Review Editor — Accept, Edit, or Reject JD optimizations live on your master template
-            </p>
-          </div>
-        </div>
+  // Render individual sections dynamically based on sectionOrder
+  const renderSection = (key: SectionKey) => {
+    if (!visibleSections[key]) return null;
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* View Mode Toggle */}
-          <div 
-            className="flex items-center p-1 rounded-xl border"
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
-          >
-            <button
-              onClick={() => setIsEditMode(true)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                isEditMode
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:text-blue-600'
-              }`}
-              style={{ color: isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Interactive Editor</span>
-            </button>
-            <button
-              onClick={() => setIsEditMode(false)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                !isEditMode
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'hover:text-blue-600'
-              }`}
-              style={{ color: !isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Clean ATS Preview</span>
-            </button>
-          </div>
-
-          {/* Template Style Dropdown Toggle */}
-          <button
-            onClick={() => setIsStyleOpen(!isStyleOpen)}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-              isStyleOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
-            }`}
-            style={{
-              backgroundColor: isStyleOpen ? undefined : 'var(--bg-tertiary)',
-              color: isStyleOpen ? undefined : 'var(--text-primary)',
-              borderColor: 'var(--border-primary)'
-            }}
-          >
-            <Palette className="w-3.5 h-3.5 text-blue-600" />
-            <span>Customize Template</span>
-          </button>
-
-          {/* AI Tailoring Drawer Button */}
-          <button
-            onClick={() => setIsTailorOpen(!isTailorOpen)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
-              isTailorOpen 
-                ? 'bg-purple-600 text-white shadow-md' 
-                : 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>AI Tailor for JD</span>
-          </button>
-
-          {/* Save Master Blueprint */}
-          <button
-            onClick={handleSaveMaster}
-            disabled={isSaving}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Saving...' : 'Save Blueprint'}</span>
-          </button>
-
-          {/* Revert Button if dirty or tailored */}
-          {masterBlueprint && isDirty && (
-            <button
-              onClick={handleResetToMaster}
-              className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-              style={{
-                backgroundColor: 'var(--bg-tertiary)',
-                color: 'var(--text-primary)',
-                borderColor: 'var(--border-primary)'
-              }}
-              title="Revert to Original Master Resume"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Revert</span>
-            </button>
-          )}
-
-          {/* Upload Resume Modal */}
-          <button
-            onClick={() => setIsResumeModalOpen(true)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              borderColor: 'var(--border-primary)'
-            }}
-          >
-            <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
-            <span>Upload PDF</span>
-          </button>
-
-          {/* Print / Export PDF */}
-          <button
-            onClick={handlePrint}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              borderColor: 'var(--border-primary)'
-            }}
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print PDF</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Template Customizer Toolbar (Hidden in Print) */}
-      {isStyleOpen && (
-        <div 
-          className="no-print p-4 rounded-2xl border space-y-3 shadow-sm animate-in fade-in duration-200"
-          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
-        >
-          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--border-primary)' }}>
-            <div className="flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-blue-600" />
-              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
-                Template Appearance & Layout Controls
+    switch (key) {
+      case 'summary':
+        return (
+          <div key="summary" className="space-y-1.5 relative group">
+            <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
+              <h3 
+                className="text-xs font-bold uppercase tracking-wider font-mono" 
+                style={{ color: templateStyle.accentColor }}
+              >
+                Professional Summary
               </h3>
-            </div>
-            <button onClick={() => setIsStyleOpen(false)} className="text-gray-400 hover:text-gray-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-            {/* Font Family */}
-            <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Typography</label>
-              <select
-                value={templateStyle.fontFamily}
-                onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontFamily: e.target.value })}
-                className="input-base w-full text-xs"
-              >
-                <option value="Inter">Inter (Modern Clean)</option>
-                <option value="Merriweather">Merriweather (Executive Serif)</option>
-                <option value="Roboto">Roboto (Technical Sans)</option>
-                <option value="JetBrains Mono">JetBrains Mono (Developer)</option>
-              </select>
-            </div>
-
-            {/* Font Size */}
-            <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Density / Text Size</label>
-              <select
-                value={templateStyle.fontSize}
-                onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontSize: e.target.value })}
-                className="input-base w-full text-xs"
-              >
-                <option value="compact">Compact (Fit 1 Page)</option>
-                <option value="standard">Standard (10.5 pt)</option>
-                <option value="spacious">Spacious (11.5 pt)</option>
-              </select>
-            </div>
-
-            {/* Header Alignment */}
-            <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Header Align</label>
-              <select
-                value={templateStyle.headerAlign}
-                onChange={(e: any) => setTemplateStyle({ ...templateStyle, headerAlign: e.target.value })}
-                className="input-base w-full text-xs"
-              >
-                <option value="center">Centered (Standard ATS)</option>
-                <option value="left">Left Aligned (Modern Silicon Valley)</option>
-              </select>
-            </div>
-
-            {/* Accent Color Palette */}
-            <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Accent Theme</label>
-              <div className="flex items-center gap-2 pt-1">
-                {ACCENT_COLORS.map((col, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setTemplateStyle({ ...templateStyle, accentColor: col.value })}
-                    className={`w-6 h-6 rounded-full border-2 transition-all ${
-                      templateStyle.accentColor === col.value ? 'scale-110 border-blue-500 shadow-sm' : 'border-transparent'
-                    } ${col.class}`}
-                    title={col.name}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AI Tailoring Parameters Form (Hidden in Print) */}
-      {isTailorOpen && (
-        <div 
-          className="no-print p-6 rounded-2xl border space-y-4 shadow-sm animate-in fade-in duration-200"
-          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-600" />
-              <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                Target Job Description Optimizer
-              </h3>
-            </div>
-            {atsScore !== null && (
-              <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                <Award className="w-3.5 h-3.5" /> ATS Match: {atsScore}%
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Role Title</label>
-              <input
-                type="text"
-                placeholder="e.g. Senior Backend / Distributed Systems Engineer"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="input-base w-full text-xs"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Google, Stripe, Microsoft, DRDO"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                className="input-base w-full text-xs"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-semibold mb-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Target Job Description (JD) / Key Requirements
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Paste the target job description to dynamically align STAR impact bullets, tech keywords, and executive summary..."
-              value={jd}
-              onChange={(e) => setJd(e.target.value)}
-              className="input-base w-full text-xs font-mono leading-relaxed"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              onClick={() => setIsTailorOpen(false)}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleTailorResume}
-              disabled={loading}
-              className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Synthesizing Tailored STAR Bullets...</span>
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-4 h-4" />
-                  <span>Generate Tracked Changes</span>
-                </>
+              {isEditMode && (
+                <div className="no-print opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                  <button onClick={() => moveSectionUp('summary')} className="p-1 hover:text-blue-600" title="Move Up"><ArrowUp className="w-3 h-3" /></button>
+                  <button onClick={() => moveSectionDown('summary')} className="p-1 hover:text-blue-600" title="Move Down"><ArrowDown className="w-3 h-3" /></button>
+                </div>
               )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Google Docs-style Floating Review Bar for Pending Changes */}
-      {pendingSuggestionsCount > 0 && (
-        <div 
-          className="no-print p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/40 dark:to-blue-950/40"
-          style={{ borderColor: 'var(--border-primary)' }}
-        >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
-              <Wand2 className="w-4 h-4" />
             </div>
-            <div>
-              <h4 className="text-xs font-bold text-purple-900 dark:text-purple-200">
-                {pendingSuggestionsCount} Pending AI Suggestions for {company || 'Target Role'}
-              </h4>
-              <p className="text-[11px] text-purple-700 dark:text-purple-300">
-                Review highlighted changes below. You can Accept, Reject, or Edit each item inline.
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleAcceptAllSuggestions}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-all"
-            >
-              <CheckCheck className="w-3.5 h-3.5" />
-              <span>Accept All ({pendingSuggestionsCount})</span>
-            </button>
-            <button
-              onClick={handleRejectAllSuggestions}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
-            >
-              Reject All
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Resume Paper Canvas */}
-      <div className="w-full max-w-4xl mx-auto">
-        <div
-          className={`resume-paper p-8 sm:p-12 rounded-2xl shadow-xl space-y-5 transition-all ${getFontSizeClass()}`}
-          style={{
-            ...getFontFamilyStyle(),
-            backgroundColor: 'var(--bg-primary)',
-            border: isEditMode ? '1px solid var(--border-primary)' : '1px solid var(--border-secondary)',
-            color: 'var(--text-primary)',
-          }}
-        >
-          {/* ================= HEADER / CONTACT ================= */}
-          <div 
-            className="pb-3 space-y-1.5 border-b-2" 
-            style={{ 
-              borderColor: templateStyle.accentColor,
-              textAlign: templateStyle.headerAlign === 'center' ? 'center' : 'left'
-            }}
-          >
-            {isEditMode ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: templateStyle.accentColor }}>
-                    Candidate Name & Contact Details
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  value={blueprint.contact?.full_name || ''}
-                  onChange={(e) => updateContact('full_name', e.target.value)}
-                  placeholder="Your Full Name"
-                  className="w-full text-2xl font-black tracking-tight input-base"
-                  style={{ height: '42px', ...getFontFamilyStyle() }}
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <input
-                      type="email"
-                      value={blueprint.contact?.email || ''}
-                      onChange={(e) => updateContact('email', e.target.value)}
-                      placeholder="Email"
-                      className="input-base w-full text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <input
-                      type="text"
-                      value={blueprint.contact?.phone || ''}
-                      onChange={(e) => updateContact('phone', e.target.value)}
-                      placeholder="Phone"
-                      className="input-base w-full text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <input
-                      type="text"
-                      value={blueprint.contact?.location || ''}
-                      onChange={(e) => updateContact('location', e.target.value)}
-                      placeholder="Location (e.g. City, Country)"
-                      className="input-base w-full text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <Github className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                    <input
-                      type="text"
-                      value={blueprint.contact?.github_url || ''}
-                      onChange={(e) => updateContact('github_url', e.target.value)}
-                      placeholder="GitHub URL"
-                      className="input-base w-full text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Linkedin className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                    <input
-                      type="text"
-                      value={blueprint.contact?.linkedin_url || ''}
-                      onChange={(e) => updateContact('linkedin_url', e.target.value)}
-                      placeholder="LinkedIn URL"
-                      className="input-base w-full text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <input
-                      type="text"
-                      value={blueprint.contact?.portfolio_url || ''}
-                      onChange={(e) => updateContact('portfolio_url', e.target.value)}
-                      placeholder="Portfolio / Website URL"
-                      className="input-base w-full text-xs"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* Clean Preview Header */
-              <div className="space-y-1">
-                <h1 
-                  className="text-2xl sm:text-3xl font-bold tracking-tight uppercase"
-                  style={{ color: templateStyle.accentColor }}
-                >
-                  {blueprint.contact?.full_name || 'Software Engineer'}
-                </h1>
-                
-                <div 
-                  className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs pt-0.5 ${
-                    templateStyle.headerAlign === 'center' ? 'justify-center' : 'justify-start'
-                  }`}
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  {blueprint.contact?.location && <span>{blueprint.contact.location}</span>}
-                  {blueprint.contact?.phone && <span>• {blueprint.contact.phone}</span>}
-                  {blueprint.contact?.email && (
-                    <>
-                      <span>•</span>
-                      <a href={`mailto:${blueprint.contact.email}`} className="hover:underline text-blue-600 dark:text-blue-400">
-                        {blueprint.contact.email}
-                      </a>
-                    </>
-                  )}
-                  {blueprint.contact?.github_url && (
-                    <>
-                      <span>•</span>
-                      <a 
-                        href={blueprint.contact.github_url.startsWith('http') ? blueprint.contact.github_url : `https://${blueprint.contact.github_url}`} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="hover:underline text-blue-600 dark:text-blue-400"
-                      >
-                        GitHub
-                      </a>
-                    </>
-                  )}
-                  {blueprint.contact?.linkedin_url && (
-                    <>
-                      <span>•</span>
-                      <a 
-                        href={blueprint.contact.linkedin_url.startsWith('http') ? blueprint.contact.linkedin_url : `https://${blueprint.contact.linkedin_url}`} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="hover:underline text-blue-600 dark:text-blue-400"
-                      >
-                        LinkedIn
-                      </a>
-                    </>
-                  )}
-                  {blueprint.contact?.portfolio_url && (
-                    <>
-                      <span>•</span>
-                      <a 
-                        href={blueprint.contact.portfolio_url.startsWith('http') ? blueprint.contact.portfolio_url : `https://${blueprint.contact.portfolio_url}`} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="hover:underline text-blue-600 dark:text-blue-400"
-                      >
-                        Portfolio
-                      </a>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ================= PROFESSIONAL SUMMARY ================= */}
-          <div className="space-y-1.5">
-            <h3 
-              className="text-xs font-bold uppercase tracking-wider font-mono border-b pb-0.5" 
-              style={{ color: templateStyle.accentColor, borderColor: 'var(--border-primary)' }}
-            >
-              Professional Summary
-            </h3>
-
-            {/* Google Docs-style Diff Box if Summary has pending suggestion */}
-            {suggestions['summary'] && suggestions['summary'].status === 'pending' ? (
+            {/* Google Docs-style Diff Box if in Tailor tab with suggestion */}
+            {activeTab === 'tailor' && suggestions['summary'] && suggestions['summary'].status === 'pending' ? (
               <div className="p-3 rounded-xl border space-y-2 bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800">
                 <div className="flex items-center justify-between text-[11px] font-bold text-purple-800 dark:text-purple-300">
                   <span className="flex items-center gap-1.5">
@@ -1231,41 +841,51 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             ) : isEditMode ? (
               <textarea
                 rows={3}
-                value={blueprint.summary || ''}
-                onChange={(e) => updateBlueprint({ ...blueprint, summary: e.target.value })}
+                value={activeBlueprint.summary || ''}
+                onChange={(e) => updateActiveBlueprint({ ...activeBlueprint, summary: e.target.value })}
                 placeholder="Write a compelling executive summary highlighting your core tech strengths and architectural contributions..."
                 className="input-base w-full text-xs leading-relaxed"
                 style={getFontFamilyStyle()}
               />
             ) : (
               <p className="text-xs leading-relaxed text-justify" style={{ color: 'var(--text-secondary)' }}>
-                {blueprint.summary || 'Software engineering professional with deep technical expertise in systems design and modern cloud architectures.'}
+                {activeBlueprint.summary || 'Software engineering professional with deep technical expertise in systems design and modern cloud architectures.'}
               </p>
             )}
           </div>
+        );
 
-          {/* ================= WORK EXPERIENCE ================= */}
-          <div className="space-y-3.5">
+      case 'experience':
+        return (
+          <div key="experience" className="space-y-3.5 relative group">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 
-                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
-                style={{ color: templateStyle.accentColor }}
-              >
-                <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
-                Work Experience
-              </h3>
-              {isEditMode && (
-                <button
-                  onClick={addExperience}
-                  className="no-print text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              <div className="flex items-center gap-2">
+                <h3 
+                  className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                  style={{ color: templateStyle.accentColor }}
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Experience
-                </button>
+                  <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+                  Work Experience
+                </h3>
+              </div>
+              {isEditMode && (
+                <div className="no-print flex items-center gap-2">
+                  <button
+                    onClick={addExperience}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Job
+                  </button>
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                    <button onClick={() => moveSectionUp('experience')} className="p-1 hover:text-blue-600" title="Move Up"><ArrowUp className="w-3 h-3" /></button>
+                    <button onClick={() => moveSectionDown('experience')} className="p-1 hover:text-blue-600" title="Move Down"><ArrowDown className="w-3 h-3" /></button>
+                  </div>
+                </div>
               )}
             </div>
 
             <div className="space-y-3.5">
-              {(blueprint.experience || []).map((exp, expIdx) => (
+              {(activeBlueprint.experience || []).map((exp, expIdx) => (
                 <div key={expIdx} className={`space-y-1.5 ${isEditMode ? 'p-3.5 rounded-xl border' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
                     <div className="space-y-2">
@@ -1338,7 +958,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                       </div>
 
-                      {/* Experience Bullets Editor with Suggestion Boxes */}
+                      {/* Bullets with Suggestion Boxes in Tailor tab */}
                       <div className="space-y-1.5 pt-1">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -1353,7 +973,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         {(exp.bullets || []).map((bullet, bIdx) => {
                           const sugId = `exp-${expIdx}-${bIdx}`;
-                          const sug = suggestions[sugId];
+                          const sug = activeTab === 'tailor' ? suggestions[sugId] : null;
 
                           return (
                             <div key={bIdx} className="space-y-1">
@@ -1442,29 +1062,39 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               ))}
             </div>
           </div>
+        );
 
-          {/* ================= TECHNICAL PROJECTS ================= */}
-          <div className="space-y-3.5">
+      case 'projects':
+        return (
+          <div key="projects" className="space-y-3.5 relative group">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 
-                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
-                style={{ color: templateStyle.accentColor }}
-              >
-                <FolderGit2 className="w-3.5 h-3.5 text-blue-600" />
-                Technical Projects & Systems
-              </h3>
-              {isEditMode && (
-                <button
-                  onClick={addProject}
-                  className="no-print text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              <div className="flex items-center gap-2">
+                <h3 
+                  className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                  style={{ color: templateStyle.accentColor }}
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Project
-                </button>
+                  <FolderGit2 className="w-3.5 h-3.5 text-blue-600" />
+                  Technical Projects & Systems
+                </h3>
+              </div>
+              {isEditMode && (
+                <div className="no-print flex items-center gap-2">
+                  <button
+                    onClick={addProject}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Project
+                  </button>
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                    <button onClick={() => moveSectionUp('projects')} className="p-1 hover:text-blue-600" title="Move Up"><ArrowUp className="w-3 h-3" /></button>
+                    <button onClick={() => moveSectionDown('projects')} className="p-1 hover:text-blue-600" title="Move Down"><ArrowDown className="w-3 h-3" /></button>
+                  </div>
+                </div>
               )}
             </div>
 
             <div className="space-y-3.5">
-              {(blueprint.projects || []).map((proj, projIdx) => (
+              {(activeBlueprint.projects || []).map((proj, projIdx) => (
                 <div key={projIdx} className={`space-y-1.5 ${isEditMode ? 'p-3.5 rounded-xl border' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
                     <div className="space-y-2">
@@ -1542,7 +1172,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         {(proj.bullets || []).map((bullet, bIdx) => {
                           const sugId = `proj-${projIdx}-${bIdx}`;
-                          const sug = suggestions[sugId];
+                          const sug = activeTab === 'tailor' ? suggestions[sugId] : null;
 
                           return (
                             <div key={bIdx} className="space-y-1">
@@ -1646,29 +1276,39 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               ))}
             </div>
           </div>
+        );
 
-          {/* ================= TECHNICAL SKILLS ================= */}
-          <div className="space-y-2.5">
+      case 'skills':
+        return (
+          <div key="skills" className="space-y-2.5 relative group">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 
-                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
-                style={{ color: templateStyle.accentColor }}
-              >
-                <Code2 className="w-3.5 h-3.5 text-amber-600" />
-                Technical Skills & Tools
-              </h3>
-              {isEditMode && (
-                <button
-                  onClick={addSkillCategory}
-                  className="no-print text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              <div className="flex items-center gap-2">
+                <h3 
+                  className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                  style={{ color: templateStyle.accentColor }}
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Category
-                </button>
+                  <Code2 className="w-3.5 h-3.5 text-amber-600" />
+                  Technical Skills & Tools
+                </h3>
+              </div>
+              {isEditMode && (
+                <div className="no-print flex items-center gap-2">
+                  <button
+                    onClick={addSkillCategory}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Category
+                  </button>
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                    <button onClick={() => moveSectionUp('skills')} className="p-1 hover:text-blue-600" title="Move Up"><ArrowUp className="w-3 h-3" /></button>
+                    <button onClick={() => moveSectionDown('skills')} className="p-1 hover:text-blue-600" title="Move Down"><ArrowDown className="w-3 h-3" /></button>
+                  </div>
+                </div>
               )}
             </div>
 
             <div className="space-y-2">
-              {(blueprint.skills || []).map((cat, catIdx) => (
+              {(activeBlueprint.skills || []).map((cat, catIdx) => (
                 <div key={catIdx} className={isEditMode ? 'p-3 rounded-xl border space-y-2' : 'flex flex-col sm:flex-row sm:items-baseline gap-1 text-xs'} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
                     <div>
@@ -1743,29 +1383,39 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               ))}
             </div>
           </div>
+        );
 
-          {/* ================= EDUCATION ================= */}
-          <div className="space-y-2.5">
+      case 'education':
+        return (
+          <div key="education" className="space-y-2.5 relative group">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 
-                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
-                style={{ color: templateStyle.accentColor }}
-              >
-                <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
-                Education
-              </h3>
-              {isEditMode && (
-                <button
-                  onClick={addEducation}
-                  className="no-print text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              <div className="flex items-center gap-2">
+                <h3 
+                  className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                  style={{ color: templateStyle.accentColor }}
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add Education
-                </button>
+                  <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
+                  Education
+                </h3>
+              </div>
+              {isEditMode && (
+                <div className="no-print flex items-center gap-2">
+                  <button
+                    onClick={addEducation}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Education
+                  </button>
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                    <button onClick={() => moveSectionUp('education')} className="p-1 hover:text-blue-600" title="Move Up"><ArrowUp className="w-3 h-3" /></button>
+                    <button onClick={() => moveSectionDown('education')} className="p-1 hover:text-blue-600" title="Move Down"><ArrowDown className="w-3 h-3" /></button>
+                  </div>
+                </div>
               )}
             </div>
 
             <div className="space-y-2.5">
-              {(blueprint.education || []).map((edu, eduIdx) => (
+              {(activeBlueprint.education || []).map((edu, eduIdx) => (
                 <div key={eduIdx} className={isEditMode ? 'p-3 rounded-xl border space-y-2' : 'space-y-0.5 text-xs'} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
                     <div className="space-y-2">
@@ -1859,11 +1509,13 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               ))}
             </div>
           </div>
+        );
 
-          {/* ================= ACHIEVEMENTS & HACKATHONS ================= */}
-          {(blueprint.achievements && blueprint.achievements.length > 0 || isEditMode) && (
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
+      case 'achievements':
+        return (
+          <div key="achievements" className="space-y-2.5 relative group">
+            <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
+              <div className="flex items-center gap-2">
                 <h3 
                   className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
                   style={{ color: templateStyle.accentColor }}
@@ -1871,48 +1523,674 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   <Award className="w-3.5 h-3.5 text-amber-500" />
                   Achievements & Hackathons
                 </h3>
-                {isEditMode && (
+              </div>
+              {isEditMode && (
+                <div className="no-print flex items-center gap-2">
                   <button
                     onClick={addAchievement}
-                    className="no-print text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add Achievement
                   </button>
-                )}
-              </div>
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                    <button onClick={() => moveSectionUp('achievements')} className="p-1 hover:text-blue-600" title="Move Up"><ArrowUp className="w-3 h-3" /></button>
+                    <button onClick={() => moveSectionDown('achievements')} className="p-1 hover:text-blue-600" title="Move Down"><ArrowDown className="w-3 h-3" /></button>
+                  </div>
+                </div>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                {isEditMode ? (
-                  (blueprint.achievements || []).map((ach, achIdx) => (
-                    <div key={achIdx} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={ach}
-                        onChange={(e) => updateAchievement(achIdx, e.target.value)}
-                        placeholder="e.g. 1st Place Winner – SIH 2024, DRDO ADRDE Demonstration"
-                        className="input-base w-full text-xs"
-                      />
-                      <button
-                        onClick={() => deleteAchievement(achIdx)}
-                        className="text-red-400 hover:text-red-600 p-1"
-                        title="Delete achievement"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))
-                ) : (
-                  <ul className="list-disc list-outside ml-4 space-y-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                    {(blueprint.achievements || []).map((ach, achIdx) => (
-                      <li key={achIdx} className="leading-relaxed">
-                        {ach}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+            <div className="space-y-2">
+              {isEditMode ? (
+                (activeBlueprint.achievements || []).map((ach, achIdx) => (
+                  <div key={achIdx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={ach}
+                      onChange={(e) => updateAchievement(achIdx, e.target.value)}
+                      placeholder="e.g. 1st Place Winner – SIH 2024, DRDO ADRDE Demonstration"
+                      className="input-base w-full text-xs"
+                    />
+                    <button
+                      onClick={() => deleteAchievement(achIdx)}
+                      className="text-red-400 hover:text-red-600 p-1"
+                      title="Delete achievement"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <ul className="list-disc list-outside ml-4 space-y-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  {(activeBlueprint.achievements || []).map((ach, achIdx) => (
+                    <li key={achIdx} className="leading-relaxed">
+                      {ach}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* Top Main Tab Navigation (Cleanly separates Master Template vs Job Tailor) */}
+      <div 
+        className="no-print p-2 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+      >
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('master')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeTab === 'master'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+            style={{ color: activeTab === 'master' ? '#ffffff' : 'var(--text-secondary)' }}
+          >
+            <Layers className="w-4 h-4" />
+            <span>1. Master Template & Blueprint</span>
+            {hasMasterResume && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('tailor')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeTab === 'tailor'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+            style={{ color: activeTab === 'tailor' ? '#ffffff' : 'var(--text-secondary)' }}
+          >
+            <Target className="w-4 h-4" />
+            <span>2. Job Application Tailor (JD Optimizer)</span>
+            {pendingSuggestionsCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-gray-900 text-[10px] font-bold">
+                {pendingSuggestionsCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Action Controls for Current Active Tab */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View Mode Toggle */}
+          <div 
+            className="flex items-center p-1 rounded-xl border"
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+          >
+            <button
+              onClick={() => setIsEditMode(true)}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                isEditMode
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'hover:text-blue-600'
+              }`}
+              style={{ color: isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Interactive Editor</span>
+            </button>
+            <button
+              onClick={() => setIsEditMode(false)}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                !isEditMode
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'hover:text-blue-600'
+              }`}
+              style={{ color: !isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Clean ATS Preview</span>
+            </button>
+          </div>
+
+          {/* Section Manager Toggle */}
+          <button
+            onClick={() => {
+              setIsSectionManagerOpen(!isSectionManagerOpen);
+              setIsStyleOpen(false);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              isSectionManagerOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
+            }`}
+            style={{
+              backgroundColor: isSectionManagerOpen ? undefined : 'var(--bg-tertiary)',
+              color: isSectionManagerOpen ? undefined : 'var(--text-primary)',
+              borderColor: 'var(--border-primary)'
+            }}
+            title="Reorder & Toggle Sections"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
+            <span>Reorder Sections</span>
+          </button>
+
+          {/* Template Style Toggle */}
+          <button
+            onClick={() => {
+              setIsStyleOpen(!isStyleOpen);
+              setIsSectionManagerOpen(false);
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              isStyleOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
+            }`}
+            style={{
+              backgroundColor: isStyleOpen ? undefined : 'var(--bg-tertiary)',
+              color: isStyleOpen ? undefined : 'var(--text-primary)',
+              borderColor: 'var(--border-primary)'
+            }}
+          >
+            <Palette className="w-3.5 h-3.5 text-purple-600" />
+            <span>Styling</span>
+          </button>
+
+          {/* If on Master tab: Show Save Master Button */}
+          {activeTab === 'master' ? (
+            <>
+              <button
+                onClick={handleSaveMaster}
+                disabled={isSaving}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSaving ? 'Saving...' : 'Save Master'}</span>
+              </button>
+
+              <button
+                onClick={() => setIsResumeModalOpen(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  borderColor: 'var(--border-primary)'
+                }}
+              >
+                <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                <span>Upload PDF</span>
+              </button>
+            </>
+          ) : (
+            /* If on Tailor tab: Show Export & Copy Options */
+            <>
+              <button
+                onClick={handleCopyMarkdown}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  borderColor: 'var(--border-primary)'
+                }}
+                title="Copy formatted Markdown"
+              >
+                <Copy className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Copy Text</span>
+              </button>
+            </>
+          )}
+
+          {/* Print / Download PDF */}
+          <button
+            onClick={handlePrint}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              borderColor: 'var(--border-primary)'
+            }}
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print / PDF</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Section Reorder & Visibility Manager Drawer */}
+      {isSectionManagerOpen && (
+        <div 
+          className="no-print p-4 rounded-2xl border space-y-3 shadow-sm animate-in fade-in duration-200"
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4 text-blue-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+                Section Reordering & Visibility Manager
+              </h3>
+            </div>
+            <button onClick={() => setIsSectionManagerOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+            {sectionOrder.map((key, idx) => (
+              <div 
+                key={key} 
+                className="p-2.5 rounded-xl border flex flex-col justify-between gap-2"
+                style={{ 
+                  backgroundColor: visibleSections[key] ? 'var(--bg-secondary)' : 'var(--bg-tertiary)',
+                  borderColor: 'var(--border-primary)' 
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold capitalize text-[11px]" style={{ color: 'var(--text-primary)' }}>
+                    {idx + 1}. {key}
+                  </span>
+                  <button
+                    onClick={() => toggleSectionVisibility(key)}
+                    className="text-gray-400 hover:text-blue-600"
+                    title={visibleSections[key] ? 'Hide section' : 'Show section'}
+                  >
+                    {visibleSections[key] ? <Eye className="w-3.5 h-3.5 text-emerald-600" /> : <EyeOff className="w-3.5 h-3.5 text-gray-400" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1 justify-end pt-1 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+                  <button
+                    onClick={() => moveSectionUp(key)}
+                    disabled={idx === 0}
+                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30"
+                    title="Move section left / up"
+                  >
+                    <ArrowUp className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => moveSectionDown(key)}
+                    disabled={idx === sectionOrder.length - 1}
+                    className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-30"
+                    title="Move section right / down"
+                  >
+                    <ArrowDown className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Template Styling Controls Drawer */}
+      {isStyleOpen && (
+        <div 
+          className="no-print p-4 rounded-2xl border space-y-3 shadow-sm animate-in fade-in duration-200"
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-purple-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+                Template Appearance & Typography Controls
+              </h3>
+            </div>
+            <button onClick={() => setIsStyleOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            {/* Font Family */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Typography</label>
+              <select
+                value={templateStyle.fontFamily}
+                onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontFamily: e.target.value })}
+                className="input-base w-full text-xs"
+              >
+                <option value="Inter">Inter (Modern Clean)</option>
+                <option value="Merriweather">Merriweather (Executive Serif)</option>
+                <option value="Roboto">Roboto (Technical Sans)</option>
+                <option value="JetBrains Mono">JetBrains Mono (Developer)</option>
+              </select>
+            </div>
+
+            {/* Font Size */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Density / Text Size</label>
+              <select
+                value={templateStyle.fontSize}
+                onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontSize: e.target.value })}
+                className="input-base w-full text-xs"
+              >
+                <option value="compact">Compact (Fit 1 Page)</option>
+                <option value="standard">Standard (10.5 pt)</option>
+                <option value="spacious">Spacious (11.5 pt)</option>
+              </select>
+            </div>
+
+            {/* Header Alignment */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Header Align</label>
+              <select
+                value={templateStyle.headerAlign}
+                onChange={(e: any) => setTemplateStyle({ ...templateStyle, headerAlign: e.target.value })}
+                className="input-base w-full text-xs"
+              >
+                <option value="center">Centered (Standard ATS)</option>
+                <option value="left">Left Aligned (Modern Silicon Valley)</option>
+              </select>
+            </div>
+
+            {/* Accent Color Palette */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Accent Theme</label>
+              <div className="flex items-center gap-2 pt-1">
+                {ACCENT_COLORS.map((col, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setTemplateStyle({ ...templateStyle, accentColor: col.value })}
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${
+                      templateStyle.accentColor === col.value ? 'scale-110 border-blue-500 shadow-sm' : 'border-transparent'
+                    } ${col.class}`}
+                    title={col.name}
+                  />
+                ))}
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Dedicated Job Tailor Parameters Box */}
+      {activeTab === 'tailor' && (
+        <div 
+          className="no-print p-5 rounded-2xl border space-y-4 shadow-sm bg-purple-50/20 dark:bg-purple-950/10"
+          style={{ borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-600" />
+              <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                Target Job Description Optimizer
+              </h3>
+            </div>
+            {atsScore !== null && (
+              <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
+                <Award className="w-3.5 h-3.5" /> Tailored ATS Match: {atsScore}%
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Role Title</label>
+              <input
+                type="text"
+                placeholder="e.g. Senior Backend / Distributed Systems Engineer"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="input-base w-full text-xs"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Google, Stripe, Microsoft, DRDO"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                className="input-base w-full text-xs"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold mb-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              Target Job Description (JD) / Key Requirements
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Paste target job description to synthesize STAR impact bullets and align keyword density..."
+              value={jd}
+              onChange={(e) => setJd(e.target.value)}
+              className="input-base w-full text-xs font-mono leading-relaxed"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              * Tailoring generates a dedicated job copy and never alters your Master Base Resume without your explicit approval.
+            </p>
+            <button
+              onClick={handleTailorResume}
+              disabled={loading}
+              className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 shrink-0"
+            >
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Synthesizing Tailored STAR Bullets...</span>
+                </>
+              ) : (
+                <>
+                  <Wand2 className="w-4 h-4" />
+                  <span>Optimize Resume for this JD</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Google Docs-style Floating Review Bar for Pending Changes (In Tailor Tab) */}
+      {activeTab === 'tailor' && pendingSuggestionsCount > 0 && (
+        <div 
+          className="no-print p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/40 dark:to-blue-950/40"
+          style={{ borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+              <Wand2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-purple-900 dark:text-purple-200">
+                {pendingSuggestionsCount} Pending AI Suggestions for {company || 'Target Role'}
+              </h4>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                Review highlighted changes below. You can Accept, Reject, or Edit each item inline.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleAcceptAllSuggestions}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-all"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span>Accept All ({pendingSuggestionsCount})</span>
+            </button>
+            <button
+              onClick={handleRejectAllSuggestions}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+            >
+              Reject All
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Resume Canvas (Standard ATS Resume Layout) */}
+      <div className="w-full max-w-4xl mx-auto">
+        <div
+          className={`resume-paper p-8 sm:p-12 rounded-2xl shadow-xl space-y-5 transition-all ${getFontSizeClass()}`}
+          style={{
+            ...getFontFamilyStyle(),
+            backgroundColor: 'var(--bg-primary)',
+            border: isEditMode ? '1px solid var(--border-primary)' : '1px solid var(--border-secondary)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {/* ================= HEADER / CONTACT ================= */}
+          <div 
+            className="pb-3 space-y-1.5 border-b-2" 
+            style={{ 
+              borderColor: templateStyle.accentColor,
+              textAlign: templateStyle.headerAlign === 'center' ? 'center' : 'left'
+            }}
+          >
+            {isEditMode ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: templateStyle.accentColor }}>
+                    Candidate Name & Contact Details ({activeTab === 'master' ? 'Master Blueprint' : 'Tailored Copy'})
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={activeBlueprint.contact?.full_name || ''}
+                  onChange={(e) => updateContact('full_name', e.target.value)}
+                  placeholder="Your Full Name"
+                  className="w-full text-2xl font-black tracking-tight input-base"
+                  style={{ height: '42px', ...getFontFamilyStyle() }}
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <input
+                      type="email"
+                      value={activeBlueprint.contact?.email || ''}
+                      onChange={(e) => updateContact('email', e.target.value)}
+                      placeholder="Email"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <input
+                      type="text"
+                      value={activeBlueprint.contact?.phone || ''}
+                      onChange={(e) => updateContact('phone', e.target.value)}
+                      placeholder="Phone"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <input
+                      type="text"
+                      value={activeBlueprint.contact?.location || ''}
+                      onChange={(e) => updateContact('location', e.target.value)}
+                      placeholder="Location (e.g. City, Country)"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <Github className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                    <input
+                      type="text"
+                      value={activeBlueprint.contact?.github_url || ''}
+                      onChange={(e) => updateContact('github_url', e.target.value)}
+                      placeholder="GitHub URL"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Linkedin className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+                    <input
+                      type="text"
+                      value={activeBlueprint.contact?.linkedin_url || ''}
+                      onChange={(e) => updateContact('linkedin_url', e.target.value)}
+                      placeholder="LinkedIn URL"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                    <input
+                      type="text"
+                      value={activeBlueprint.contact?.portfolio_url || ''}
+                      onChange={(e) => updateContact('portfolio_url', e.target.value)}
+                      placeholder="Portfolio / Website URL"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Clean Preview Header */
+              <div className="space-y-1">
+                <h1 
+                  className="text-2xl sm:text-3xl font-bold tracking-tight uppercase"
+                  style={{ color: templateStyle.accentColor }}
+                >
+                  {activeBlueprint.contact?.full_name || 'Software Engineer'}
+                </h1>
+                
+                <div 
+                  className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs pt-0.5 ${
+                    templateStyle.headerAlign === 'center' ? 'justify-center' : 'justify-start'
+                  }`}
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {activeBlueprint.contact?.location && <span>{activeBlueprint.contact.location}</span>}
+                  {activeBlueprint.contact?.phone && <span>• {activeBlueprint.contact.phone}</span>}
+                  {activeBlueprint.contact?.email && (
+                    <>
+                      <span>•</span>
+                      <a href={`mailto:${activeBlueprint.contact.email}`} className="hover:underline text-blue-600 dark:text-blue-400">
+                        {activeBlueprint.contact.email}
+                      </a>
+                    </>
+                  )}
+                  {activeBlueprint.contact?.github_url && (
+                    <>
+                      <span>•</span>
+                      <a 
+                        href={activeBlueprint.contact.github_url.startsWith('http') ? activeBlueprint.contact.github_url : `https://${activeBlueprint.contact.github_url}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="hover:underline text-blue-600 dark:text-blue-400"
+                      >
+                        GitHub
+                      </a>
+                    </>
+                  )}
+                  {activeBlueprint.contact?.linkedin_url && (
+                    <>
+                      <span>•</span>
+                      <a 
+                        href={activeBlueprint.contact.linkedin_url.startsWith('http') ? activeBlueprint.contact.linkedin_url : `https://${activeBlueprint.contact.linkedin_url}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="hover:underline text-blue-600 dark:text-blue-400"
+                      >
+                        LinkedIn
+                      </a>
+                    </>
+                  )}
+                  {activeBlueprint.contact?.portfolio_url && (
+                    <>
+                      <span>•</span>
+                      <a 
+                        href={activeBlueprint.contact.portfolio_url.startsWith('http') ? activeBlueprint.contact.portfolio_url : `https://${activeBlueprint.contact.portfolio_url}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="hover:underline text-blue-600 dark:text-blue-400"
+                      >
+                        Portfolio
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ================= DYNAMICALLY ORDERED RESUME SECTIONS ================= */}
+          {sectionOrder.map(key => renderSection(key))}
         </div>
       </div>
 
@@ -1922,11 +2200,11 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         onClose={() => setIsResumeModalOpen(false)}
         onUploadSuccess={(bp) => {
           if (bp) {
-            setBlueprint(bp);
             setMasterBlueprint(bp);
+            setTailoredBlueprint(bp);
             setHasMasterResume(true);
             setSuggestions({});
-            setIsDirty(false);
+            setIsMasterDirty(false);
           }
           setIsResumeModalOpen(false);
         }}
