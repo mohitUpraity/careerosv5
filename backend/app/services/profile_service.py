@@ -370,7 +370,20 @@ class ProfileService:
                         add_link(pid, sid, "USES_TECH")
                         add_link(f"user_{user_id}", sid, "HAS_SKILL")
 
-                # 3. Work Experience & Companies
+                # 3. Work Experience & Companies (Strictly Filtered)
+                invalid_comp_set = {
+                    'building', 'deploying', 'prototype', 'systems', 'winner', 'next',
+                    'generation', 'firewall', 'present', 'and', 'for', 'with', 'tight',
+                    'timelines', 'timeline', 'analysis', 'anomalous', 'detection', 'state', 'time',
+                    'risk', 'work', 'working', 'deliver', 'ship', 'features', 'rest', 'apis',
+                    'adrde,', 'adrde.', 'industry network', 'defence', 'research', 'development',
+                    '(drdo)', '(ngfw)', '(react,', 'node.js,', 'firebase,', 'mongodb,', 'postgresql)',
+                    '2026', 'feb', 'jun', 'apr', 'intern', 'conducted', 'engineered', 'developed',
+                    'currently', 'proven', 'ability', 'alongside', 'specialized', 'simulated',
+                    'suspicious', 'third', 'packets', 'packet', 'patterns', 'pipeline', 'potential',
+                    'prediction,', 'production', 'products', 'real', 'reviews', 'risks.', 'secure',
+                    'security.', 'services,', 'strengthening', 'traffic', 'under', 'upcoming', 'web'
+                }
                 exp_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[r:WORKED_AT]->(c:Company)
@@ -379,8 +392,13 @@ class ProfileService:
                     {"user_id": user_id}
                 )
                 for e in exp_res:
-                    cid = f"comp_{e['name']}"
-                    add_node(cid, e["name"], "company", "Employer / Company", {
+                    cname = (e.get("name") or "").strip()
+                    if not cname or len(cname) < 3 or cname.lower() in invalid_comp_set:
+                        continue
+                    if len(cname.split()) == 1 and (cname.lower() in invalid_comp_set or len(cname) < 4):
+                        continue
+                    cid = f"comp_{cname}"
+                    add_node(cid, cname, "company", "Employer / Company", {
                         "role": e.get("role", "Engineer"),
                         "timeline": f"{e.get('start', '')} - {e.get('end', 'Present')}"
                     })
@@ -401,7 +419,7 @@ class ProfileService:
                 )
                 for edu in edu_res:
                     uname = (edu.get("name") or "").strip()
-                    if len(uname) < 4:
+                    if len(uname) < 4 or uname.lower() in invalid_comp_set:
                         continue
                     uid = f"univ_{uname}"
                     add_node(uid, uname, "university", "University / College", {
@@ -427,7 +445,7 @@ class ProfileService:
                 )
                 for ach in ach_res:
                     aname = (ach.get("name") or "").strip()
-                    if len(aname) < 3:
+                    if len(aname) < 3 or aname.lower() in invalid_comp_set:
                         continue
                     aid = f"ach_{aname[:30]}"
                     add_node(aid, aname, "achievement", "Milestone & Hackathon", {"val": 16})
@@ -445,7 +463,7 @@ class ProfileService:
                 user_name_tokens = set(user_name.lower().split()) if user_name else set()
                 for s in skill_res:
                     sname = (s.get("name") or "").strip()
-                    if not sname or len(sname) > 30 or len(sname) < 2:
+                    if not sname or len(sname) > 30 or len(sname) < 2 or sname.lower() in invalid_comp_set:
                         continue
                     if sname.lower() == user_name.lower() or sname.lower() in user_name_tokens:
                         continue
@@ -453,7 +471,7 @@ class ProfileService:
                     add_node(sid, sname, "skill", s.get("category") or "Technical Skill", {"verified": True})
                     add_link(f"user_{user_id}", sid, "HAS_SKILL")
 
-                # 7. Connections & Alumni Bridges
+                # 7. Connections & Alumni Bridges (Inter-relations)
                 conn_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)
@@ -478,14 +496,20 @@ class ProfileService:
                         "is_alumni": is_alumni
                     })
                     add_link(f"user_{user_id}", pid, "CONNECTED_TO")
-                    if c.get("company"):
-                        cid = f"comp_{c['company']}"
-                        add_node(cid, c["company"], "company", "Target Company")
+                    
+                    comp_name = (c.get("company") or "").strip()
+                    if comp_name and comp_name.lower() not in invalid_comp_set and len(comp_name) > 2:
+                        cid = f"comp_{comp_name}"
+                        add_node(cid, comp_name, "company", "Target Company")
                         add_link(pid, cid, "WORKS_AT")
+                    
                     if c.get("univ"):
-                        uid = f"univ_{c['univ']}"
-                        add_node(uid, c["univ"], "university", "University Cluster")
-                        add_link(pid, uid, "ATTENDED")
+                        uname = c["univ"].strip()
+                        if uname and uname.lower() not in invalid_comp_set:
+                            uid = f"univ_{uname}"
+                            add_node(uid, uname, "university", "University / College")
+                            add_link(pid, uid, "ATTENDED")
+                            add_link(f"user_{user_id}", uid, "ATTENDED")
 
         except Exception as e:
             logger.warning(f"Error building graph topology from Neo4j: {e}")

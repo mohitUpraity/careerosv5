@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # AI Providers
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
 
     # Neo4j Graph Database
     NEO4J_URI: str = "neo4j+ssc://a68e0c1f.databases.neo4j.io"

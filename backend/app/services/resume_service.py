@@ -21,6 +21,55 @@ class ResumeService:
         pass
 
     @classmethod
+    def normalize_text(cls, raw_text: str) -> str:
+        """
+        Reconstructs fragmented line streams (common in PDF extractions where
+        every word or span is placed on an isolated line) into structured sentences and paragraphs.
+        """
+        if not raw_text:
+            return ""
+        
+        lines = [l.strip() for l in raw_text.splitlines()]
+        merged = []
+        buf = []
+        header_keywords = {
+            'summary', 'professional summary', 'profile', 'about me',
+            'experience', 'work experience', 'professional experience', 'employment',
+            'education', 'academics', 'academic background',
+            'projects', 'key projects', 'technical projects',
+            'technical skills', 'skills', 'skills & tools', 'technologies',
+            'achievements', 'hackathons', 'awards & achievements', 'honors & awards', 'certifications'
+        }
+        
+        for l in lines:
+            if not l:
+                continue
+            lower_l = l.lower()
+            is_header = lower_l in header_keywords or any(lower_l.startswith(h) and len(lower_l.split()) <= 4 for h in header_keywords)
+            is_bullet = l.startswith('●') or l.startswith('•') or l.startswith('- ') or l.startswith('* ') or l.startswith('+ ')
+            
+            if is_header or is_bullet:
+                if buf:
+                    merged.append(' '.join(buf))
+                    buf = []
+                merged.append(l)
+            elif len(l.split()) <= 2 and not any(p in l for p in ['@', '|', '+91', 'http', '.com', 'linkedin.com', 'github.com']):
+                # Word fragment
+                buf.append(l)
+                if len(buf) >= 8:
+                    merged.append(' '.join(buf))
+                    buf = []
+            else:
+                if buf:
+                    merged.append(' '.join(buf))
+                    buf = []
+                merged.append(l)
+        if buf:
+            merged.append(' '.join(buf))
+            
+        return '\n'.join(merged)
+
+    @classmethod
     def extract_text_from_pdf(cls, file_bytes: bytes) -> str:
         """Extracts clean digital text from a PDF byte stream while preserving layout structure."""
         try:
@@ -29,7 +78,8 @@ class ResumeService:
             for page in reader.pages:
                 page_text = page.extract_text() or ""
                 full_text.append(page_text.strip())
-            return "\n\n".join(full_text)
+            raw_extracted = "\n\n".join(full_text)
+            return cls.normalize_text(raw_extracted)
         except Exception as e:
             logger.error(f"Error reading PDF byte stream: {e}")
             return ""
@@ -37,35 +87,38 @@ class ResumeService:
     async def parse_resume_to_blueprint(self, raw_text: str) -> ResumeBlueprint:
         """
         Parses unstructured resume text into a strict JSON Layout Blueprint
-        using high-precision Gemini 1.5 Flash and Groq Llama 3.3.
+        using high-precision Groq (Llama 3.3 / GPT-OSS) and Gemini.
         """
         from app.services.llm_service import llm_service
 
         if not raw_text or not raw_text.strip():
             return self._advanced_heuristic_parser("", "")
 
+        normalized_text = self.normalize_text(raw_text)
+
         system_prompt = """You are an elite, high-precision ATS resume and candidate intelligence parser.
 Extract the EXACT factual information from the candidate's resume into a structured JSON blueprint.
 
 CRITICAL EXTRACTION RULES:
-1. Candidate Full Name: Extract the actual human person's name from the very top of the resume. Never put project names, technologies, or job titles as the candidate name.
-2. Education: Extract university/college name, degree title (e.g. B.Tech, B.E., M.S., B.S.), major/field of study, and years.
-3. Experience: Extract company name, role/title, dates, and achievement bullet points.
-4. Projects: Extract project title, tech stack used, and bullet points.
-5. Skills: Categorize real technical skills into clean groups (Languages, Frameworks, Databases, Cloud & DevOps, AI/ML & Tools).
+1. Candidate Full Name: Extract the actual human person's name from the very top of the resume. Never use project names, technologies, or job titles.
+2. Education: Extract genuine university or college names (e.g., 'Anand Engineering College, SGI Agra'), degree title (e.g. B.Tech, Bachelor of Technology), major, and years. Never extract technologies or project bullet points as university names.
+3. Experience: Extract genuine employer / company names (e.g., 'Defence Research & Development Organization (DRDO) – ADRDE, Agra', 'NovonixSoft', 'Google', 'TCS'). NEVER treat code frameworks (React, Node.js), verbs (developing, building, deploying, prototype), or bullet fragments as companies.
+4. Projects: Extract project titles, tech stack used, and bullet points.
+5. Skills: Categorize real technical skills into clean groups (Languages, Frameworks, Databases, DevOps & Cloud, AI/ML & Security).
+6. Achievements: Extract hackathons won, awards, rankings, and major milestones.
 
 Return ONLY valid JSON matching this schema (no markdown fences, no commentary):"""
 
         user_prompt = f"""
 Resume Content:
 \"\"\"
-{raw_text[:18000]}
+{normalized_text[:18000]}
 \"\"\"
 
 JSON Schema:
 {{
   "contact": {{
-    "full_name": "Exact Candidate Name",
+    "full_name": "Candidate Full Name",
     "email": "candidate email or empty",
     "phone": "candidate phone or empty",
     "location": "City, State or Country or empty",
@@ -86,7 +139,7 @@ JSON Schema:
   ],
   "experience": [
     {{
-      "company": "Company Name",
+      "company": "Exact Employer / Organization Name",
       "role": "Job Role / Title",
       "location": "Location or Remote",
       "start_date": "Start Date",
@@ -111,16 +164,24 @@ JSON Schema:
   "skills": [
     {{
       "category": "Languages",
-      "skills": ["Skill 1", "Skill 2"]
+      "skills": ["Python", "JavaScript", "TypeScript"]
     }},
     {{
       "category": "Frameworks",
-      "skills": ["Skill 1", "Skill 2"]
+      "skills": ["React", "FastAPI", "Node.js"]
     }},
     {{
       "category": "Databases & Cloud",
-      "skills": ["Skill 1", "Skill 2"]
+      "skills": ["MongoDB", "PostgreSQL", "Docker", "AWS"]
+    }},
+    {{
+      "category": "AI/ML & Security",
+      "skills": ["Network Security", "NLP", "RAG"]
     }}
+  ],
+  "achievements": [
+    "Winner of Smart India Hackathon (SIH) 2024",
+    "Winner of Microsoft Noida Hackathon 2025"
   ]
 }}
 """
@@ -132,13 +193,30 @@ JSON Schema:
 
         if parsed_data and isinstance(parsed_data, dict) and "contact" in parsed_data:
             try:
-                parsed_data["raw_text"] = raw_text
+                # Sanitize experience company names
+                valid_experiences = []
+                invalid_comp_words = {
+                    "building", "deploying", "prototype", "systems", "winner", "next",
+                    "generation", "firewall", "present", "and", "for", "with", "tight",
+                    "timeline", "analysis", "anomalous", "detection", "state", "time",
+                    "risk", "work", "working", "deliver", "ship", "features", "rest", "apis",
+                    "react", "node", "firebase", "mongodb", "postgresql", "python"
+                }
+                for exp_raw in parsed_data.get("experience", []):
+                    comp = (exp_raw.get("company") or "").strip()
+                    # Skip if company is a single invalid word
+                    if comp.lower() in invalid_comp_words or (len(comp.split()) == 1 and comp.lower() in invalid_comp_words):
+                        continue
+                    if len(comp) >= 3:
+                        valid_experiences.append(exp_raw)
+                parsed_data["experience"] = valid_experiences
+                parsed_data["raw_text"] = normalized_text
                 return ResumeBlueprint(**parsed_data)
             except Exception as pe:
                 logger.warning(f"Validation error constructing ResumeBlueprint from LLM output: {pe}")
 
         # Fallback to algorithmic parser if LLM fails
-        return self._advanced_heuristic_parser(raw_text, raw_text)
+        return self._advanced_heuristic_parser(normalized_text, normalized_text)
 
     def _advanced_heuristic_parser(self, text: str, raw_text: str) -> ResumeBlueprint:
         """
@@ -151,22 +229,23 @@ JSON Schema:
         - Achievements & Hackathons (Milestones, Awards)
         Never mixes bullet text or project verbs into Education or Skills.
         """
-        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        normalized = self.normalize_text(raw_text)
+        lines = [line.strip() for line in normalized.splitlines() if line.strip()]
 
         # 1. Contact info extraction
-        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', raw_text)
-        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,13}', raw_text)
-        github_match = re.search(r'(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)', raw_text, re.IGNORECASE)
-        linkedin_match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)', raw_text, re.IGNORECASE)
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', normalized)
+        phone_match = re.search(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,13}', normalized)
+        github_match = re.search(r'(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)', normalized, re.IGNORECASE)
+        linkedin_match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)', normalized, re.IGNORECASE)
 
         name = ""
         for line in lines[:5]:
-            if len(line.split()) <= 4 and not re.search(r'@|phone|email|github|linkedin|resume|curriculum|profile|developer|engineer', line, re.IGNORECASE):
+            if len(line.split()) <= 4 and not re.search(r'@|phone|email|github|linkedin|resume|curriculum|profile|developer|engineer|software|full-stack', line, re.IGNORECASE):
                 if re.match(r'^[A-Z][a-zA-Z\s\.\'-]+$', line):
                     name = line
                     break
         if not name and lines:
-            name = lines[0][:40]
+            name = lines[0].split("|")[0].strip()[:40]
 
         # 2. Segment lines into distinct sections
         sections: Dict[str, List[str]] = {
@@ -199,31 +278,26 @@ JSON Schema:
             if not matched_header:
                 sections[current_sec].append(line)
 
-        # 3. Process Education Section (Strictly validated)
+        # 3. Process Education Section
         education = []
-        univ_keywords = {"college", "university", "institute", "iit", "nit", "iiit", "school", "academy", "vidyalaya", "campus"}
-        verb_blocklist = {"developed", "built", "engineered", "processed", "implemented", "created", "designed", "optimized", "managed", "prototype", "for", "with"}
+        univ_keywords = {"college", "university", "institute", "iit", "nit", "iiit", "school", "academy", "vidyalaya", "campus", "engineering"}
+        verb_blocklist = {"developed", "built", "engineered", "processed", "implemented", "created", "designed", "optimized", "managed", "prototype", "for", "with", "deploying"}
 
         seen_colleges = set()
         for eline in sections["education"]:
-            # Must not be a bullet point or contain action verbs
-            if re.match(r'^[•\-\*\+]\s*', eline) or any(v in eline.lower().split()[:3] for v in verb_blocklist):
+            if re.match(r'^[•\-\*\+●]\s*', eline) or any(v in eline.lower().split()[:2] for v in verb_blocklist):
                 continue
             
-            # Check for institution keywords on this specific line
             has_univ_keyword = any(k in eline.lower() for k in univ_keywords)
             if has_univ_keyword and len(eline) > 5 and len(eline) < 100:
                 clean_name = re.split(r'\s*[-–—|,]\s*(?:B\.?Tech|Bachelor|Master|B\.?E|Degree|Engineering|Diploma)', eline, flags=re.IGNORECASE)[0].strip()
                 clean_name = re.sub(r'[\(\)\[\]]', '', clean_name).strip()
                 
-                # Verify not polluted with code / frameworks
                 if any(tech in clean_name.lower() for tech in ["react", "next.js", "python", "node", "fastapi", "docker"]):
                     continue
 
                 if clean_name.lower() not in seen_colleges and len(clean_name) > 4:
                     seen_colleges.add(clean_name.lower())
-                    
-                    # Extract degree & year from the same or surrounding text
                     deg_match = re.search(r'(B\.?Tech|Bachelor|Master|B\.?E|B\.?Sc|M\.?S|M\.?Tech|Diploma|High\s*School)[\w\s\.]*', eline, re.IGNORECASE)
                     degree_str = deg_match.group(0).strip() if deg_match else "Bachelor of Technology"
                     
@@ -241,16 +315,26 @@ JSON Schema:
         # 4. Process Work Experience Section
         experience = []
         current_exp: Optional[ExperienceEntry] = None
+        invalid_comp_words = {
+            "building", "deploying", "prototype", "systems", "winner", "next",
+            "generation", "firewall", "present", "and", "for", "with", "tight",
+            "timeline", "analysis", "anomalous", "detection", "state", "time",
+            "risk", "work", "working", "deliver", "ship", "features", "rest", "apis"
+        }
+
         for xline in sections["experience"]:
-            is_bullet = bool(re.match(r'^[•\-\*\+]\s*', xline))
-            if not is_bullet and len(xline.split()) <= 10 and not any(k in xline.lower() for k in ["languages:", "skills:", "tools:"]):
-                # New company/role line
+            is_bullet = bool(re.match(r'^[•\-\*\+●]\s*', xline))
+            if not is_bullet and len(xline.split()) <= 12 and not any(k in xline.lower() for k in ["languages:", "skills:", "tools:"]):
+                # Check if this line looks like a genuine company or organization
                 parts = re.split(r'\s*[-–—|]\s*', xline)
-                comp = parts[0].strip()[:50]
+                comp = parts[0].strip()[:60]
                 role = parts[1].strip()[:40] if len(parts) > 1 else "Software Engineer"
                 dates = parts[2].strip() if len(parts) > 2 else ""
                 
-                if comp and len(comp) > 2:
+                # Validate company name: must not be a single verb/noise word
+                if comp and len(comp) > 2 and comp.lower() not in invalid_comp_words:
+                    if len(comp.split()) == 1 and (comp.lower() in invalid_comp_words or len(comp) < 4):
+                        continue
                     current_exp = ExperienceEntry(
                         company=comp,
                         role=role,
@@ -261,7 +345,7 @@ JSON Schema:
                     )
                     experience.append(current_exp)
             elif is_bullet and current_exp:
-                clean_b = re.sub(r'^[•\-\*\+]\s*', '', xline).strip()
+                clean_b = re.sub(r'^[•\-\*\+●]\s*', '', xline).strip()
                 if clean_b:
                     current_exp.bullets.append(clean_b)
 
@@ -269,8 +353,8 @@ JSON Schema:
         projects = []
         current_proj: Optional[ProjectEntry] = None
         for pline in sections["projects"]:
-            is_bullet = bool(re.match(r'^[•\-\*\+]\s*', pline))
-            if not is_bullet and len(pline.split()) <= 8 and not pline.lower().startswith("tech stack"):
+            is_bullet = bool(re.match(r'^[•\-\*\+●]\s*', pline))
+            if not is_bullet and len(pline.split()) <= 10 and not pline.lower().startswith("tech stack"):
                 parts = re.split(r'\s*[-–—|]\s*', pline)
                 pname = parts[0].strip()[:40]
                 stack = parts[1].strip()[:60] if len(parts) > 1 else ""
@@ -282,15 +366,15 @@ JSON Schema:
                     )
                     projects.append(current_proj)
             elif is_bullet and current_proj:
-                clean_pb = re.sub(r'^[•\-\*\+]\s*', '', pline).strip()
+                clean_pb = re.sub(r'^[•\-\*\+●]\s*', '', pline).strip()
                 if clean_pb:
                     current_proj.bullets.append(clean_pb)
 
         # 6. Process Achievements & Hackathons
         achievements = []
         for aline in sections["achievements"]:
-            clean_ach = re.sub(r'^[•\-\*\+]\s*', '', aline).strip()
-            if clean_ach and len(clean_ach) > 3 and len(clean_ach) < 120:
+            clean_ach = re.sub(r'^[•\-\*\+●]\s*', '', aline).strip()
+            if clean_ach and len(clean_ach) > 3 and len(clean_ach) < 140:
                 achievements.append(clean_ach)
 
         # 7. Process Technical Skills
@@ -314,7 +398,7 @@ JSON Schema:
 
         categorized_skills: Dict[str, List[str]] = {}
         for skill_name, category in known_skills_vocab:
-            if re.search(rf"\b{re.escape(skill_name)}\b", raw_text, re.IGNORECASE):
+            if re.search(rf"\b{re.escape(skill_name)}\b", normalized, re.IGNORECASE):
                 categorized_skills.setdefault(category, []).append(skill_name)
 
         skill_categories = [
@@ -339,7 +423,7 @@ JSON Schema:
             projects=projects,
             skills=skill_categories,
             achievements=achievements,
-            raw_text=raw_text
+            raw_text=normalized
         )
 
     async def tailor_blueprint_to_job(
@@ -388,7 +472,6 @@ Return JSON with tailored bullet points:
         tailored_proj = [p.model_copy(deep=True) for p in base_blueprint.projects]
 
         if parsed and isinstance(parsed, dict):
-            # Update experience bullets if matched
             if "experience" in parsed and isinstance(parsed["experience"], list):
                 for new_exp in parsed["experience"]:
                     for orig in tailored_exp:
@@ -396,7 +479,6 @@ Return JSON with tailored bullet points:
                             if new_exp.get("bullets"):
                                 orig.bullets = new_exp["bullets"]
 
-            # Update project bullets if matched
             if "projects" in parsed and isinstance(parsed["projects"], list):
                 for new_proj in parsed["projects"]:
                     for orig_p in tailored_proj:
@@ -424,4 +506,3 @@ Return JSON with tailored bullet points:
         )
 
 resume_service = ResumeService()
-

@@ -243,34 +243,81 @@ class Neo4jService:
                 })
                 nodes_merged += 1
 
-        # 3. Upsert Work Experience & Company Nodes
+        # 3. Upsert Work Experience & Company Nodes (Strictly Validated)
+        invalid_comp_words = {
+            "building", "deploying", "prototype", "systems", "winner", "next",
+            "generation", "firewall", "present", "and", "for", "with", "tight",
+            "timelines", "timeline", "analysis", "anomalous", "detection", "state", "time",
+            "risk", "work", "working", "deliver", "ship", "features", "rest", "apis",
+            "adrde,", "adrde.", "industry network", "defence", "research", "development",
+            "(drdo)", "(ngfw)", "(react,", "node.js,", "firebase,", "mongodb,", "postgresql)",
+            "2026", "feb", "jun", "apr", "intern", "conducted", "engineered", "developed",
+            "currently", "proven", "ability", "alongside", "specialized", "simulated",
+            "suspicious", "third", "packets", "packet", "patterns", "pipeline", "potential",
+            "prediction,", "production", "products", "real", "reviews", "risks.", "secure",
+            "security.", "services,", "strengthening", "traffic", "under", "upcoming", "web"
+        }
+
+        # Purge rogue company nodes
+        try:
+            cleanup_rogue_companies = """
+            MATCH (c:Company)
+            WHERE size(split(c.name, ' ')) = 1 AND toLower(c.name) IN [
+                'building', 'deploying', 'prototype', 'systems', 'winner', 'next',
+                'generation', 'firewall', 'present', 'and', 'for', 'with', 'tight',
+                'timelines', 'timeline', 'analysis', 'anomalous', 'detection', 'state', 'time',
+                'risk', 'work', 'working', 'deliver', 'ship', 'features', 'rest', 'apis',
+                'adrde,', 'adrde.', 'industry network', 'defence', 'research', 'development',
+                '(drdo)', '(ngfw)', '(react,', 'node.js,', 'firebase,', 'mongodb,', 'postgresql)',
+                '2026', 'feb', 'jun', 'apr', 'intern', 'conducted', 'engineered', 'developed',
+                'currently', 'proven', 'ability', 'alongside', 'specialized', 'simulated',
+                'suspicious', 'third', 'packets', 'packet', 'patterns', 'pipeline', 'potential',
+                'prediction,', 'production', 'products', 'real', 'reviews', 'risks.', 'secure',
+                'security.', 'services,', 'strengthening', 'traffic', 'under', 'upcoming', 'web'
+            ]
+            DETACH DELETE c;
+            """
+            await neo4j_client.execute_query(cleanup_rogue_companies, {})
+        except Exception as pe:
+            logger.warning(f"Note on purging rogue companies: {pe}")
+
         for exp in blueprint.experience:
             comp_name = (exp.company or "").strip()
-            if comp_name and len(comp_name) > 1 and len(comp_name) < 60:
-                forbidden_terms.add(comp_name.lower())
-                comp_query = """
-                MATCH (u:User {id: $user_id})
-                MERGE (c:Company {name: $company_name})
-                MERGE (u)-[r:WORKED_AT]->(c)
-                ON CREATE SET r.role = $role,
-                              r.start_date = $start_date,
-                              r.end_date = $end_date,
-                              r.is_current = $is_current
-                ON MATCH SET r.role = $role,
-                             r.start_date = $start_date,
-                             r.end_date = $end_date,
-                             r.is_current = $is_current
-                RETURN c.name;
-                """
-                await neo4j_client.execute_query(comp_query, {
-                    "user_id": user_id,
-                    "company_name": comp_name,
-                    "role": exp.role or "Software Engineer",
-                    "start_date": exp.start_date or "",
-                    "end_date": exp.end_date or "",
-                    "is_current": bool(exp.is_current)
-                })
-                nodes_merged += 1
+            # Clean up company name
+            comp_name = re.sub(r'^[•\-\*\+●]\s*', '', comp_name).strip()
+            if not comp_name or len(comp_name) < 3 or len(comp_name) > 80:
+                continue
+            if comp_name.lower() in invalid_comp_words:
+                continue
+            if len(comp_name.split()) == 1 and (comp_name.lower() in invalid_comp_words or len(comp_name) < 4):
+                continue
+            if any(t in comp_name.lower() for t in ["react,", "node.js,", "mongodb,", "firebase,"]):
+                continue
+
+            forbidden_terms.add(comp_name.lower())
+            comp_query = """
+            MATCH (u:User {id: $user_id})
+            MERGE (c:Company {name: $company_name})
+            MERGE (u)-[r:WORKED_AT]->(c)
+            ON CREATE SET r.role = $role,
+                          r.start_date = $start_date,
+                          r.end_date = $end_date,
+                          r.is_current = $is_current
+            ON MATCH SET r.role = $role,
+                         r.start_date = $start_date,
+                         r.end_date = $end_date,
+                         r.is_current = $is_current
+            RETURN c.name;
+            """
+            await neo4j_client.execute_query(comp_query, {
+                "user_id": user_id,
+                "company_name": comp_name,
+                "role": exp.role or "Software Engineer",
+                "start_date": exp.start_date or "",
+                "end_date": exp.end_date or "",
+                "is_current": bool(exp.is_current)
+            })
+            nodes_merged += 1
 
         # 4. Upsert Achievements & Hackathons (Milestones)
         if hasattr(blueprint, "achievements") and blueprint.achievements:
@@ -425,9 +472,9 @@ class Neo4jService:
                      p.linkedin_url = conn.profile_url
         MERGE (u)-[:CONNECTED_TO {source: 'linkedin'}]->(p)
         
-        // Link Person to Company
+        // Link Person to Company only for valid, non-generic companies
         WITH p, conn, u
-        WHERE conn.company <> ''
+        WHERE conn.company <> '' AND toLower(conn.company) <> 'industry network' AND size(conn.company) > 2
         MERGE (c:Company {name: conn.company})
         MERGE (p)-[:WORKS_AT {title: conn.position}]->(c)
         RETURN count(p) AS imported_count;
