@@ -193,7 +193,7 @@
   // Extract from Feed Left Sidebar
   function extractFeedSidebarProfile() {
     const nameElem = document.querySelector(".feed-identity-module__actor-meta a, .profile-rail-card__actor-link, .identity-headline, a[href*='/in/'] > .t-16");
-    const name = nameElem ? nameElem.innerText.trim() : (document.querySelector(".feed-identity-module")?.innerText?.split("\n")[0] || "Mohit Upraity");
+    const name = nameElem ? nameElem.innerText.trim() : (document.querySelector(".feed-identity-module")?.innerText?.split("\n")[0] || "Candidate");
 
     const headlineElem = document.querySelector(".feed-identity-module__headline, .identity-headline, .feed-identity-module .t-12");
     const headline = headlineElem ? headlineElem.innerText.trim() : "";
@@ -202,8 +202,8 @@
     const profileUrl = profileLinkElem ? profileLinkElem.href : "";
 
     return {
-      name: name || "Mohit Upraity",
-      headline: headline || "4x National hackathon winner | Intern@ADRDE(DRDO)",
+      name: name || "Candidate",
+      headline: headline || "Software Engineer",
       profile_url: profileUrl,
       source: "FEED_SIDEBAR",
       raw_text: document.body.innerText.slice(0, 15000)
@@ -242,7 +242,7 @@
     });
 
     return {
-      name: name || "Mohit Upraity",
+      name: name || "Candidate",
       headline,
       location,
       about,

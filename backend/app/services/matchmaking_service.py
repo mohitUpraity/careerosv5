@@ -361,10 +361,12 @@ Job Description:
         user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
         user_info = user_res[0] if user_res else {}
 
-        candidate_name = user_info.get("full_name") or "Mohit Upraity"
-        candidate_college = user_info.get("college") or "Anand Engineering College"
-        projects_str = ", ".join(user_info.get("top_projects", ["RecoverIQ", "careerosv5", "reconpilot"]))
-        milestones_str = ", ".join(user_info.get("milestones", ["Microsoft Noida Hackathon", "DRDO Research"]))
+        candidate_name = user_info.get("full_name") or "Candidate"
+        candidate_college = user_info.get("college") or "Engineering Institute"
+        top_projs = user_info.get("top_projects", [])
+        projects_str = ", ".join(top_projs) if top_projs else "Verified Code Repositories"
+        milestones_list = user_info.get("milestones", [])
+        milestones_str = ", ".join(milestones_list) if milestones_list else "Key Milestones & Hackathons"
 
         system_prompt = "You are an elite career strategist and executive outreach copywriter. Generate high-converting, concise referral outreach pitches."
         user_prompt = f"""

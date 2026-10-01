@@ -1125,28 +1125,27 @@ Responsibilities:
 
     // Client fallback generator
     let pitch = '';
+    const candName = state.user?.full_name || 'Candidate';
     if (isEmail) {
-      pitch = `Subject: Quick hello from fellow ${isAlumni ? 'Anand Engineering College alumnus' : 'CS engineer'} – Mohit Upraity
+      pitch = `Subject: Quick hello from fellow ${isAlumni ? 'alumnus' : 'CS engineer'} – ${candName}
 
 Hi ${c.name.split(' ')[0]},
 
 I hope you're having a great week. I’ve been closely following ${c.company || 'your team’s work'} and noticed your role as ${c.headline || 'Engineer'}.
 
-${isAlumni ? `As a fellow Computer Science engineer from Anand Engineering College (SGI Cluster), I'm currently working on GraphRAG systems and automated cybersecurity frameworks (DRDO ADRDE intern / RecoverIQ creator).` : `As a backend engineer building production-grade FastAPI services and GraphRAG knowledge engines (creator of RecoverIQ and careerosv5), I've been really impressed by your team's engineering benchmarks.`}
+${isAlumni ? `As a fellow Computer Science engineer, I'm currently working on GraphRAG systems and automated software engineering frameworks.` : `As a software engineer building production-grade microservices and knowledge graph engines, I've been really impressed by your team's engineering benchmarks.`}
 
-I would love to connect, learn a bit about the technical challenges your team is currently solving at ${c.company || 'your company'}, and explore if my background in Python, distributed microservices, and graph databases could be a great fit for open opportunities.
+I would love to connect, learn a bit about the technical challenges your team is currently solving at ${c.company || 'your company'}, and explore if my background in backend engineering and distributed systems could be a great fit for open opportunities.
 
 Looking forward to hearing your thoughts!
 
 Best regards,
-Mohit Prasad Upraity
-Portfolio / GitHub: https://github.com/mohitUpraity
-LinkedIn: https://linkedin.com/in/mohit-upraity`;
+${candName}`;
     } else {
       if (isAlternative) {
-        pitch = `Hi ${c.name.split(' ')[0]}, great to see fellow ${isAlumni ? 'Anand Engg alumni' : 'engineers'} excelling at ${c.company || 'your company'}! As a CS engineer building RecoverIQ & GraphRAG co-pilot with FastAPI/Neo4j, I’d love to connect and learn about your backend engineering initiatives.`;
+        pitch = `Hi ${c.name.split(' ')[0]}, great to see fellow ${isAlumni ? 'alumni' : 'engineers'} excelling at ${c.company || 'your company'}! As a CS engineer building full-stack & GraphRAG architectures with FastAPI/Neo4j, I’d love to connect and learn about your engineering initiatives.`;
       } else {
-        pitch = `Hi ${c.name.split(' ')[0]}, noticed your great work as ${c.headline ? c.headline.split('@')[0].trim() : 'Engineer'} at ${c.company || 'your team'}! As a fellow CS engineer from ${isAlumni ? 'Anand Engg College' : 'Agra'} building RecoverIQ (FastAPI/Python) and DRDO NGFW, I’d love to connect and learn more!`;
+        pitch = `Hi ${c.name.split(' ')[0]}, noticed your great work as ${c.headline ? c.headline.split('@')[0].trim() : 'Engineer'} at ${c.company || 'your team'}! As a fellow software engineer building graph architectures and high-performance services, I’d love to connect and learn more!`;
       }
     }
 
