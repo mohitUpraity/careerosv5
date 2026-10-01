@@ -22,11 +22,12 @@ async def get_live_opportunities(
     remote_only: bool = Query(False, description="Filter for 100% remote or virtual opportunities"),
     location_filter: Optional[str] = Query(None, description="Filter: India, Remote Worldwide, All"),
     sort_by: str = Query("match_score", description="match_score, deadline, newest"),
+    refresh: bool = Query(False, description="Force re-scrape Devfolio, Unstop and live feeds"),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Returns real-time verified opportunities (Jobs, Internships, Hackathons, Open Source Fellowships)
-    fetched live from developer feeds and scored semantically against user profile & location preferences.
+    scraped directly from Devfolio, Unstop, and Jobicy APIs and scored semantically against user profile.
     """
     user_id = current_user["id"]
     try:
@@ -36,7 +37,8 @@ async def get_live_opportunities(
             search_query=search,
             remote_only=remote_only,
             location_filter=location_filter,
-            sort_by=sort_by
+            sort_by=sort_by,
+            force_refresh=refresh
         )
 
         counts = {

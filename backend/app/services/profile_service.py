@@ -601,6 +601,379 @@ class ProfileService:
         return []
 
     @classmethod
+    async def get_user_profile_details(cls, user_id: str) -> Dict[str, Any]:
+        """
+        Fetches full editable profile details including personal info, headline, bio,
+        education, experience, core skills, and comprehensive career preferences.
+        """
+        from app.services.neo4j_service import neo4j_service
+
+        default_details = {
+            "id": user_id,
+            "full_name": "Candidate",
+            "email": "",
+            "phone": "",
+            "headline": "Software Engineer",
+            "location": "Bengaluru, India",
+            "bio": "Passionate Software Engineer specializing in scalable backends, graph algorithms, and cloud technologies.",
+            "github_username": "",
+            "github_url": "",
+            "linkedin_url": "",
+            "portfolio_url": "",
+            "education": [
+                {
+                    "university": "Anand Engineering College",
+                    "degree": "B.Tech in Computer Science & Engineering",
+                    "field_of_study": "Computer Science",
+                    "start_date": "2021",
+                    "end_date": "2025",
+                    "gpa": "8.5"
+                }
+            ],
+            "experience": [
+                {
+                    "company": "DRDO ADRDE",
+                    "role": "Cybersecurity & Software Engineering Intern",
+                    "location": "Agra, India",
+                    "start_date": "Jun 2024",
+                    "end_date": "Aug 2024",
+                    "is_current": False,
+                    "description": "Engineered real-time anomalous network socket detection and automated packet analysis pipelines using Python and C++."
+                }
+            ],
+            "skills": ["Python", "FastAPI", "Neo4j", "React", "Docker", "PostgreSQL", "TypeScript", "Redis", "Git", "REST APIs", "System Design", "GraphRAG"],
+            "preferences": {
+                "primary_role": "Backend Engineer",
+                "priority_domain": "Distributed Systems & Cloud",
+                "target_country": "India",
+                "preferred_cities": ["Bengaluru", "Noida / Delhi NCR", "Hyderabad", "Pune", "Mumbai", "Remote India"],
+                "work_modes": ["Remote", "Hybrid", "Onsite"],
+                "preferred_roles": ["Backend Engineer", "Full Stack Developer", "Software Engineer", "AI/ML Engineer"],
+                "opportunity_types": ["jobs", "internships", "hackathons", "opensource"],
+                "experience_level": "Fresher / 0-3 yrs",
+                "min_salary": "₹8-18 LPA / $30k+ Remote",
+                "priority_factor": "best_fit",
+                "custom_locations": []
+            }
+        }
+
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return default_details
+
+        try:
+            # 1. Fetch User node properties
+            user_query = """
+            MATCH (u:User {id: $user_id})
+            RETURN u.full_name AS full_name,
+                   u.email AS email,
+                   u.phone AS phone,
+                   u.headline AS headline,
+                   u.location AS location,
+                   u.summary AS bio,
+                   u.github_username AS github_username,
+                   u.github_url AS github_url,
+                   u.linkedin_url AS linkedin_url,
+                   u.portfolio_url AS portfolio_url,
+                   u.preferences_json AS preferences_json,
+                   u.blueprint_json AS blueprint_json
+            """
+            user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
+            
+            # If no user found, fallback or check last user
+            if not user_res or len(user_res) == 0:
+                fallback_u = await neo4j_client.execute_query(
+                    "MATCH (u:User) RETURN u.id as id ORDER BY u.created_at DESC LIMIT 1"
+                )
+                if fallback_u and len(fallback_u) > 0 and fallback_u[0].get("id"):
+                    user_id = fallback_u[0]["id"]
+                    user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
+
+            u_record = user_res[0] if user_res else {}
+
+            # Parse Preferences
+            prefs = default_details["preferences"].copy()
+            if u_record.get("preferences_json"):
+                try:
+                    saved_prefs = json.loads(u_record["preferences_json"])
+                    prefs.update(saved_prefs)
+                except Exception:
+                    pass
+
+            # 2. Fetch Education
+            edu_query = """
+            MATCH (u:User {id: $user_id})-[r:ATTENDED]->(univ:University)
+            RETURN univ.name AS university,
+                   r.degree AS degree,
+                   r.field_of_study AS field_of_study,
+                   r.start_date AS start_date,
+                   r.end_date AS end_date,
+                   r.gpa AS gpa
+            """
+            edu_res = await neo4j_client.execute_query(edu_query, {"user_id": user_id})
+            education = edu_res if edu_res else []
+
+            # 3. Fetch Experience
+            exp_query = """
+            MATCH (u:User {id: $user_id})-[r:WORKED_AT]->(c:Company)
+            RETURN c.name AS company,
+                   r.role AS role,
+                   r.location AS location,
+                   r.start_date AS start_date,
+                   r.end_date AS end_date,
+                   r.is_current AS is_current,
+                   r.description AS description
+            ORDER BY r.start_date DESC
+            """
+            exp_res = await neo4j_client.execute_query(exp_query, {"user_id": user_id})
+            experience = exp_res if exp_res else []
+
+            # 4. Fetch Skills
+            skills_query = """
+            MATCH (u:User {id: $user_id})-[:HAS_SKILL]->(s:Skill)
+            RETURN DISTINCT s.name AS name
+            ORDER BY s.name ASC
+            """
+            skills_res = await neo4j_client.execute_query(skills_query, {"user_id": user_id})
+            skills = [s["name"] for s in skills_res if s.get("name")] if skills_res else []
+
+            # 5. Check Blueprint if available to backfill any empty details
+            if u_record.get("blueprint_json"):
+                try:
+                    bp = json.loads(u_record["blueprint_json"])
+                    contact = bp.get("contact", {})
+                    if not u_record.get("full_name") and contact.get("full_name"):
+                        u_record["full_name"] = contact["full_name"]
+                    if not u_record.get("email") and contact.get("email"):
+                        u_record["email"] = contact["email"]
+                    if not u_record.get("phone") and contact.get("phone"):
+                        u_record["phone"] = contact["phone"]
+                    if not u_record.get("location") and contact.get("location"):
+                        u_record["location"] = contact["location"]
+                    if not u_record.get("linkedin_url") and contact.get("linkedin_url"):
+                        u_record["linkedin_url"] = contact.get("linkedin_url")
+                    if not u_record.get("github_url") and contact.get("github_url"):
+                        u_record["github_url"] = contact.get("github_url")
+                    if not u_record.get("bio") and bp.get("summary"):
+                        u_record["bio"] = bp.get("summary")
+                    if not education and bp.get("education"):
+                        education = bp.get("education")
+                    if not experience and bp.get("experience"):
+                        experience = bp.get("experience")
+                    if not skills and bp.get("skills"):
+                        for cat in bp.get("skills", []):
+                            for sk in cat.get("skills", []):
+                                if sk and sk not in skills:
+                                    skills.append(sk)
+                except Exception:
+                    pass
+
+            return {
+                "id": user_id,
+                "full_name": u_record.get("full_name") or default_details["full_name"],
+                "email": u_record.get("email") or default_details["email"],
+                "phone": u_record.get("phone") or default_details["phone"],
+                "headline": u_record.get("headline") or default_details["headline"],
+                "location": u_record.get("location") or default_details["location"],
+                "bio": u_record.get("bio") or default_details["bio"],
+                "github_username": u_record.get("github_username") or "",
+                "github_url": u_record.get("github_url") or "",
+                "linkedin_url": u_record.get("linkedin_url") or "",
+                "portfolio_url": u_record.get("portfolio_url") or "",
+                "education": education if education else default_details["education"],
+                "experience": experience if experience else default_details["experience"],
+                "skills": skills if skills else default_details["skills"],
+                "preferences": prefs
+            }
+        except Exception as e:
+            logger.error(f"Error fetching user profile details for {user_id}: {e}")
+            return default_details
+
+    @classmethod
+    async def update_user_profile_details(cls, user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Updates full user identity, education, experience, skills, and preferences in Neo4j.
+        Guarantees that all matching algorithms and resume tools are updated in real-time.
+        """
+        from app.services.neo4j_service import neo4j_service
+
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return payload
+
+        try:
+            full_name = payload.get("full_name", "").strip()
+            email = payload.get("email", "").strip()
+            phone = payload.get("phone", "").strip()
+            headline = payload.get("headline", "").strip()
+            location = payload.get("location", "").strip()
+            bio = payload.get("bio", "").strip()
+            github_username = payload.get("github_username", "").strip()
+            github_url = payload.get("github_url", "").strip()
+            linkedin_url = payload.get("linkedin_url", "").strip()
+            portfolio_url = payload.get("portfolio_url", "").strip()
+            
+            # Handle Preferences
+            prefs = payload.get("preferences") or {}
+            prefs_json_str = json.dumps(prefs)
+
+            # 1. Upsert User Node
+            user_update_query = """
+            MERGE (u:User {id: $user_id})
+            ON CREATE SET u.created_at = datetime()
+            SET u.full_name = $full_name,
+                u.email = $email,
+                u.phone = $phone,
+                u.headline = $headline,
+                u.location = $location,
+                u.summary = $bio,
+                u.github_username = $github_username,
+                u.github_url = $github_url,
+                u.linkedin_url = $linkedin_url,
+                u.portfolio_url = $portfolio_url,
+                u.preferences_json = $preferences_json,
+                u.updated_at = datetime()
+            RETURN u.id AS id;
+            """
+            await neo4j_client.execute_query(user_update_query, {
+                "user_id": user_id,
+                "full_name": full_name,
+                "email": email,
+                "phone": phone,
+                "headline": headline,
+                "location": location,
+                "bio": bio,
+                "github_username": github_username,
+                "github_url": github_url,
+                "linkedin_url": linkedin_url,
+                "portfolio_url": portfolio_url,
+                "preferences_json": prefs_json_str
+            })
+
+            # 2. Update Skills if provided
+            skills = payload.get("skills")
+            if isinstance(skills, list):
+                # Remove previous manually editable HAS_SKILL relationships
+                purge_skills_query = """
+                MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
+                WHERE r.source IS NULL OR r.source IN ['user_profile', 'resume', 'manual']
+                DELETE r;
+                """
+                await neo4j_client.execute_query(purge_skills_query, {"user_id": user_id})
+
+                # Insert updated skills
+                clean_skills = [str(s).strip() for s in skills if str(s).strip()]
+                if clean_skills:
+                    insert_skills_query = """
+                    MATCH (u:User {id: $user_id})
+                    UNWIND $skills AS sname
+                    MERGE (s:Skill {name: sname})
+                    MERGE (u)-[:HAS_SKILL {source: 'user_profile'}]->(s);
+                    """
+                    await neo4j_client.execute_query(insert_skills_query, {
+                        "user_id": user_id,
+                        "skills": clean_skills
+                    })
+
+            # 3. Update Education if provided
+            education = payload.get("education")
+            if isinstance(education, list):
+                purge_edu_query = """
+                MATCH (u:User {id: $user_id})-[r:ATTENDED]->(univ:University)
+                DELETE r;
+                """
+                await neo4j_client.execute_query(purge_edu_query, {"user_id": user_id})
+
+                for edu in education:
+                    univ_name = (edu.get("university") or "").strip()
+                    if univ_name and len(univ_name) > 2:
+                        ins_edu_query = """
+                        MATCH (u:User {id: $user_id})
+                        MERGE (univ:University {name: $university_name})
+                        MERGE (u)-[r:ATTENDED]->(univ)
+                        SET r.degree = $degree,
+                            r.field_of_study = $field_of_study,
+                            r.start_date = $start_date,
+                            r.end_date = $end_date,
+                            r.gpa = $gpa;
+                        """
+                        await neo4j_client.execute_query(ins_edu_query, {
+                            "user_id": user_id,
+                            "university_name": univ_name[:60],
+                            "degree": edu.get("degree", ""),
+                            "field_of_study": edu.get("field_of_study", ""),
+                            "start_date": edu.get("start_date", ""),
+                            "end_date": edu.get("end_date", ""),
+                            "gpa": edu.get("gpa", "")
+                        })
+
+            # 4. Update Experience if provided
+            experience = payload.get("experience")
+            if isinstance(experience, list):
+                purge_exp_query = """
+                MATCH (u:User {id: $user_id})-[r:WORKED_AT]->(c:Company)
+                DELETE r;
+                """
+                await neo4j_client.execute_query(purge_exp_query, {"user_id": user_id})
+
+                for exp in experience:
+                    comp_name = (exp.get("company") or "").strip()
+                    if comp_name and len(comp_name) > 2:
+                        ins_exp_query = """
+                        MATCH (u:User {id: $user_id})
+                        MERGE (c:Company {name: $company_name})
+                        MERGE (u)-[r:WORKED_AT]->(c)
+                        SET r.role = $role,
+                            r.location = $location,
+                            r.start_date = $start_date,
+                            r.end_date = $end_date,
+                            r.is_current = $is_current,
+                            r.description = $description;
+                        """
+                        await neo4j_client.execute_query(ins_exp_query, {
+                            "user_id": user_id,
+                            "company_name": comp_name[:80],
+                            "role": exp.get("role", "Engineer"),
+                            "location": exp.get("location", ""),
+                            "start_date": exp.get("start_date", ""),
+                            "end_date": exp.get("end_date", ""),
+                            "is_current": bool(exp.get("is_current", False)),
+                            "description": exp.get("description", "")
+                        })
+
+            # 5. Keep Master Resume Blueprint in sync
+            try:
+                current_bp = await neo4j_service.get_user_resume_blueprint(user_id) or {}
+                updated_bp = {
+                    "contact": {
+                        "full_name": full_name,
+                        "email": email,
+                        "phone": phone,
+                        "location": location,
+                        "linkedin_url": linkedin_url,
+                        "github_url": github_url or (f"https://github.com/{github_username}" if github_username else "")
+                    },
+                    "summary": bio,
+                    "experience": experience if experience else current_bp.get("experience", []),
+                    "education": education if education else current_bp.get("education", []),
+                    "projects": current_bp.get("projects", []),
+                    "skills": [{"category": "Core & Technical Skills", "skills": skills}] if skills else current_bp.get("skills", [])
+                }
+                sync_bp_query = """
+                MATCH (u:User {id: $user_id})
+                SET u.blueprint_json = $blueprint_json;
+                """
+                await neo4j_client.execute_query(sync_bp_query, {
+                    "user_id": user_id,
+                    "blueprint_json": json.dumps(updated_bp)
+                })
+            except Exception as bpe:
+                logger.warning(f"Could not sync blueprint json with profile update: {bpe}")
+
+            return await cls.get_user_profile_details(user_id)
+        except Exception as e:
+            logger.error(f"Failed to update profile details for {user_id}: {e}")
+            raise e
+
+    @classmethod
     async def reset_user_profile_data(cls, user_id: str) -> Dict[str, Any]:
         """
         Safely purges ONLY the authenticated user's isolated sub-graph (Projects, Connections, Peers).

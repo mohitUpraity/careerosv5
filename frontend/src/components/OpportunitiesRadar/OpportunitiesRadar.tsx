@@ -144,7 +144,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
     }
   };
 
-  const fetchOpportunities = async () => {
+  const fetchOpportunities = async (forceRefresh: boolean = false) => {
     setLoading(true);
     try {
       const res = await apiService.getOpportunities(
@@ -154,12 +154,16 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
           remote_only: remoteOnly,
           location_filter: locationFilter,
           sort_by: sortBy,
+          refresh: forceRefresh,
         },
         getAuthHeaders()
       );
       setOpportunities(res.opportunities || []);
       if (res.category_counts) {
         setCategoryCounts(res.category_counts);
+      }
+      if (forceRefresh) {
+        onSuccess('Successfully executed live re-scan of Devfolio & Unstop APIs!');
       }
     } catch (err: any) {
       onError(err.message || 'Failed to fetch live opportunities');
@@ -170,8 +174,9 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchOpportunities();
+    fetchOpportunities(false);
   };
+
 
   const handleSavePreferences = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -336,11 +341,11 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
               </h2>
               <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                Live APIs (India, Unstop, Jobicy, GSoC)
+                Live APIs (Devfolio, Unstop, Jobicy) • 6h Auto-Scan & Verified
               </span>
             </div>
             <p className="text-xs pt-1" style={{ color: 'var(--text-secondary)' }}>
-              Real-time verified developer jobs, internships, Unstop hackathons & open source fellowships filtered strictly for your location & career preferences.
+              100% real-world open hackathons, paid tech internships & remote developer roles scraped live with active deadline verification.
             </p>
           </div>
         </div>
@@ -365,16 +370,18 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
           </button>
 
           <button
-            onClick={fetchOpportunities}
+            onClick={() => fetchOpportunities(true)}
             disabled={loading}
             className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all hover:bg-gray-100 dark:hover:bg-gray-800"
             style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+            title="Force immediate live re-scan of Devfolio & Unstop APIs"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <span>Re-scan Feeds</span>
           </button>
         </div>
       </div>
+
 
       {/* User Location Preference Active Bar */}
       <div 

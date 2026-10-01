@@ -193,15 +193,9 @@ export interface OpportunitiesResponse {
   opportunities: Opportunity[];
 }
 
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatar_url?: string;
-  isBenchmarkPeer?: boolean;
-}
-
 export interface UserPreferences {
+  primary_role?: string;
+  priority_domain?: string;
   target_country: string;
   preferred_cities: string[];
   work_modes: string[];
@@ -209,6 +203,41 @@ export interface UserPreferences {
   opportunity_types: string[];
   experience_level?: string;
   min_salary?: string;
+  priority_factor?: 'best_fit' | 'urgency' | 'compensation' | 'remote_first';
+  custom_locations?: string[];
+}
+
+export interface UserProfileDetails {
+  id?: string;
+  full_name: string;
+  email: string;
+  phone?: string;
+  headline?: string;
+  location?: string;
+  bio?: string;
+  github_username?: string;
+  github_url?: string;
+  linkedin_url?: string;
+  portfolio_url?: string;
+  education?: Array<{
+    university: string;
+    degree?: string;
+    field_of_study?: string;
+    start_date?: string;
+    end_date?: string;
+    gpa?: string;
+  }>;
+  experience?: Array<{
+    company: string;
+    role?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string;
+    is_current?: boolean;
+    description?: string;
+  }>;
+  skills?: string[];
+  preferences: UserPreferences;
 }
 
 

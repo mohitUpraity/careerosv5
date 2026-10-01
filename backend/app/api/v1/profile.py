@@ -105,5 +105,61 @@ async def update_user_preferences(
         logger.error(f"Failed to update preferences for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/details", response_model=Dict[str, Any])
+async def get_profile_details(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Retrieves full user identity, headline, bio, education, experience,
+    core skills list, and career matching preferences.
+    """
+    user_id = current_user["id"]
+    try:
+        details = await profile_service.get_user_profile_details(user_id=user_id)
+        return {
+            "status": "success",
+            "profile": details
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch profile details for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/details", response_model=Dict[str, Any])
+async def update_profile_details(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Updates full user profile information, education, experience, skills,
+    and matching preferences in Neo4j.
+    """
+    user_id = current_user["id"]
+    try:
+        updated = await profile_service.update_user_profile_details(user_id=user_id, payload=payload)
+        return {
+            "status": "success",
+            "message": "User profile and career preferences updated successfully",
+            "profile": updated
+        }
+    except Exception as e:
+        logger.error(f"Failed to update profile details for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/reset", response_model=Dict[str, Any])
+async def reset_profile(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Safely resets the user's personal profile and graph data.
+    """
+    user_id = current_user["id"]
+    try:
+        res = await profile_service.reset_user_profile_data(user_id=user_id)
+        return res
+    except Exception as e:
+        logger.error(f"Failed to reset profile for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 

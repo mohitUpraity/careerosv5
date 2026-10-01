@@ -307,8 +307,40 @@ export const apiService = {
     return await res.json();
   },
 
+  async getProfileDetails(headers: Record<string, string>): Promise<{
+    status: string;
+    profile: import('../types').UserProfileDetails;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/details`, { headers });
+    if (!res.ok) throw new Error(`Failed to load profile details (${res.status})`);
+    return await res.json();
+  },
+
+  async updateProfileDetails(
+    profile: Partial<import('../types').UserProfileDetails>,
+    headers: Record<string, string>
+  ): Promise<{
+    status: string;
+    message: string;
+    profile: import('../types').UserProfileDetails;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/details`, {
+      method: 'PUT',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(profile),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to update profile details (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async getOpportunities(
-    params: { category?: string; search?: string; remote_only?: boolean; location_filter?: string; sort_by?: string } = {},
+    params: { category?: string; search?: string; remote_only?: boolean; location_filter?: string; sort_by?: string; refresh?: boolean } = {},
     headers: Record<string, string> = {}
   ): Promise<{
     status: string;
@@ -328,12 +360,14 @@ export const apiService = {
     if (params.remote_only) query.append('remote_only', 'true');
     if (params.location_filter) query.append('location_filter', params.location_filter);
     if (params.sort_by) query.append('sort_by', params.sort_by);
+    if (params.refresh) query.append('refresh', 'true');
 
     const url = `${API_BASE}/api/v1/opportunities?${query.toString()}`;
     const res = await fetch(url, { headers });
     if (!res.ok) throw new Error(`Failed to load opportunities (${res.status})`);
     return await res.json();
   },
+
 
 
   async parseJobUrl(jobUrl: string, headers: Record<string, string>): Promise<{

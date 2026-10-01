@@ -37,6 +37,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   switchProfile: (profileType: 'candidate' | 'coworker') => void;
+  updateActiveProfile: (updates: Partial<ProfileMode>) => void;
   getAuthHeaders: () => Record<string, string>;
 }
 
@@ -132,6 +133,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateActiveProfile = (updates: Partial<ProfileMode>) => {
+    setActiveProfile(prev => ({
+      ...prev,
+      ...updates
+    }));
+  };
+
   const getAuthHeaders = (): Record<string, string> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -154,6 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         logout,
         switchProfile,
+        updateActiveProfile,
         getAuthHeaders,
       }}
     >
