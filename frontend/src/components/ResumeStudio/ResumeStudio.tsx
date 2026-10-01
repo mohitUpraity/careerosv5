@@ -24,7 +24,15 @@ import {
   Phone,
   Linkedin,
   Globe,
-  Check
+  Check,
+  X,
+  Type,
+  Palette,
+  Sliders,
+  CheckCheck,
+  Undo2,
+  Wand2,
+  Layers
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -44,6 +52,27 @@ interface ResumeStudioProps {
   initialJd?: string;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
+}
+
+// Suggestion interface for Google Docs-like track changes
+interface AISuggestion {
+  id: string; // e.g. "summary", "exp-0-1", "proj-1-0"
+  type: 'summary' | 'exp_bullet' | 'proj_bullet' | 'skill_add';
+  parentIndex?: number;
+  bulletIndex?: number;
+  originalText: string;
+  suggestedText: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  reason?: string;
+}
+
+interface TemplateStyle {
+  fontFamily: 'Inter' | 'Merriweather' | 'Roboto' | 'JetBrains Mono';
+  fontSize: 'compact' | 'standard' | 'spacious';
+  spacing: 'compact' | 'normal' | 'relaxed';
+  accentColor: string;
+  headerAlign: 'center' | 'left';
+  showBorders: boolean;
 }
 
 const DEFAULT_STARTER_BLUEPRINT: ResumeBlueprint = {
@@ -113,6 +142,14 @@ const DEFAULT_STARTER_BLUEPRINT: ResumeBlueprint = {
   ]
 };
 
+const ACCENT_COLORS = [
+  { name: 'Onyx ATS (Default)', value: '#111827', class: 'bg-gray-900' },
+  { name: 'Navy Corporate', value: '#1E3A8A', class: 'bg-blue-900' },
+  { name: 'Emerald Forest', value: '#065F46', class: 'bg-emerald-800' },
+  { name: 'Royal Indigo', value: '#4338CA', class: 'bg-indigo-700' },
+  { name: 'Slate Modern', value: '#334155', class: 'bg-slate-700' },
+];
+
 export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   initialRole = '',
   initialCompany = '',
@@ -120,11 +157,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   onError,
   onSuccess,
 }) => {
-  const { user, getAuthHeaders, activeProfile } = useAuth();
+  const { user, getAuthHeaders } = useAuth();
   
   // View & Mode States
   const [isEditMode, setIsEditMode] = useState<boolean>(true);
   const [isTailorOpen, setIsTailorOpen] = useState<boolean>(false);
+  const [isStyleOpen, setIsStyleOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -135,6 +173,19 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   const [masterBlueprint, setMasterBlueprint] = useState<ResumeBlueprint | null>(null);
   const [hasMasterResume, setHasMasterResume] = useState<boolean>(false);
   const [isDirty, setIsDirty] = useState<boolean>(false);
+
+  // Google Docs-style AI Diff Suggestions
+  const [suggestions, setSuggestions] = useState<{ [id: string]: AISuggestion }>({});
+
+  // Template Styling State (Font, Colors, Sizes, Spacing)
+  const [templateStyle, setTemplateStyle] = useState<TemplateStyle>({
+    fontFamily: 'Inter',
+    fontSize: 'standard',
+    spacing: 'normal',
+    accentColor: '#111827',
+    headerAlign: 'center',
+    showBorders: true,
+  });
 
   // AI Tailoring Parameters
   const [role, setRole] = useState(initialRole || 'Full Stack / Backend Engineer');
@@ -207,13 +258,14 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   const handleResetToMaster = () => {
     if (masterBlueprint) {
       setBlueprint(masterBlueprint);
+      setSuggestions({});
       setIsDirty(false);
       setAtsScore(null);
       onSuccess('Reverted back to your Master Resume Blueprint');
     }
   };
 
-  // AI Tailoring
+  // ================= AI Tailoring & Google Docs-style Diff Generator =================
   const handleTailorResume = async () => {
     if (!jd.trim()) {
       onError('Please paste a target Job Description to tailor the resume');
@@ -231,26 +283,172 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         getAuthHeaders()
       );
 
-      if (data.tailored_blueprint) {
-        setBlueprint(data.tailored_blueprint);
+      const tailoredBp: ResumeBlueprint | undefined = data.tailored_blueprint;
+      if (tailoredBp) {
+        // Compute granular suggestions between current blueprint and tailored blueprint
+        const newSuggestions: { [id: string]: AISuggestion } = {};
+
+        // 1. Summary Diff
+        if (tailoredBp.summary && tailoredBp.summary !== blueprint.summary) {
+          newSuggestions['summary'] = {
+            id: 'summary',
+            type: 'summary',
+            originalText: blueprint.summary || '',
+            suggestedText: tailoredBp.summary,
+            status: 'pending',
+            reason: `Optimized summary for ${role} role and key requirements.`
+          };
+        }
+
+        // 2. Experience Bullets Diff
+        (tailoredBp.experience || []).forEach((tailoredExp, expIdx) => {
+          const currentExp = blueprint.experience?.[expIdx];
+          if (currentExp) {
+            (tailoredExp.bullets || []).forEach((tBullet, bIdx) => {
+              const origBullet = currentExp.bullets?.[bIdx];
+              if (origBullet && origBullet !== tBullet) {
+                const id = `exp-${expIdx}-${bIdx}`;
+                newSuggestions[id] = {
+                  id,
+                  type: 'exp_bullet',
+                  parentIndex: expIdx,
+                  bulletIndex: bIdx,
+                  originalText: origBullet,
+                  suggestedText: tBullet,
+                  status: 'pending',
+                  reason: 'Rephrased with STAR format & target keywords.'
+                };
+              }
+            });
+          }
+        });
+
+        // 3. Project Bullets Diff
+        (tailoredBp.projects || []).forEach((tailoredProj, projIdx) => {
+          const currentProj = blueprint.projects?.[projIdx];
+          if (currentProj) {
+            (tailoredProj.bullets || []).forEach((tBullet, bIdx) => {
+              const origBullet = currentProj.bullets?.[bIdx];
+              if (origBullet && origBullet !== tBullet) {
+                const id = `proj-${projIdx}-${bIdx}`;
+                newSuggestions[id] = {
+                  id,
+                  type: 'proj_bullet',
+                  parentIndex: projIdx,
+                  bulletIndex: bIdx,
+                  originalText: origBullet,
+                  suggestedText: tBullet,
+                  status: 'pending',
+                  reason: 'Enhanced impact metrics & tech stack alignment.'
+                };
+              }
+            });
+          }
+        });
+
+        setSuggestions(newSuggestions);
+        setAtsScore(data.ats_score || 94);
+        setIsTailorOpen(false);
         setIsDirty(true);
+
+        const count = Object.keys(newSuggestions).length;
+        onSuccess(`Tailored for ${company || 'role'}! ${count} AI suggestions ready for your review (ATS Match: ${data.ats_score || 94}%).`);
+        
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#2563EB', '#10B981', '#F59E0B']
+        });
       }
-      setAtsScore(data.ats_score || 94);
-      setIsTailorOpen(false);
-      onSuccess(`Resume tailored successfully for ${company || 'target role'}! ATS Match: ${data.ats_score || 94}%`);
-      
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.6 },
-        colors: ['#2563EB', '#10B981', '#F59E0B']
-      });
     } catch (err: any) {
       onError(err.message || 'Failed to tailor resume');
     } finally {
       setLoading(false);
     }
   };
+
+  // Accept a single AI suggestion
+  const handleAcceptSuggestion = (id: string) => {
+    const sug = suggestions[id];
+    if (!sug) return;
+
+    if (sug.type === 'summary') {
+      updateBlueprint({ ...blueprint, summary: sug.suggestedText });
+    } else if (sug.type === 'exp_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
+      const expList = [...(blueprint.experience || [])];
+      if (expList[sug.parentIndex]?.bullets) {
+        expList[sug.parentIndex].bullets[sug.bulletIndex] = sug.suggestedText;
+        updateBlueprint({ ...blueprint, experience: expList });
+      }
+    } else if (sug.type === 'proj_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
+      const projList = [...(blueprint.projects || [])];
+      if (projList[sug.parentIndex]?.bullets) {
+        projList[sug.parentIndex].bullets[sug.bulletIndex] = sug.suggestedText;
+        updateBlueprint({ ...blueprint, projects: projList });
+      }
+    }
+
+    setSuggestions(prev => ({
+      ...prev,
+      [id]: { ...prev[id], status: 'accepted' }
+    }));
+  };
+
+  // Reject a single AI suggestion (keep original)
+  const handleRejectSuggestion = (id: string) => {
+    setSuggestions(prev => ({
+      ...prev,
+      [id]: { ...prev[id], status: 'rejected' }
+    }));
+  };
+
+  // Accept All Pending Suggestions
+  const handleAcceptAllSuggestions = () => {
+    let newBp = { ...blueprint };
+
+    Object.values(suggestions).forEach(sug => {
+      if (sug.status === 'pending') {
+        if (sug.type === 'summary') {
+          newBp.summary = sug.suggestedText;
+        } else if (sug.type === 'exp_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
+          const expList = [...(newBp.experience || [])];
+          if (expList[sug.parentIndex]?.bullets) {
+            expList[sug.parentIndex].bullets[sug.bulletIndex] = sug.suggestedText;
+            newBp.experience = expList;
+          }
+        } else if (sug.type === 'proj_bullet' && sug.parentIndex !== undefined && sug.bulletIndex !== undefined) {
+          const projList = [...(newBp.projects || [])];
+          if (projList[sug.parentIndex]?.bullets) {
+            projList[sug.parentIndex].bullets[sug.bulletIndex] = sug.suggestedText;
+            newBp.projects = projList;
+          }
+        }
+      }
+    });
+
+    const updatedSugs: { [id: string]: AISuggestion } = {};
+    Object.keys(suggestions).forEach(k => {
+      updatedSugs[k] = { ...suggestions[k], status: 'accepted' };
+    });
+
+    setBlueprint(newBp);
+    setSuggestions(updatedSugs);
+    setIsDirty(true);
+    onSuccess('Accepted all AI suggestions!');
+  };
+
+  // Reject All Pending Suggestions
+  const handleRejectAllSuggestions = () => {
+    const updatedSugs: { [id: string]: AISuggestion } = {};
+    Object.keys(suggestions).forEach(k => {
+      updatedSugs[k] = { ...suggestions[k], status: 'rejected' };
+    });
+    setSuggestions(updatedSugs);
+    onSuccess('Kept all original content and rejected AI suggestions.');
+  };
+
+  const pendingSuggestionsCount = Object.values(suggestions).filter(s => s.status === 'pending').length;
 
   // Print to PDF
   const handlePrint = () => {
@@ -433,6 +631,31 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     updateBlueprint({ ...blueprint, achievements: updated });
   };
 
+  // Styling helper classes based on templateStyle
+  const getFontFamilyStyle = () => {
+    switch (templateStyle.fontFamily) {
+      case 'Merriweather':
+        return { fontFamily: '"Merriweather", Georgia, serif' };
+      case 'Roboto':
+        return { fontFamily: '"Roboto", sans-serif' };
+      case 'JetBrains Mono':
+        return { fontFamily: '"JetBrains Mono", monospace' };
+      default:
+        return { fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' };
+    }
+  };
+
+  const getFontSizeClass = () => {
+    switch (templateStyle.fontSize) {
+      case 'compact':
+        return 'text-[11px] leading-snug';
+      case 'spacious':
+        return 'text-[13px] leading-relaxed';
+      default:
+        return 'text-xs leading-normal';
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Controls Toolbar (Hidden in Print) */}
@@ -465,7 +688,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               )}
             </div>
             <p className="text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
-              100% editable ATS template matched directly to your uploaded resume and live knowledge graph
+              Google Docs-style Review Editor — Accept, Edit, or Reject JD optimizations live on your master template
             </p>
           </div>
         </div>
@@ -502,6 +725,22 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               <span>Clean ATS Preview</span>
             </button>
           </div>
+
+          {/* Template Style Dropdown Toggle */}
+          <button
+            onClick={() => setIsStyleOpen(!isStyleOpen)}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+              isStyleOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
+            }`}
+            style={{
+              backgroundColor: isStyleOpen ? undefined : 'var(--bg-tertiary)',
+              color: isStyleOpen ? undefined : 'var(--text-primary)',
+              borderColor: 'var(--border-primary)'
+            }}
+          >
+            <Palette className="w-3.5 h-3.5 text-blue-600" />
+            <span>Customize Template</span>
+          </button>
 
           {/* AI Tailoring Drawer Button */}
           <button
@@ -573,7 +812,88 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         </div>
       </div>
 
-      {/* AI Tailoring Drawer (Hidden in Print) */}
+      {/* Template Customizer Toolbar (Hidden in Print) */}
+      {isStyleOpen && (
+        <div 
+          className="no-print p-4 rounded-2xl border space-y-3 shadow-sm animate-in fade-in duration-200"
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-blue-600" />
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+                Template Appearance & Layout Controls
+              </h3>
+            </div>
+            <button onClick={() => setIsStyleOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+            {/* Font Family */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Typography</label>
+              <select
+                value={templateStyle.fontFamily}
+                onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontFamily: e.target.value })}
+                className="input-base w-full text-xs"
+              >
+                <option value="Inter">Inter (Modern Clean)</option>
+                <option value="Merriweather">Merriweather (Executive Serif)</option>
+                <option value="Roboto">Roboto (Technical Sans)</option>
+                <option value="JetBrains Mono">JetBrains Mono (Developer)</option>
+              </select>
+            </div>
+
+            {/* Font Size */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Density / Text Size</label>
+              <select
+                value={templateStyle.fontSize}
+                onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontSize: e.target.value })}
+                className="input-base w-full text-xs"
+              >
+                <option value="compact">Compact (Fit 1 Page)</option>
+                <option value="standard">Standard (10.5 pt)</option>
+                <option value="spacious">Spacious (11.5 pt)</option>
+              </select>
+            </div>
+
+            {/* Header Alignment */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Header Align</label>
+              <select
+                value={templateStyle.headerAlign}
+                onChange={(e: any) => setTemplateStyle({ ...templateStyle, headerAlign: e.target.value })}
+                className="input-base w-full text-xs"
+              >
+                <option value="center">Centered (Standard ATS)</option>
+                <option value="left">Left Aligned (Modern Silicon Valley)</option>
+              </select>
+            </div>
+
+            {/* Accent Color Palette */}
+            <div>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Accent Theme</label>
+              <div className="flex items-center gap-2 pt-1">
+                {ACCENT_COLORS.map((col, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setTemplateStyle({ ...templateStyle, accentColor: col.value })}
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${
+                      templateStyle.accentColor === col.value ? 'scale-110 border-blue-500 shadow-sm' : 'border-transparent'
+                    } ${col.class}`}
+                    title={col.name}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Tailoring Parameters Form (Hidden in Print) */}
       {isTailorOpen && (
         <div 
           className="no-print p-6 rounded-2xl border space-y-4 shadow-sm animate-in fade-in duration-200"
@@ -583,12 +903,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-600" />
               <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                Target Job Tailoring Engine
+                Target Job Description Optimizer
               </h3>
             </div>
             {atsScore !== null && (
               <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                <Award className="w-3.5 h-3.5" /> ATS Match Score: {atsScore}%
+                <Award className="w-3.5 h-3.5" /> ATS Match: {atsScore}%
               </span>
             )}
           </div>
@@ -608,7 +928,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company Name</label>
               <input
                 type="text"
-                placeholder="e.g. Google, Stripe, Microsoft"
+                placeholder="e.g. Google, Stripe, Microsoft, DRDO"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 className="input-base w-full text-xs"
@@ -649,8 +969,8 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Run AI Optimization</span>
+                  <Wand2 className="w-4 h-4" />
+                  <span>Generate Tracked Changes</span>
                 </>
               )}
             </button>
@@ -658,22 +978,67 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         </div>
       )}
 
-      {/* Main Resume Canvas (Standard ATS Resume Layout) */}
+      {/* Google Docs-style Floating Review Bar for Pending Changes */}
+      {pendingSuggestionsCount > 0 && (
+        <div 
+          className="no-print p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/40 dark:to-blue-950/40"
+          style={{ borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0">
+              <Wand2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-purple-900 dark:text-purple-200">
+                {pendingSuggestionsCount} Pending AI Suggestions for {company || 'Target Role'}
+              </h4>
+              <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                Review highlighted changes below. You can Accept, Reject, or Edit each item inline.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleAcceptAllSuggestions}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-all"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span>Accept All ({pendingSuggestionsCount})</span>
+            </button>
+            <button
+              onClick={handleRejectAllSuggestions}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+            >
+              Reject All
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Resume Paper Canvas */}
       <div className="w-full max-w-4xl mx-auto">
         <div
-          className="resume-paper p-8 sm:p-12 rounded-2xl shadow-xl space-y-6 transition-all"
+          className={`resume-paper p-8 sm:p-12 rounded-2xl shadow-xl space-y-5 transition-all ${getFontSizeClass()}`}
           style={{
+            ...getFontFamilyStyle(),
             backgroundColor: 'var(--bg-primary)',
             border: isEditMode ? '1px solid var(--border-primary)' : '1px solid var(--border-secondary)',
             color: 'var(--text-primary)',
           }}
         >
           {/* ================= HEADER / CONTACT ================= */}
-          <div className="pb-4 space-y-2 border-b-2" style={{ borderColor: 'var(--border-secondary)' }}>
+          <div 
+            className="pb-3 space-y-1.5 border-b-2" 
+            style={{ 
+              borderColor: templateStyle.accentColor,
+              textAlign: templateStyle.headerAlign === 'center' ? 'center' : 'left'
+            }}
+          >
             {isEditMode ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider font-mono text-blue-600">
+                  <span className="text-[10px] font-bold uppercase tracking-wider font-mono" style={{ color: templateStyle.accentColor }}>
                     Candidate Name & Contact Details
                   </span>
                 </div>
@@ -682,8 +1047,8 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   value={blueprint.contact?.full_name || ''}
                   onChange={(e) => updateContact('full_name', e.target.value)}
                   placeholder="Your Full Name"
-                  className="w-full text-2xl font-black tracking-tight input-base font-sans"
-                  style={{ height: '42px' }}
+                  className="w-full text-2xl font-black tracking-tight input-base"
+                  style={{ height: '42px', ...getFontFamilyStyle() }}
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
@@ -754,12 +1119,20 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               </div>
             ) : (
               /* Clean Preview Header */
-              <div className="text-center space-y-1">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-serif uppercase" style={{ color: 'var(--text-primary)' }}>
+              <div className="space-y-1">
+                <h1 
+                  className="text-2xl sm:text-3xl font-bold tracking-tight uppercase"
+                  style={{ color: templateStyle.accentColor }}
+                >
                   {blueprint.contact?.full_name || 'Software Engineer'}
                 </h1>
                 
-                <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-xs pt-1 font-sans" style={{ color: 'var(--text-secondary)' }}>
+                <div 
+                  className={`flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs pt-0.5 ${
+                    templateStyle.headerAlign === 'center' ? 'justify-center' : 'justify-start'
+                  }`}
+                  style={{ color: 'var(--text-secondary)' }}
+                >
                   {blueprint.contact?.location && <span>{blueprint.contact.location}</span>}
                   {blueprint.contact?.phone && <span>• {blueprint.contact.phone}</span>}
                   {blueprint.contact?.email && (
@@ -816,16 +1189,53 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
           {/* ================= PROFESSIONAL SUMMARY ================= */}
           <div className="space-y-1.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider font-mono border-b pb-0.5" style={{ color: 'var(--text-tertiary)', borderColor: 'var(--border-primary)' }}>
+            <h3 
+              className="text-xs font-bold uppercase tracking-wider font-mono border-b pb-0.5" 
+              style={{ color: templateStyle.accentColor, borderColor: 'var(--border-primary)' }}
+            >
               Professional Summary
             </h3>
-            {isEditMode ? (
+
+            {/* Google Docs-style Diff Box if Summary has pending suggestion */}
+            {suggestions['summary'] && suggestions['summary'].status === 'pending' ? (
+              <div className="p-3 rounded-xl border space-y-2 bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800">
+                <div className="flex items-center justify-between text-[11px] font-bold text-purple-800 dark:text-purple-300">
+                  <span className="flex items-center gap-1.5">
+                    <Wand2 className="w-3.5 h-3.5" /> AI Tailored Summary Suggestion:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleAcceptSuggestion('summary')}
+                      className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1 shadow-sm"
+                    >
+                      <Check className="w-3 h-3" /> Accept
+                    </button>
+                    <button
+                      onClick={() => handleRejectSuggestion('summary')}
+                      className="px-2.5 py-1 rounded bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[10px] font-medium flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Keep Original
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <div className="line-through opacity-60 text-red-600 dark:text-red-400">
+                    {suggestions['summary'].originalText}
+                  </div>
+                  <div className="font-medium text-emerald-700 dark:text-emerald-300">
+                    {suggestions['summary'].suggestedText}
+                  </div>
+                </div>
+              </div>
+            ) : isEditMode ? (
               <textarea
                 rows={3}
                 value={blueprint.summary || ''}
                 onChange={(e) => updateBlueprint({ ...blueprint, summary: e.target.value })}
                 placeholder="Write a compelling executive summary highlighting your core tech strengths and architectural contributions..."
-                className="input-base w-full text-xs font-sans leading-relaxed"
+                className="input-base w-full text-xs leading-relaxed"
+                style={getFontFamilyStyle()}
               />
             ) : (
               <p className="text-xs leading-relaxed text-justify" style={{ color: 'var(--text-secondary)' }}>
@@ -835,9 +1245,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           </div>
 
           {/* ================= WORK EXPERIENCE ================= */}
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+              <h3 
+                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                style={{ color: templateStyle.accentColor }}
+              >
                 <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
                 Work Experience
               </h3>
@@ -851,9 +1264,9 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               {(blueprint.experience || []).map((exp, expIdx) => (
-                <div key={expIdx} className={`space-y-2 ${isEditMode ? 'p-3.5 rounded-xl border' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
+                <div key={expIdx} className={`space-y-1.5 ${isEditMode ? 'p-3.5 rounded-xl border' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -925,7 +1338,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                       </div>
 
-                      {/* Experience Bullets Editor */}
+                      {/* Experience Bullets Editor with Suggestion Boxes */}
                       <div className="space-y-1.5 pt-1">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -938,30 +1351,63 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                             <Plus className="w-3 h-3" /> Add Bullet
                           </button>
                         </div>
-                        {(exp.bullets || []).map((bullet, bIdx) => (
-                          <div key={bIdx} className="flex items-start gap-1.5">
-                            <textarea
-                              rows={2}
-                              value={bullet}
-                              onChange={(e) => updateExpBullet(expIdx, bIdx, e.target.value)}
-                              placeholder="Action + Context + Quantifiable Result..."
-                              className="input-base w-full text-xs leading-relaxed"
-                            />
-                            <button
-                              onClick={() => deleteExpBullet(expIdx, bIdx)}
-                              className="text-red-400 hover:text-red-600 p-1 mt-1"
-                              title="Delete bullet"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                        {(exp.bullets || []).map((bullet, bIdx) => {
+                          const sugId = `exp-${expIdx}-${bIdx}`;
+                          const sug = suggestions[sugId];
+
+                          return (
+                            <div key={bIdx} className="space-y-1">
+                              {sug && sug.status === 'pending' ? (
+                                <div className="p-2.5 rounded-lg border bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 space-y-1.5 text-xs">
+                                  <div className="flex items-center justify-between text-[10px] font-bold text-purple-700 dark:text-purple-300">
+                                    <span className="flex items-center gap-1">
+                                      <Wand2 className="w-3 h-3" /> AI Tailored Bullet Suggestion
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => handleAcceptSuggestion(sugId)}
+                                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1"
+                                      >
+                                        <Check className="w-3 h-3" /> Accept
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectSuggestion(sugId)}
+                                        className="px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[10px] font-medium"
+                                      >
+                                        <X className="w-3 h-3" /> Keep Original
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="line-through text-red-500 opacity-60">{sug.originalText}</div>
+                                  <div className="font-medium text-emerald-700 dark:text-emerald-300">{sug.suggestedText}</div>
+                                </div>
+                              ) : (
+                                <div className="flex items-start gap-1.5">
+                                  <textarea
+                                    rows={2}
+                                    value={bullet}
+                                    onChange={(e) => updateExpBullet(expIdx, bIdx, e.target.value)}
+                                    placeholder="Action + Context + Quantifiable Result..."
+                                    className="input-base w-full text-xs leading-relaxed"
+                                  />
+                                  <button
+                                    onClick={() => deleteExpBullet(expIdx, bIdx)}
+                                    className="text-red-400 hover:text-red-600 p-1 mt-1"
+                                    title="Delete bullet"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
                     /* Clean ATS Preview Experience */
-                    <div className="space-y-1">
-                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between font-sans">
+                    <div className="space-y-0.5">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between">
                         <div className="flex items-baseline gap-2">
                           <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                             {exp.company}
@@ -982,7 +1428,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       </div>
 
                       {exp.bullets && exp.bullets.length > 0 && (
-                        <ul className="list-disc list-outside ml-4 space-y-1 text-xs pt-1" style={{ color: 'var(--text-secondary)' }}>
+                        <ul className="list-disc list-outside ml-4 space-y-0.5 text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
                           {exp.bullets.map((bullet, bIdx) => (
                             <li key={bIdx} className="leading-relaxed">
                               {bullet}
@@ -998,9 +1444,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           </div>
 
           {/* ================= TECHNICAL PROJECTS ================= */}
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+              <h3 
+                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                style={{ color: templateStyle.accentColor }}
+              >
                 <FolderGit2 className="w-3.5 h-3.5 text-blue-600" />
                 Technical Projects & Systems
               </h3>
@@ -1014,9 +1463,9 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               {(blueprint.projects || []).map((proj, projIdx) => (
-                <div key={projIdx} className={`space-y-2 ${isEditMode ? 'p-3.5 rounded-xl border' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
+                <div key={projIdx} className={`space-y-1.5 ${isEditMode ? 'p-3.5 rounded-xl border' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -1078,7 +1527,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                       </div>
 
-                      {/* Project Bullets */}
+                      {/* Project Bullets with Suggestions */}
                       <div className="space-y-1.5 pt-1">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
@@ -1091,30 +1540,63 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                             <Plus className="w-3 h-3" /> Add Bullet
                           </button>
                         </div>
-                        {(proj.bullets || []).map((bullet, bIdx) => (
-                          <div key={bIdx} className="flex items-start gap-1.5">
-                            <textarea
-                              rows={2}
-                              value={bullet}
-                              onChange={(e) => updateProjBullet(projIdx, bIdx, e.target.value)}
-                              placeholder="Key feature developed, algorithms implemented, or benchmarks achieved..."
-                              className="input-base w-full text-xs leading-relaxed"
-                            />
-                            <button
-                              onClick={() => deleteProjBullet(projIdx, bIdx)}
-                              className="text-red-400 hover:text-red-600 p-1 mt-1"
-                              title="Delete bullet"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
+                        {(proj.bullets || []).map((bullet, bIdx) => {
+                          const sugId = `proj-${projIdx}-${bIdx}`;
+                          const sug = suggestions[sugId];
+
+                          return (
+                            <div key={bIdx} className="space-y-1">
+                              {sug && sug.status === 'pending' ? (
+                                <div className="p-2.5 rounded-lg border bg-purple-50/40 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 space-y-1.5 text-xs">
+                                  <div className="flex items-center justify-between text-[10px] font-bold text-purple-700 dark:text-purple-300">
+                                    <span className="flex items-center gap-1">
+                                      <Wand2 className="w-3 h-3" /> AI Tailored Project Bullet
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={() => handleAcceptSuggestion(sugId)}
+                                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold flex items-center gap-1"
+                                      >
+                                        <Check className="w-3 h-3" /> Accept
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectSuggestion(sugId)}
+                                        className="px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[10px] font-medium"
+                                      >
+                                        <X className="w-3 h-3" /> Keep Original
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="line-through text-red-500 opacity-60">{sug.originalText}</div>
+                                  <div className="font-medium text-emerald-700 dark:text-emerald-300">{sug.suggestedText}</div>
+                                </div>
+                              ) : (
+                                <div className="flex items-start gap-1.5">
+                                  <textarea
+                                    rows={2}
+                                    value={bullet}
+                                    onChange={(e) => updateProjBullet(projIdx, bIdx, e.target.value)}
+                                    placeholder="Key feature developed, algorithms implemented, or benchmarks achieved..."
+                                    className="input-base w-full text-xs leading-relaxed"
+                                  />
+                                  <button
+                                    onClick={() => deleteProjBullet(projIdx, bIdx)}
+                                    className="text-red-400 hover:text-red-600 p-1 mt-1"
+                                    title="Delete bullet"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
                     /* Clean ATS Preview Project */
-                    <div className="space-y-1">
-                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between font-sans">
+                    <div className="space-y-0.5">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between">
                         <div className="flex items-baseline gap-2 flex-wrap">
                           <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                             {proj.name}
@@ -1150,7 +1632,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       </div>
 
                       {proj.bullets && proj.bullets.length > 0 && (
-                        <ul className="list-disc list-outside ml-4 space-y-1 text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                        <ul className="list-disc list-outside ml-4 space-y-0.5 text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
                           {proj.bullets.map((bullet, bIdx) => (
                             <li key={bIdx} className="leading-relaxed">
                               {bullet}
@@ -1166,9 +1648,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           </div>
 
           {/* ================= TECHNICAL SKILLS ================= */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+              <h3 
+                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                style={{ color: templateStyle.accentColor }}
+              >
                 <Code2 className="w-3.5 h-3.5 text-amber-600" />
                 Technical Skills & Tools
               </h3>
@@ -1182,7 +1667,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               )}
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {(blueprint.skills || []).map((cat, catIdx) => (
                 <div key={catIdx} className={isEditMode ? 'p-3 rounded-xl border space-y-2' : 'flex flex-col sm:flex-row sm:items-baseline gap-1 text-xs'} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
@@ -1209,7 +1694,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         {cat.skills.map((skill, sIdx) => (
                           <span
                             key={sIdx}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium"
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium"
                             style={{
                               backgroundColor: 'var(--bg-tertiary)',
                               color: 'var(--text-primary)',
@@ -1260,9 +1745,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           </div>
 
           {/* ================= EDUCATION ================= */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-              <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+              <h3 
+                className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                style={{ color: templateStyle.accentColor }}
+              >
                 <GraduationCap className="w-3.5 h-3.5 text-purple-600" />
                 Education
               </h3>
@@ -1276,7 +1764,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               )}
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {(blueprint.education || []).map((edu, eduIdx) => (
                 <div key={eduIdx} className={isEditMode ? 'p-3 rounded-xl border space-y-2' : 'space-y-0.5 text-xs'} style={{ borderColor: 'var(--border-primary)' }}>
                   {isEditMode ? (
@@ -1353,7 +1841,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   ) : (
                     /* Clean ATS Preview Education */
                     <div>
-                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between font-sans">
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between">
                         <div className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>
                           {edu.university}
                         </div>
@@ -1374,9 +1862,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
           {/* ================= ACHIEVEMENTS & HACKATHONS ================= */}
           {(blueprint.achievements && blueprint.achievements.length > 0 || isEditMode) && (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between border-b pb-0.5" style={{ borderColor: 'var(--border-primary)' }}>
-                <h3 className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+                <h3 
+                  className="text-xs font-bold uppercase tracking-wider font-mono flex items-center gap-1.5" 
+                  style={{ color: templateStyle.accentColor }}
+                >
                   <Award className="w-3.5 h-3.5 text-amber-500" />
                   Achievements & Hackathons
                 </h3>
@@ -1411,7 +1902,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                     </div>
                   ))
                 ) : (
-                  <ul className="list-disc list-outside ml-4 space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <ul className="list-disc list-outside ml-4 space-y-0.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                     {(blueprint.achievements || []).map((ach, achIdx) => (
                       <li key={achIdx} className="leading-relaxed">
                         {ach}
@@ -1434,6 +1925,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             setBlueprint(bp);
             setMasterBlueprint(bp);
             setHasMasterResume(true);
+            setSuggestions({});
             setIsDirty(false);
           }
           setIsResumeModalOpen(false);
