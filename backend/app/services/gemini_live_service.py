@@ -195,8 +195,8 @@ IMPORTANT: You are speaking through audio — keep responses conversational, 2-4
                 )
 
                 LIVE_MODELS = [
-                    "gemini-2.5-flash-native-audio-latest",
-                    "gemini-3.1-flash-live-preview",
+                    "gemini-3.8-live",
+                    "gemini-3.8-live-extended-thinking",
                     "gemini-3.8-live",
                 ]
 

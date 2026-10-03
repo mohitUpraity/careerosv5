@@ -353,24 +353,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           }
 
           const currentText = final || interim;
-          if (currentText.trim()) {
+          // Only process user recognition if AI is not currently speaking out loud
+          if (currentText.trim() && !audioManager.hasActivePlayback()) {
             setCurrentCaption({
               speaker: "user",
               speakerName: config.candidateName || "You",
               text: currentText.trim(),
             });
-
-            // Interrupt AI playback when user starts speaking
-            // Use audioManager directly instead of stale isAiSpeaking state
-            if (audioManager.hasActivePlayback()) {
-              console.log("[Live] ⚡ User interrupted AI (SpeechRecognition)");
-              discardAudioRef.current = true;
-              audioManager.stopPlayback();
-              if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-              setIsAiSpeaking(false);
-              setIsInterrupted(true);
-              setTimeout(() => setIsInterrupted(false), 2000);
-            }
 
             if (final.trim()) {
               setTranscripts((prev) => [
@@ -384,7 +373,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                   isFinal: true,
                 },
               ]);
-              // NOT sending text to WebSocket — audio stream handles this
             }
           }
         };
@@ -617,8 +605,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         </div>
       )}
 
-      {/* Hidden video & canvas for frame grabbing */}
-      <video ref={videoFeedRef} autoPlay playsInline muted className="hidden" />
+      {/* Off-screen video & canvas for frame grabbing */}
+      <video
+        ref={videoFeedRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ position: "fixed", top: "-9999px", left: "-9999px", width: "320px", height: "180px", pointerEvents: "none", opacity: 0 }}
+      />
       <canvas ref={hiddenCanvasRef} className="hidden" />
 
       {/* Floating Emojis Overlay */}

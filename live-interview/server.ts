@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Define Gemini Live In-Meeting Tool Declarations
-const liveInterviewTools = [
+const liveInterviewTools: any[] = [
   {
     functionDeclarations: [
       {
@@ -126,7 +126,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    model: process.env.GEMINI_LIVE_MODEL || "gemini-3.1-flash-live-preview",
+    model: process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live",
     time: new Date().toISOString(),
   });
 });
@@ -168,7 +168,7 @@ app.post("/api/run-code", async (req, res) => {
     try {
       const ai = getGeminiClient();
       const response = await ai.models.generateContent({
-        model: "gemini-3.7-flash",
+        model: "gemini-3.8-flash",
         contents: prompt,
         config: { temperature: 0.1 },
       });
@@ -293,7 +293,7 @@ Please output a comprehensive, structured evaluation JSON adhering STRICTLY to t
 }`;
 
     // 1. Try Gemini Flash models first
-    const candidateModels = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash"];
+    const candidateModels = ["gemini-3.8-flash", "gemini-3.1-pro-preview"];
     let lastError: any = null;
     let parsedData: any = null;
 
@@ -464,15 +464,17 @@ INTERVIEW CONDUCT & INTERACTION TOOLS:
 5. When the interview finishes naturally or after disqualification, call 'conclude_interview'.`;
 
         const finalSystemInstruction = customInstruction || defaultInstruction;
+        const VALID_VOICES = ["Zephyr", "Puck", "Charon", "Kore", "Fenrir"];
+        const selectedVoice = VALID_VOICES.includes(voice) ? voice : "Zephyr";
+
         const primaryModel = process.env.GEMINI_LIVE_MODEL || "gemini-3.8-live";
-        // Fallback models in order of preference when primary is overloaded
+        // Valid live models according to @google/genai guidelines
         const candidateModels = [
           primaryModel,
-          "gemini-3.1-flash-live-preview",
           "gemini-3.8-live-extended-thinking",
         ].map(m => m.startsWith("models/") ? m.replace("models/", "") : m);
 
-        console.log(`[Gemini Live] Starting Executive HR session for ${candidateName} at ${company} with models [${candidateModels}] and voice ${voice}`);
+        console.log(`[Gemini Live] Starting session for ${candidateName} at ${company} with models [${candidateModels}] and voice ${selectedVoice}`);
 
         try {
           const ai = getGeminiClient();
@@ -606,7 +608,7 @@ INTERVIEW CONDUCT & INTERACTION TOOLS:
             responseModalities: [Modality.AUDIO],
             speechConfig: {
               voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: voice || "Zephyr" },
+                prebuiltVoiceConfig: { voiceName: selectedVoice },
               },
             },
             systemInstruction: finalSystemInstruction,
@@ -690,7 +692,7 @@ INTERVIEW CONDUCT & INTERACTION TOOLS:
         if (liveSession && msg.data) {
           try {
             liveSession.sendRealtimeInput({
-              media: {
+              audio: {
                 data: msg.data,
                 mimeType: "audio/pcm;rate=16000",
               },

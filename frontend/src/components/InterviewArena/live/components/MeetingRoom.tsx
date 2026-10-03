@@ -19,7 +19,7 @@ import { SidePanel } from "./SidePanel";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { FloatingReactions, FloatingReactionItem } from "./FloatingReactions";
 import { EvaluationModal } from "./EvaluationModal";
-import { Sparkles, Radio, Maximize, Minimize, FileText, CheckCircle2, ShieldCheck, Clock } from "lucide-react";
+import { Sparkles, Radio, Maximize2, Minimize2 } from "lucide-react";
 
 interface MeetingRoomProps {
   config: InterviewConfig;
@@ -46,7 +46,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
 
   // Live Speech & Audio states
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -54,8 +53,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const [userVolume, setUserVolume] = useState(0);
   const [isConnecting, setIsConnecting] = useState(true);
   const [isInterrupted, setIsInterrupted] = useState(false);
-  const [callDurationSeconds, setCallDurationSeconds] = useState(0);
-
   const [currentCaption, setCurrentCaption] = useState<{
     speaker: "ai" | "user" | "none";
     speakerName: string;
@@ -71,10 +68,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [rubricStages, setRubricStages] = useState<RubricStage[]>(INITIAL_RUBRIC_STAGES);
   const [reactions, setReactions] = useState<FloatingReactionItem[]>([]);
-  const [conductWarnings, setConductWarnings] = useState<any[]>([]);
-  const [interviewerObservations, setInterviewerObservations] = useState<any[]>([]);
-  const [conclusionData, setConclusionData] = useState<any>(null);
-
   const [analytics, setAnalytics] = useState<LiveAnalytics>({
     userSpeakingSeconds: 0,
     aiSpeakingSeconds: 0,
@@ -88,6 +81,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const [evaluationReport, setEvaluationReport] = useState<EvaluationReport | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [lastCodeWritten, setLastCodeWritten] = useState<string>("");
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
   // Refs
   const audioManagerRef = useRef<AudioStreamingManager | null>(null);
@@ -95,51 +89,23 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hiddenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoFeedRef = useRef<HTMLVideoElement | null>(null);
+
+  // Track if raw PCM audio was received during current turn
+  const hasPcmAudioRef = useRef(false);
+  const currentAiTurnTextRef = useRef("");
   const speechRecognitionRef = useRef<any>(null);
-  const isPcmPlayingRef = useRef<boolean>(false);
+  // When true, discard incoming audio chunks (user interrupted the AI)
+  const discardAudioRef = useRef(false);
 
-  // Fullscreen Change Listener
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
-    };
-  }, []);
-
-  // Meeting Timer Counter
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCallDurationSeconds((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const formatTimer = (totalSec: number) => {
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const handleToggleFullscreen = async () => {
-    try {
-      if (!document.fullscreenElement) {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen().catch(() => {});
-        }
-      } else {
-        if (document.exitFullscreen) {
-          await document.exitFullscreen().catch(() => {});
-        }
-      }
-    } catch (err) {
-      console.warn("Fullscreen toggle error:", err);
+  // Unlock AudioContext on any user click
+  const handleUnlockAudio = useCallback(() => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.unlockAudioContext();
     }
-  };
+    setAudioUnlocked(true);
+  }, []);
 
-  // Human TTS Vocalizer for Text Fallbacks
+  // Human TTS Vocalizer for fallback when PCM is blocked by browser autoplay
   const speakAiText = useCallback((text: string) => {
     if (!("speechSynthesis" in window)) return;
     try {
@@ -159,21 +125,22 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         isFemale
           ? v.name.includes("Samantha") ||
             v.name.includes("Victoria") ||
-            v.name.includes("Google US English") ||
-            v.name.includes("Female") ||
-            v.lang === "en-US"
+            v.name.includes("Karen") ||
+            v.name.includes("Zira") ||
+            v.name.includes("Google UK English Female") ||
+            v.name.includes("Female")
           : v.name.includes("Daniel") ||
             v.name.includes("Alex") ||
+            v.name.includes("David") ||
             v.name.includes("Google UK English Male") ||
-            v.name.includes("Male") ||
-            v.lang === "en-US"
-      ) || voices[0];
+            v.name.includes("Male")
+      );
 
       if (preferredVoice) utterance.voice = preferredVoice;
 
       utterance.onstart = () => {
         setIsAiSpeaking(true);
-        setAiVolume(0.4);
+        setAiVolume(0.85);
       };
       utterance.onend = () => {
         setIsAiSpeaking(false);
@@ -190,343 +157,250 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     }
   }, [config]);
 
-  // Client Autonomous Turn Fallback (in case WebSocket is offline)
-  const handleClientAutonomousTurn = useCallback(async (candidateInput: string) => {
-    setIsAiSpeaking(false);
-
-    try {
-      const res = await fetch("/api/v1/interview/live-respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(6000),
-        body: JSON.stringify({
-          company: config.company || "Google",
-          role: config.role,
-          candidate_answer: candidateInput,
-          current_question: transcripts.filter((t) => t.speaker === "ai").pop()?.text || "",
-          job_description: config.jobDescription,
-          resume_context: config.resumeText,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const nextQ = data.next_question || data.interviewer_reaction || "Thank you for that explanation. Let's delve into how you handle system trade-offs and edge cases under load.";
-
-        setCurrentCaption({
-          speaker: "ai",
-          speakerName: config.interviewerProfile.name,
-          text: nextQ,
-        });
-
-        setTranscripts((prev) => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            speaker: "ai",
-            speakerName: config.interviewerProfile.name,
-            text: nextQ,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            isFinal: true,
-          },
-        ]);
-
-        speakAiText(nextQ);
-        return;
-      }
-    } catch (e) {
-      console.warn("Autonomous endpoint fallback:", e);
-    }
-
-    // Default high-bar follow up question
-    const defaultFollowup = `That's a solid breakdown. Considering the scale required at ${config.company || "our engineering team"}, how would you monitor latency spikes and guarantee data consistency across distributed replicas?`;
-    setCurrentCaption({
-      speaker: "ai",
-      speakerName: config.interviewerProfile.name,
-      text: defaultFollowup,
-    });
-    setTranscripts((prev) => [
-      ...prev,
-      {
-        id: `ai-${Date.now()}`,
-        speaker: "ai",
-        speakerName: config.interviewerProfile.name,
-        text: defaultFollowup,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        isFinal: true,
-      },
-    ]);
-    speakAiText(defaultFollowup);
-  }, [config, transcripts, speakAiText]);
-
-  // Candidate Speech Recognition Listener
-  useEffect(() => {
-    const SpeechRecognitionClass =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognitionClass) return;
-
-    let recognition: any = null;
-    try {
-      recognition = new SpeechRecognitionClass();
-      speechRecognitionRef.current = recognition;
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onresult = (e: any) => {
-        let interim = "";
-        let final = "";
-
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const text = e.results[i][0].transcript;
-          if (e.results[i].isFinal) {
-            final += text;
-          } else {
-            interim += text;
-          }
-        }
-
-        const currentText = final || interim;
-        if (currentText.trim()) {
-          // Display live closed caption for candidate
-          setCurrentCaption({
-            speaker: "user",
-            speakerName: config.candidateName || "You",
-            text: currentText.trim(),
-          });
-
-          // Immediate interruption: if candidate begins speaking, stop interviewer
-          if (isAiSpeaking) {
-            audioManagerRef.current?.stopPlayback();
-            isPcmPlayingRef.current = false;
-            if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-            setIsAiSpeaking(false);
-            setIsInterrupted(true);
-            setTimeout(() => setIsInterrupted(false), 2000);
-          }
-
-          if (final.trim()) {
-            setTranscripts((prev) => [
-              ...prev,
-              {
-                id: `user-${Date.now()}`,
-                speaker: "user",
-                speakerName: config.candidateName || "You",
-                text: final.trim(),
-                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                isFinal: true,
-              },
-            ]);
-
-            // Forward text to WebSocket if active
-            if (socketRef.current?.readyState === WebSocket.OPEN) {
-              socketRef.current.send(
-                JSON.stringify({
-                  type: "text",
-                  data: final.trim(),
-                })
-              );
-            } else {
-              // Trigger client autonomous response
-              handleClientAutonomousTurn(final.trim());
-            }
-          }
-        }
-      };
-
-      recognition.onerror = (err: any) => {
-        console.debug("Speech recognition event:", err?.error);
-      };
-
-      recognition.start();
-    } catch (e) {
-      console.debug("Speech recognition init notice:", e);
-    }
-
-    return () => {
-      if (recognition) {
-        try {
-          recognition.stop();
-        } catch (e) {}
-      }
-    };
-  }, [config, isAiSpeaking, handleClientAutonomousTurn]);
-
   // Initialize Audio & WebSocket Connection
   useEffect(() => {
     const audioManager = new AudioStreamingManager();
     audioManagerRef.current = audioManager;
 
-    let interruptDebounceCounter = 0;
     audioManager.setOnVolumeChange((inVol, outVol) => {
       setUserVolume(inVol);
-      if (isPcmPlayingRef.current) {
-        setAiVolume(outVol);
-        setIsAiSpeaking(outVol > 0.04);
-      }
-
-      // Client-side interruption threshold
-      if ((isAiSpeaking || outVol > 0.04) && inVol > 0.075) {
-        interruptDebounceCounter++;
-        if (interruptDebounceCounter >= 2) {
-          audioManager.stopPlayback();
-          isPcmPlayingRef.current = false;
-          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-          setIsAiSpeaking(false);
-          setIsInterrupted(true);
-          if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({ type: "interrupt" }));
-          }
-          setTimeout(() => setIsInterrupted(false), 2000);
-          interruptDebounceCounter = 0;
-        }
-      } else {
-        interruptDebounceCounter = 0;
-      }
+      setAiVolume(outVol);
+      setIsAiSpeaking(outVol > 0.04);
     });
 
-    // Auto-connect to active WebSocket endpoint (routes cleanly through Vite proxy)
+    // Determine WS protocol
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/v1/interview/live-ws?role=${encodeURIComponent(config.role)}&company=${encodeURIComponent(config.company || "Apponward Technologies")}&voice=${encodeURIComponent(config.interviewerProfile.voice)}`;
+    const wsUrl = `${protocol}//${window.location.host}/api/live`;
+    const ws = new WebSocket(wsUrl);
+    socketRef.current = ws;
 
-    // Connection safeguard: clear isConnecting after max 2.5s so candidate is never stuck on "Connecting..."
-    const connectionSafeguard = setTimeout(() => {
-      setIsConnecting(false);
-    }, 2500);
+    ws.onopen = () => {
+      console.log("WebSocket connected to /api/live");
+      // Send Setup packet to Gemini Live API
+      ws.send(
+        JSON.stringify({
+          type: "setup",
+          role: config.role,
+          seniority: config.seniority,
+          voice: config.interviewerProfile.voice,
+          candidateName: config.candidateName,
+          interviewType: config.format,
+          customContext: `Candidate Resume: ${config.resumeText}\nJob Description: ${config.jobDescription}`,
+        })
+      );
+    };
 
-    let hasReceivedGreeting = false;
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
 
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
-
-      ws.onopen = () => {
-        console.log("WebSocket connected to /api/v1/interview/live-ws");
-        setIsConnecting(false);
-        ws?.send(
-          JSON.stringify({
-            type: "setup",
-            role: config.role,
-            seniority: config.seniority,
-            voice: config.interviewerProfile.voice,
-            candidateName: config.candidateName,
-            interviewType: config.format,
-            company: config.company || "Target Company",
-            companyContext: `Target Company: ${config.company}\nJob Description:\n${config.jobDescription}`,
-            candidateResume: config.resumeText,
-            customContext: `Target Company: ${config.company}\nTarget Role: ${config.seniority} ${config.role}\n\n=== CANDIDATE RESUME ===\n${config.resumeText}\n\n=== JOB DESCRIPTION ===\n${config.jobDescription}`,
-          })
-        );
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-
-          if (msg.type === "ready") {
-            setIsConnecting(false);
-          } else if (msg.type === "audio" || msg.type === "audio_chunk") {
-            hasReceivedGreeting = true;
-            clearTimeout(initialGreetingTimer);
-            isPcmPlayingRef.current = true;
-            audioManager.playAudioChunk(msg.data);
-            setIsInterrupted(false);
-          } else if (msg.type === "output_transcript" || msg.type === "ai_transcript") {
-            hasReceivedGreeting = true;
-            clearTimeout(initialGreetingTimer);
-            setCurrentCaption({
-              speaker: "ai",
-              speakerName: config.interviewerProfile.name,
-              text: msg.text,
-            });
-
-            setTranscripts((prev) => {
-              const last = prev[prev.length - 1];
-              if (last && last.speaker === "ai" && !last.isFinal) {
-                return [...prev.slice(0, -1), { ...last, text: last.text + " " + msg.text }];
-              }
+        if (msg.type === "ready") {
+          console.log("[Live] ✓ Session ready — AI interviewer connected");
+          discardAudioRef.current = false;
+          setIsConnecting(false);
+        } else if (msg.type === "audio") {
+          // Skip audio chunks from an interrupted AI turn
+          if (discardAudioRef.current) return;
+          hasPcmAudioRef.current = true;
+          audioManager.playAudioChunk(msg.data);
+          setIsInterrupted(false);
+        } else if (msg.type === "output_transcript") {
+          // Closed captions for AI
+          currentAiTurnTextRef.current += (currentAiTurnTextRef.current ? " " : "") + msg.text;
+          setCurrentCaption({
+            speaker: "ai",
+            speakerName: config.interviewerProfile.name,
+            text: msg.text,
+          });
+          // Append to transcripts
+          setTranscripts((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.speaker === "ai" && !last.isFinal) {
               return [
-                ...prev,
-                {
-                  id: `ai-${Date.now()}`,
-                  speaker: "ai",
-                  speakerName: config.interviewerProfile.name,
-                  text: msg.text,
-                  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                  isFinal: false,
-                },
+                ...prev.slice(0, -1),
+                { ...last, text: last.text + " " + msg.text },
               ];
-            });
-
-            // Note: Native PCM audio is streamed directly from Gemini Live API via audioManager.playAudioChunk
-          } else if (msg.type === "input_transcript" || msg.type === "user_transcript") {
-            setCurrentCaption({
+            }
+            return [
+              ...prev,
+              {
+                id: `ai-${Date.now()}`,
+                speaker: "ai",
+                speakerName: config.interviewerProfile.name,
+                text: msg.text,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                isFinal: false,
+              },
+            ];
+          });
+        } else if (msg.type === "input_transcript") {
+          // Closed captions for User
+          setCurrentCaption({
+            speaker: "user",
+            speakerName: config.candidateName || "You",
+            text: msg.text,
+          });
+          setTranscripts((prev) => [
+            ...prev,
+            {
+              id: `user-${Date.now()}`,
               speaker: "user",
               speakerName: config.candidateName || "You",
               text: msg.text,
-            });
-          } else if (msg.type === "interviewer_reaction") {
-            const reactionData = msg.data || msg;
-            handleTriggerReaction(reactionData.emoji || "👏");
-          } else if (msg.type === "conduct_warning") {
-            setConductWarnings((prev) => [...prev, msg.data || msg]);
-          } else if (msg.type === "interviewer_observation") {
-            setInterviewerObservations((prev) => [...prev, msg.data || msg]);
-          } else if (msg.type === "push_coding_challenge") {
-            setActiveLayout("code_split");
-          } else if (msg.type === "update_whiteboard") {
-            setActiveLayout("whiteboard_split");
-          } else if (msg.type === "conclude_interview") {
-            setConclusionData(msg.data || msg);
-            handleEndCall();
-          } else if (msg.type === "interrupted") {
-            audioManager.stopPlayback();
-            if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-            setIsAiSpeaking(false);
-            setIsInterrupted(true);
-            setTimeout(() => setIsInterrupted(false), 2000);
-          } else if (msg.type === "turn_complete") {
-            isPcmPlayingRef.current = false;
-            setAnalytics((prev) => ({ ...prev, turnCount: prev.turnCount + 1 }));
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              isFinal: true,
+            },
+          ]);
+        } else if (msg.type === "interrupted") {
+          // Candidate interrupted the AI — discard remaining audio from this turn
+          console.log("[Live] ⚡ Interrupted — discarding remaining audio");
+          discardAudioRef.current = true;
+          audioManager.stopPlayback();
+          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+          setIsAiSpeaking(false);
+          setIsInterrupted(true);
+          setAnalytics((prev) => ({
+            ...prev,
+            interruptionCount: prev.interruptionCount + 1,
+          }));
+          setTimeout(() => setIsInterrupted(false), 2500);
+        } else if (msg.type === "turn_complete") {
+          // Re-enable audio for the next AI turn (after interruption discard)
+          discardAudioRef.current = false;
+          // Fallback: If no PCM audio arrived but captions did, vocalize via speech synthesis
+          if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
+            speakAiText(currentAiTurnTextRef.current.trim());
           }
-        } catch (err) {
-          console.error("Error processing WebSocket message:", err);
+          hasPcmAudioRef.current = false;
+          currentAiTurnTextRef.current = "";
+
+          setAnalytics((prev) => ({
+            ...prev,
+            turnCount: prev.turnCount + 1,
+          }));
+        } else if (msg.type === "status") {
+          // Model fallback progress updates from server
+          console.log("[Live Status]", msg.message);
+          setCurrentCaption({
+            speaker: "ai",
+            speakerName: "System",
+            text: msg.message || "Connecting...",
+          });
+        } else if (msg.type === "error") {
+          console.error("[Live Error]", msg.message);
+          setCurrentCaption({
+            speaker: "ai",
+            speakerName: "System",
+            text: `⚠️ ${msg.message || "Connection error"} — retrying...`,
+          });
+        } else if (msg.type === "session_closed") {
+          console.warn("[Live] Session closed by server");
+          setIsConnecting(true);
+          setCurrentCaption({
+            speaker: "ai",
+            speakerName: "System",
+            text: "Session ended. Refresh to start a new interview.",
+          });
         }
-      };
+      } catch (err) {
+        console.error("Error processing WS message:", err);
+      }
+    };
 
-      ws.onerror = (err) => {
-        console.warn("Live WebSocket error, falling back to autonomous Bar-Raiser mode:", err);
-        setIsConnecting(false);
-      };
-
-      ws.onclose = () => {
-        console.log("Live WebSocket connection closed.");
-        setIsConnecting(false);
-      };
-    } catch (e) {
-      console.warn("WebSocket init error:", e);
+    ws.onerror = (err) => {
+      console.error("Live WebSocket error:", err);
       setIsConnecting(false);
-    }
+    };
 
     // Forward mic audio PCM to WebSocket
     audioManager.setOnAudioChunk((base64Pcm) => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "audio", data: base64Pcm }));
       }
     });
 
-    // Start Audio Capture with user stream
+    // Start Audio Capture with user's stream
     if (userStream) {
-      audioManager.startAudioCapture(userStream).catch((err) => {
-        console.warn("Audio capture start notice:", err);
-      });
+      audioManager.startAudioCapture(userStream);
+    }
+
+    // Candidate Speech Recognition Listener (Web Speech API)
+    // IMPORTANT: Used ONLY for local captions and interruption detection.
+    // Audio is already streamed to Gemini via AudioStreamingManager as raw PCM.
+    // Do NOT send recognized text to the WebSocket — that would duplicate the input
+    // and confuse Gemini's turn-taking model, causing it to never respond.
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognitionClass) {
+      try {
+        const recognition = new SpeechRecognitionClass();
+        speechRecognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        recognition.onresult = (e: any) => {
+          let interim = "";
+          let final = "";
+
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            const text = e.results[i][0].transcript;
+            if (e.results[i].isFinal) {
+              final += text;
+            } else {
+              interim += text;
+            }
+          }
+
+          const currentText = final || interim;
+          // Only process user recognition if AI is not currently speaking out loud
+          if (currentText.trim() && !audioManager.hasActivePlayback()) {
+            setCurrentCaption({
+              speaker: "user",
+              speakerName: config.candidateName || "You",
+              text: currentText.trim(),
+            });
+
+            if (final.trim()) {
+              setTranscripts((prev) => [
+                ...prev,
+                {
+                  id: `user-${Date.now()}`,
+                  speaker: "user",
+                  speakerName: config.candidateName || "You",
+                  text: final.trim(),
+                  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  isFinal: true,
+                },
+              ]);
+            }
+          }
+        };
+
+        recognition.onerror = (err: any) => {
+          if (err?.error !== "no-speech" && err?.error !== "aborted") {
+            console.debug("Speech recognition event:", err?.error);
+          }
+        };
+
+        recognition.onend = () => {
+          // Auto-restart speech recognition if still in meeting
+          if (speechRecognitionRef.current) {
+            try {
+              recognition.start();
+            } catch (e) {}
+          }
+        };
+
+        recognition.start();
+      } catch (err) {
+        console.debug("Speech recognition start skipped:", err);
+      }
     }
 
     // Video Streaming Frame Loop (~1 FPS)
     frameIntervalRef.current = setInterval(() => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (ws.readyState !== WebSocket.OPEN) return;
       const canvas = hiddenCanvasRef.current;
       const activeVideo = videoFeedRef.current;
 
@@ -543,44 +417,32 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       }
     }, 1200);
 
-    // Initial greeting prompt dispatch fallback (runs after 2500ms if server hasn't sent greeting)
-    const initialGreetingTimer = setTimeout(() => {
-      if (hasReceivedGreeting) return;
-      hasReceivedGreeting = true;
-      setIsConnecting(false);
-      const greetingMsg = `Hello ${config.candidateName}! Welcome to your technical interview for the ${config.seniority} ${config.role} position at ${config.company || "Google"}. I've thoroughly reviewed your uploaded resume and your project background. To kick things off, could you briefly introduce yourself and share the architecture behind the most challenging project on your resume?`;
-
-      setCurrentCaption({
-        speaker: "ai",
-        speakerName: config.interviewerProfile.name,
-        text: greetingMsg,
-      });
-
-      setTranscripts([
-        {
-          id: `ai-greet-${Date.now()}`,
-          speaker: "ai",
-          speakerName: config.interviewerProfile.name,
-          text: greetingMsg,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          isFinal: true,
-        },
-      ]);
-
-      speakAiText(greetingMsg);
-    }, 2500);
+    // Live analytics timer
+    const analyticsTimer = setInterval(() => {
+      setAnalytics((prev) => ({
+        ...prev,
+        userSpeakingSeconds: prev.userSpeakingSeconds + (userVolume > 0.05 && !isMuted ? 1 : 0),
+        aiSpeakingSeconds: prev.aiSpeakingSeconds + (isAiSpeaking ? 1 : 0),
+      }));
+    }, 1000);
 
     return () => {
-      clearTimeout(initialGreetingTimer);
-      clearTimeout(connectionSafeguard);
+      clearInterval(analyticsTimer);
       if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch (e) {}
+      }
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
       audioManager.cleanup();
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
     };
-  }, [config]);
+  }, [config, speakAiText]);
 
   // Update mute state in Audio Manager
   useEffect(() => {
@@ -645,32 +507,27 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     };
     setChatMessages((prev) => [...prev, newMsg]);
 
+    // Send to Gemini Live session
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(
         JSON.stringify({
           type: "text",
-          data: `Candidate chat message: "${text}"`,
+          data: `Candidate shared message in chat: "${text}"`,
         })
       );
-    } else {
-      handleClientAutonomousTurn(text);
     }
   };
 
   // Sync Code IDE with AI
   const handleSyncCodeWithAi = (code: string, language: string) => {
     setLastCodeWritten(code);
-    const codeNotice = `[Candidate Code in ${language} IDE]:\n\`\`\`${language}\n${code}\n\`\`\`\nPlease examine the candidate's code, give feedback or ask about design trade-offs.`;
-
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(
         JSON.stringify({
           type: "text",
-          data: codeNotice,
+          data: `[Candidate Code in ${language} IDE]:\n\`\`\`${language}\n${code}\n\`\`\`\nPlease examine the candidate's code, give interactive feedback or ask them about their design choices.`,
         })
       );
-    } else {
-      handleClientAutonomousTurn(codeNotice);
     }
     handleTriggerReaction("💻");
   };
@@ -687,16 +544,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       socketRef.current.send(
         JSON.stringify({
           type: "text",
-          data: "Candidate updated their System Design Whiteboard architecture diagram. Please review the diagram on screen.",
+          data: "Candidate updated their System Design Whiteboard architecture diagram. Please review the diagram they drew on their screen.",
         })
       );
-    } else {
-      handleClientAutonomousTurn("Candidate presented an updated System Design architectural diagram on the whiteboard.");
     }
     handleTriggerReaction("🎨");
   };
 
-  // End Call & Trigger Evaluation Scorecard
+  // End Call & Trigger Comprehensive Evaluation
   const handleEndCall = async () => {
     setShowEvaluation(true);
     setIsEvaluating(true);
@@ -704,153 +559,107 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     if (audioManagerRef.current) {
       audioManagerRef.current.stopPlayback();
     }
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
 
     try {
-      const res = await fetch("/api/v1/interview/evaluate-interview", {
+      const res = await fetch("/api/evaluate-interview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transcript: transcripts,
-          company: config.company || "Apponward Technologies",
           role: config.role,
           seniority: config.seniority,
           format: config.format,
           codeSnippet: lastCodeWritten,
           notes: chatMessages.map((m) => `${m.senderName}: ${m.text}`).join("\n"),
-          companyContext: config.jobDescription,
-          candidateResume: config.resumeText,
-          conductWarnings,
-          interviewerObservations,
-          conclusionData,
         }),
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data.overallScore === "number") {
-          setEvaluationReport(data);
-          return;
-        }
-      }
-      throw new Error("Backend evaluation fallback triggered");
+      const data = await res.json();
+      setEvaluationReport(data);
     } catch (err) {
-      console.warn("Evaluation fallback activated:", err);
-      // High-signal Bar-Raiser Scorecard anchored on candidate resume & target JD
-      setEvaluationReport({
-        overallScore: 86,
-        hiringDecision: "Hire",
-        executiveSummary: `The candidate demonstrated strong architectural intuition, methodical system decomposition, and credible ownership over their resume projects for the ${config.seniority} ${config.role} position at ${config.company || "the company"}.`,
-        metrics: [
-          { category: "Technical Competence & Knowledge", score: 88, feedback: "Confident grasp of distributed architectures, high-concurrency event loops, and database indexing." },
-          { category: "Problem Solving & Algorithmic Rigor", score: 85, feedback: "Systematic decomposition of edge cases, cache stampede mitigations, and latency bottlenecks." },
-          { category: "System Design & Scalability", score: 87, feedback: "Articulated microservices boundaries, asynchronous worker pools, and partition tolerance trade-offs." },
-          { category: "Code Quality & Edge Case Handling", score: 82, feedback: "Clean idiomatic coding style with defensive validation and good error handling boundaries." },
-          { category: "Communication & Collaboration", score: 90, feedback: "Highly articulate, responsive to interviewer prompts, and well-structured STAR behavioral communication." },
-        ],
-        topStrengths: [
-          `Clear defense of past engineering decisions cited on resume`,
-          `Solid understanding of caching trade-offs (Cache-Aside vs Write-Through)`,
-          `Composed executive presence and active listening throughout the session`,
-        ],
-        areasForImprovement: [
-          `Provide more concrete throughput numbers when discussing past system scale`,
-          `Deep dive into multi-region database failover strategies during network partitions`,
-        ],
-        questionBreakdown: [
-          {
-            topic: "Architecture & Project Defense",
-            candidateResponseQuality: "Exceptional",
-            interviewerNotes: "Demonstrated clear ownership of engineering decisions, technical debt trade-offs, and microservices decoupling.",
-          },
-          {
-            topic: "System Scalability & High Concurrency",
-            candidateResponseQuality: "Solid",
-            interviewerNotes: "Handled caching bottlenecks and cache stampede scenarios effectively.",
-          },
-        ],
-        actionableStudyRoadmap: [
-          "Practice drafting end-to-end distributed system schemas with capacity planning in under 15 minutes",
-          "Review database index lock contention and isolation levels (Read Committed vs Serializable)",
-          "Refine 60-second punchy elevator pitches for your top two GitHub portfolio projects",
-        ],
-      });
+      console.error("Evaluation request failed:", err);
     } finally {
       setIsEvaluating(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 w-screen h-screen bg-[#202124] text-[#e8eaed] flex flex-col justify-between overflow-hidden select-none relative font-sans">
-      {/* Hidden video & canvas for frame capture */}
-      <video ref={videoFeedRef} autoPlay playsInline muted className="hidden" />
+    <div
+      className="h-screen w-screen bg-[#202124] text-[#e8eaed] flex flex-col overflow-hidden select-none relative"
+      onClick={handleUnlockAudio}
+    >
+      {/* Audio Unlock Overlay — Chrome requires a user gesture to play audio */}
+      {!audioUnlocked && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center cursor-pointer"
+          onClick={handleUnlockAudio}
+        >
+          <div className="text-center space-y-4 animate-pulse">
+            <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h2.5l4.5-4v14l-4.5-4z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white">Click to Start Interview</h2>
+            <p className="text-gray-300 text-sm">Click anywhere to enable audio playback</p>
+          </div>
+        </div>
+      )}
+
+      {/* Off-screen video & canvas for frame grabbing */}
+      <video
+        ref={videoFeedRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ position: "fixed", top: "-9999px", left: "-9999px", width: "320px", height: "180px", pointerEvents: "none", opacity: 0 }}
+      />
       <canvas ref={hiddenCanvasRef} className="hidden" />
 
       {/* Floating Emojis Overlay */}
       <FloatingReactions reactions={reactions} />
 
-      {/* Realistic Google Meet Top Header Bar */}
-      <header className="h-14 px-4 sm:px-6 bg-[#202124] border-b border-[#3c4043]/60 flex items-center justify-between z-20 shrink-0">
-        <div className="flex items-center space-x-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+      {/* Top Header Meeting Bar */}
+      <header className="h-14 px-4 sm:px-6 bg-[#202124] border-b border-[#3c4043]/50 flex items-center justify-between z-20">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-md">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center space-x-2">
-              <h1 className="text-xs sm:text-sm font-bold text-white truncate">
-                {config.company || "Target Company"} • {config.seniority} {config.role}
-              </h1>
-              <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                meet.ai/interview-live
-              </span>
-            </div>
+          <div>
+            <h1 className="text-xs sm:text-sm font-semibold text-white truncate max-w-xs sm:max-w-md">
+              {config.role} • {config.format}
+            </h1>
             <div className="flex items-center space-x-2 text-[11px] text-gray-400">
-              <span className="flex items-center gap-1 text-emerald-400 font-medium">
+              <span className="flex items-center gap-1 text-emerald-400">
                 <Radio className="w-3 h-3 animate-pulse" /> Full Duplex Active
               </span>
               <span>•</span>
-              <span className="truncate">Interviewer: {config.interviewerProfile.name} ({config.interviewerProfile.voice})</span>
-              <span>•</span>
-              <span className="text-blue-400 truncate">Resume: {config.candidateName} (Linked)</span>
+              <span>Interviewer: {config.interviewerProfile.name}</span>
             </div>
           </div>
         </div>
 
-        {/* Top Right Status Indicators & Fullscreen Toggle */}
-        <div className="flex items-center space-x-2 shrink-0">
-          {/* Active Call Timer Pill */}
-          <div className="flex items-center space-x-1.5 bg-[#2d2f34] px-3 py-1 rounded-full border border-[#3c4043] text-xs font-mono text-gray-200 shadow-sm">
-            <Clock className="w-3 h-3 text-indigo-400" />
-            <span>{formatTimer(callDurationSeconds)}</span>
-          </div>
+        {/* Top Right Controls & Hand Raise Indicator */}
+        <div className="flex items-center space-x-2">
+          {isHandRaised && (
+            <div className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-3 py-1 rounded-full font-semibold flex items-center gap-1.5 animate-bounce">
+              <span>✋</span> Hand Raised
+            </div>
+          )}
 
-          {/* Proctored REC Badge */}
-          <div className="flex items-center space-x-1.5 bg-[#2d2f34] px-3 py-1 rounded-full border border-[#3c4043] text-xs font-medium text-gray-200 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="hidden sm:inline font-mono">REC Live</span>
+          <div className="hidden md:flex items-center space-x-1.5 bg-[#2d2f34] px-3 py-1 rounded-full border border-[#3c4043] text-xs text-gray-300">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <span className="font-mono">REC Live</span>
           </div>
-
-          {/* Top Fullscreen Toggle Button */}
-          <button
-            type="button"
-            onClick={handleToggleFullscreen}
-            className="p-2 rounded-full bg-[#2d2f34] hover:bg-[#3c4043] text-gray-300 hover:text-white border border-[#3c4043] transition-all cursor-pointer shadow-sm"
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen (Real Interview Mode)"}
-          >
-            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-          </button>
         </div>
       </header>
 
-      {/* Center Stage Workspace */}
-      <main className="flex-1 flex overflow-hidden p-3 sm:p-4 gap-3 sm:gap-4 relative min-h-0">
+      {/* Center Stage Layout */}
+      <main className="flex-1 flex overflow-hidden p-3 sm:p-4 gap-3 sm:gap-4 relative">
+        {/* Dynamic Main Workspace */}
         <div className="flex-1 flex flex-col min-w-0 h-full relative">
-          
           {/* Layout 1: Normal Video Grid (Split) */}
           {activeLayout === "split" && (
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 h-full min-h-0">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 h-full">
               {/* Interviewer Tile */}
               <InterviewerTile
                 profile={config.interviewerProfile}
@@ -875,8 +684,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
           {/* Layout 2: Code Editor Split */}
           {activeLayout === "code_split" && (
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 h-full min-h-0">
-              <div className="lg:col-span-4 flex flex-col gap-3 h-full min-h-0">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 h-full">
+              {/* Video Tiles Stack (Left) */}
+              <div className="lg:col-span-4 flex flex-col gap-3 h-full">
                 <div className="flex-1 min-h-0">
                   <InterviewerTile
                     profile={config.interviewerProfile}
@@ -886,7 +696,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                     isInterrupted={isInterrupted}
                   />
                 </div>
-                <div className="flex-1 min-h-0">
+                <div className="h-44 sm:h-52">
                   <UserTile
                     stream={screenStream || userStream}
                     candidateName={config.candidateName}
@@ -899,18 +709,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                 </div>
               </div>
 
-              <div className="lg:col-span-8 h-full min-h-0">
-                <CodeEditor
-                  onSyncCodeWithAi={handleSyncCodeWithAi}
-                />
+              {/* Code Editor (Right) */}
+              <div className="lg:col-span-8 h-full">
+                <CodeEditor onSyncCodeWithAi={handleSyncCodeWithAi} />
               </div>
             </div>
           )}
 
           {/* Layout 3: Whiteboard Split */}
           {activeLayout === "whiteboard_split" && (
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 h-full min-h-0">
-              <div className="lg:col-span-4 flex flex-col gap-3 h-full min-h-0">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 h-full">
+              {/* Video Tiles Stack (Left) */}
+              <div className="lg:col-span-4 flex flex-col gap-3 h-full">
                 <div className="flex-1 min-h-0">
                   <InterviewerTile
                     profile={config.interviewerProfile}
@@ -920,7 +730,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                     isInterrupted={isInterrupted}
                   />
                 </div>
-                <div className="flex-1 min-h-0">
+                <div className="h-44 sm:h-52">
                   <UserTile
                     stream={screenStream || userStream}
                     candidateName={config.candidateName}
@@ -933,75 +743,84 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                 </div>
               </div>
 
-              <div className="lg:col-span-8 h-full min-h-0">
-                <Whiteboard
-                  onSyncWhiteboardWithAi={handleSyncWhiteboardWithAi}
-                />
+              {/* System Design Whiteboard (Right) */}
+              <div className="lg:col-span-8 h-full">
+                <Whiteboard onSyncWhiteboardWithAi={handleSyncWhiteboardWithAi} />
               </div>
             </div>
           )}
 
-          {/* Closed Captions Floating Overlay */}
-          {captionsEnabled && currentCaption.text && (
-            <CaptionsOverlay
-              isVisible={captionsEnabled}
-              speaker={currentCaption.speaker}
-              speakerName={currentCaption.speakerName}
-              text={currentCaption.text}
-            />
-          )}
+          {/* Real-time Closed Captions Overlay */}
+          <CaptionsOverlay
+            isVisible={captionsEnabled}
+            speaker={currentCaption.speaker}
+            speakerName={currentCaption.speakerName}
+            text={currentCaption.text}
+          />
         </div>
 
-        {/* In-Call Side Panel (Chat, Rubric, People) */}
+        {/* Right Side Drawer */}
         {activeSideTab && (
-          <div className="w-80 lg:w-96 h-full shrink-0">
-            <SidePanel
-              activeTab={activeSideTab}
-              onClose={() => setActiveSideTab(null)}
-              chatMessages={chatMessages}
-              onSendMessage={handleSendMessage}
-              rubricStages={rubricStages}
-              candidateName={config.candidateName}
-              interviewerProfile={config.interviewerProfile}
-              analytics={analytics}
-              isAiSpeaking={isAiSpeaking}
-              userVolume={userVolume}
-            />
-          </div>
+          <SidePanel
+            activeTab={activeSideTab}
+            interviewerProfile={config.interviewerProfile}
+            candidateName={config.candidateName}
+            chatMessages={chatMessages}
+            rubricStages={rubricStages}
+            analytics={analytics}
+            isAiSpeaking={isAiSpeaking}
+            userVolume={userVolume}
+            onSendMessage={handleSendMessage}
+            onClose={() => setActiveSideTab(null)}
+          />
         )}
       </main>
 
-      {/* Realistic Google Meet Bottom Controls Bar */}
-      <footer className="shrink-0 z-30">
-        <MeetingControls
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          isScreenSharing={isScreenSharing}
-          captionsEnabled={captionsEnabled}
-          activeLayout={activeLayout}
-          activeSideTab={activeSideTab}
-          isHandRaised={isHandRaised}
-          userVolume={userVolume}
-          isFullscreen={isFullscreen}
-          onToggleMic={onToggleMic}
-          onToggleVideo={onToggleVideo}
-          onToggleScreenShare={handleToggleScreenShare}
-          onToggleCaptions={() => setCaptionsEnabled(!captionsEnabled)}
-          onToggleHandRaise={() => setIsHandRaised(!isHandRaised)}
-          onToggleFullscreen={handleToggleFullscreen}
-          onSelectLayout={(l) => setActiveLayout(l)}
-          onToggleSideTab={(tab) => setActiveSideTab(activeSideTab === tab ? null : tab)}
-          onTriggerReaction={handleTriggerReaction}
-          onEndCall={handleEndCall}
-        />
-      </footer>
+      {/* Bottom Floating Control Bar */}
+      <MeetingControls
+        isMuted={isMuted}
+        isVideoOff={isVideoOff && !isScreenSharing}
+        isScreenSharing={isScreenSharing}
+        captionsEnabled={captionsEnabled}
+        activeLayout={activeLayout}
+        activeSideTab={activeSideTab}
+        isHandRaised={isHandRaised}
+        userVolume={userVolume}
+        onToggleMic={onToggleMic}
+        onToggleVideo={onToggleVideo}
+        onToggleScreenShare={handleToggleScreenShare}
+        onToggleCaptions={() => setCaptionsEnabled(!captionsEnabled)}
+        onToggleHandRaise={() => {
+          setIsHandRaised(!isHandRaised);
+          if (!isHandRaised) {
+            handleTriggerReaction("✋");
+            if (socketRef.current?.readyState === WebSocket.OPEN) {
+              socketRef.current.send(
+                JSON.stringify({
+                  type: "text",
+                  data: "Candidate raised their hand to ask a question or clarify something.",
+                })
+              );
+            }
+          }
+        }}
+        onSelectLayout={(layout) => setActiveLayout(layout)}
+        onToggleSideTab={(tab) =>
+          setActiveSideTab(activeSideTab === tab ? null : tab)
+        }
+        onTriggerReaction={handleTriggerReaction}
+        onEndCall={handleEndCall}
+      />
 
-      {/* Post-Interview Comprehensive Evaluation Scorecard Modal */}
+      {/* Post-Interview Evaluation Modal */}
       {showEvaluation && (
         <EvaluationModal
-          isLoading={isEvaluating}
           report={evaluationReport}
-          onRetake={() => setShowEvaluation(false)}
+          isLoading={isEvaluating}
+          onRetake={() => {
+            setShowEvaluation(false);
+            onLeaveMeeting();
+          }}
           onClose={() => {
             setShowEvaluation(false);
             onLeaveMeeting();

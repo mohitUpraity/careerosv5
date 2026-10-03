@@ -24,7 +24,7 @@ export const INTERVIEWER_PROFILES: InterviewerProfile[] = [
     role: "Head of Technical Talent & Leadership",
     company: "Google People Operations",
     avatarUrl: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300&auto=format&fit=crop&q=80",
-    voice: "Aoede",
+    voice: "Kore",
     personality: "Warm, perceptive, and focused on behavioral STAR stories, cross-functional leadership, and culture add.",
     accentColor: "#9334e6",
   },
