@@ -225,7 +225,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           console.log("[Live] ⚡ Interrupted — discarding remaining audio");
           discardAudioRef.current = true;
           audioManager.stopPlayback();
-          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
           setIsAiSpeaking(false);
           setIsInterrupted(true);
           setAnalytics((prev) => ({
@@ -236,10 +235,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         } else if (msg.type === "turn_complete") {
           // Re-enable audio for the next AI turn (after interruption discard)
           discardAudioRef.current = false;
-          // Fallback: If no PCM audio arrived but captions did, vocalize via speech synthesis
-          if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
-            speakAiText(currentAiTurnTextRef.current.trim());
-          }
           hasPcmAudioRef.current = false;
           currentAiTurnTextRef.current = "";
 
