@@ -178,13 +178,38 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     const audioManager = new AudioStreamingManager();
     audioManagerRef.current = audioManager;
 
+    let userSpeakingFrames = 0;
     audioManager.setOnVolumeChange((inVol, outVol) => {
       setUserVolume(inVol);
       setAiVolume(outVol);
       setIsAiSpeaking(outVol > 0.04);
+
+      // Bidirectional barge-in interruption via voice volume
+      if (inVol > 0.12 && (outVol > 0.04 || ("speechSynthesis" in window && window.speechSynthesis.speaking))) {
+        userSpeakingFrames++;
+        if (userSpeakingFrames >= 2) {
+          userSpeakingFrames = 0;
+          console.log("[Live] ⚡ Candidate voice barge-in detected — interrupting interviewer");
+          discardAudioRef.current = true;
+          audioManager.stopPlayback();
+          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+          setIsAiSpeaking(false);
+          setIsInterrupted(true);
+          setAnalytics((prev) => ({
+            ...prev,
+            interruptionCount: prev.interruptionCount + 1,
+          }));
+          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: "interrupt" }));
+          }
+          setTimeout(() => setIsInterrupted(false), 2000);
+        }
+      } else {
+        userSpeakingFrames = 0;
+      }
     });
 
-    // Determine WS URL: Supports explicit VITE_WS_URL, VITE_API_BASE_URL, or defaults to current host
+    // Determine WS URL: Supports explicit VITE_WS_URL, VITE_API_BASE_URL, or defaults to current host / Render in production
     let wsUrl: string;
     const envWs = (import.meta as any).env?.VITE_WS_URL;
     const envApi = (import.meta as any).env?.VITE_API_BASE_URL;
@@ -195,6 +220,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       const wsProtocol = envApi.startsWith("https") ? "wss:" : "ws:";
       const hostPart = envApi.replace(/^https?:\/\//, "").replace(/\/$/, "");
       wsUrl = `${wsProtocol}//${hostPart}/api/live`;
+    } else if (typeof window !== "undefined" && window.location.hostname.includes("vercel.app")) {
+      // Running on Vercel -> connect directly to deployed Render backend WebSockets
+      wsUrl = "wss://careerosv5.onrender.com/api/live";
     } else {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       wsUrl = `${protocol}//${window.location.host}/api/live`;
@@ -549,8 +577,25 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           }
 
           const currentText = final || interim;
-          // Only process user recognition if AI is not currently speaking out loud
-          if (currentText.trim() && !audioManager.hasActivePlayback()) {
+          if (currentText.trim()) {
+            // Bidirectional barge-in interruption via recognized speech
+            if (audioManager.hasActivePlayback() || ("speechSynthesis" in window && window.speechSynthesis.speaking)) {
+              console.log("[Live] ⚡ Candidate speech barge-in detected — interrupting interviewer");
+              discardAudioRef.current = true;
+              audioManager.stopPlayback();
+              if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+              setIsAiSpeaking(false);
+              setIsInterrupted(true);
+              setAnalytics((prev) => ({
+                ...prev,
+                interruptionCount: prev.interruptionCount + 1,
+              }));
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "interrupt" }));
+              }
+              setTimeout(() => setIsInterrupted(false), 2000);
+            }
+
             setCurrentCaption({
               speaker: "user",
               speakerName: config.candidateName || "You",

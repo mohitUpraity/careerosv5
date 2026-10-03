@@ -16,7 +16,7 @@ class LLMService:
             candidates.append(requested_model)
         if settings.GROQ_MODEL and settings.GROQ_MODEL not in candidates:
             candidates.append(settings.GROQ_MODEL)
-        for fallback in ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
+        for fallback in ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
             if fallback not in candidates:
                 candidates.append(fallback)
         return candidates
