@@ -111,6 +111,11 @@ app.include_router(opportunities.router, prefix="/api/v1")
 app.include_router(brain.router, prefix="/api/v1")
 app.include_router(interview.router, prefix="/api/v1")
 
+@app.websocket("/api/live")
+async def live_websocket_alias(websocket: WebSocket):
+    from app.api.v1.interview import live_interview_websocket
+    await live_interview_websocket(websocket=websocket)
+
 # Mount Static Frontend
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
 if os.path.exists(frontend_dir):

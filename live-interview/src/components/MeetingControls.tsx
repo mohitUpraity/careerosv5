@@ -20,6 +20,7 @@ import {
   Check,
   Maximize,
   Minimize,
+  ShieldCheck,
 } from "lucide-react";
 import { MeetingLayout } from "../types";
 
@@ -29,10 +30,11 @@ interface MeetingControlsProps {
   isScreenSharing: boolean;
   captionsEnabled: boolean;
   activeLayout: MeetingLayout;
-  activeSideTab: "people" | "chat" | "rubric" | "notes" | null;
+  activeSideTab: "people" | "chat" | "rubric" | "notes" | "proctor" | null;
   isHandRaised: boolean;
   userVolume: number;
   isFullscreen?: boolean;
+  warningCount?: number;
   onToggleMic: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
@@ -40,7 +42,7 @@ interface MeetingControlsProps {
   onToggleHandRaise: () => void;
   onToggleFullscreen?: () => void;
   onSelectLayout: (layout: MeetingLayout) => void;
-  onToggleSideTab: (tab: "people" | "chat" | "rubric" | "notes") => void;
+  onToggleSideTab: (tab: "people" | "chat" | "rubric" | "notes" | "proctor") => void;
   onTriggerReaction: (emoji: string) => void;
   onEndCall: () => void;
 }
@@ -54,6 +56,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
   activeSideTab,
   isHandRaised,
   isFullscreen,
+  warningCount = 0,
   userVolume,
   onToggleMic,
   onToggleVideo,
@@ -256,6 +259,25 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
 
       {/* Right Side Drawer Toggles */}
       <div className="hidden lg:flex items-center space-x-1">
+        <button
+          onClick={() => onToggleSideTab("proctor")}
+          className={`relative p-2.5 rounded-full transition-colors ${
+            activeSideTab === "proctor"
+              ? "bg-[#8ab4f8]/20 text-[#8ab4f8]"
+              : "text-gray-300 hover:bg-[#3c4043] hover:text-white"
+          }`}
+          title="Proctored Mode & Noticing Radar"
+        >
+          {warningCount > 0 ? (
+            <ShieldCheck className="w-5 h-5 text-amber-400" />
+          ) : (
+            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+          )}
+          {warningCount > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
+          )}
+        </button>
+
         <button
           onClick={() => onToggleSideTab("rubric")}
           className={`p-2.5 rounded-full transition-colors ${

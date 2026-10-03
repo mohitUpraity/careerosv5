@@ -8,6 +8,8 @@ import {
   Sparkles,
   User,
   ShieldCheck,
+  ShieldAlert,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   Activity,
@@ -15,11 +17,14 @@ import {
   Volume2,
   HelpCircle,
   Lightbulb,
+  Eye,
+  Camera,
+  Flame,
 } from "lucide-react";
-import { InterviewerProfile, ChatMessage, RubricStage, LiveAnalytics } from "../types";
+import { InterviewerProfile, ChatMessage, RubricStage, LiveAnalytics, ProctorWarning, ScratchpadNote } from "../types";
 
 interface SidePanelProps {
-  activeTab: "people" | "chat" | "rubric" | "notes";
+  activeTab: "people" | "chat" | "rubric" | "notes" | "proctor";
   interviewerProfile: InterviewerProfile;
   candidateName: string;
   chatMessages: ChatMessage[];
@@ -27,6 +32,8 @@ interface SidePanelProps {
   analytics: LiveAnalytics;
   isAiSpeaking: boolean;
   userVolume: number;
+  proctorWarnings?: ProctorWarning[];
+  scratchpadNotes?: ScratchpadNote[];
   onSendMessage: (text: string) => void;
   onClose: () => void;
 }
@@ -40,6 +47,8 @@ export const SidePanel: React.FC<SidePanelProps> = ({
   analytics,
   isAiSpeaking,
   userVolume,
+  proctorWarnings = [],
+  scratchpadNotes = [],
   onSendMessage,
   onClose,
 }) => {
@@ -71,8 +80,19 @@ export const SidePanel: React.FC<SidePanelProps> = ({
           {activeTab === "chat" && <MessageSquare className="w-5 h-5 text-blue-400" />}
           {activeTab === "rubric" && <Activity className="w-5 h-5 text-blue-400" />}
           {activeTab === "notes" && <FileText className="w-5 h-5 text-blue-400" />}
-          <h2 className="text-sm font-semibold text-white capitalize">
-            {activeTab === "rubric" ? "Interview Guide & Analytics" : `${activeTab} Panel`}
+          {activeTab === "proctor" && (
+            proctorWarnings.length > 0 ? (
+              <ShieldAlert className="w-5 h-5 text-amber-400" />
+            ) : (
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+            )
+          )}
+          <h2 className="text-sm font-semibold text-white">
+            {activeTab === "rubric"
+              ? "Interview Guide & Analytics"
+              : activeTab === "proctor"
+              ? "Proctored Mode & Noticing Radar"
+              : `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Panel`}
           </h2>
         </div>
         <button
@@ -292,6 +312,146 @@ export const SidePanel: React.FC<SidePanelProps> = ({
               className="flex-1 w-full p-3 bg-[#1e1e24] text-gray-200 text-xs rounded-xl border border-[#3c4043] focus:outline-none focus:border-blue-500 font-mono resize-none leading-relaxed"
               placeholder="Jot down notes during the call..."
             />
+          </div>
+        )}
+
+        {/* 5. PROCTOR & NOTICING RADAR TAB */}
+        {activeTab === "proctor" && (
+          <div className="space-y-4 text-xs overflow-y-auto pr-1">
+            {/* Integrity Status Card */}
+            <div
+              className={`p-3 rounded-xl border ${
+                proctorWarnings.length === 0
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  : proctorWarnings.length === 1
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                  : "bg-red-500/10 border-red-500/30 text-red-300"
+              }`}
+            >
+              <div className="flex items-center justify-between font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  Proctored Mode Status
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#202124]/60 border border-current">
+                  {proctorWarnings.length === 0
+                    ? "Clean Record"
+                    : `${proctorWarnings.length}/3 Warnings`}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-300 mt-1 leading-snug">
+                {proctorWarnings.length === 0
+                  ? "Active multi-modal monitoring. Eye contact and camera angle are within standard parameters."
+                  : `Integrity cautions have been logged. 3 warnings result in immediate session conclusion.`}
+              </p>
+            </div>
+
+            {/* Live Noticing Radar Telemetry */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-blue-400" />
+                Live Noticing Mode Radar
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2.5 bg-[#2d2f34] rounded-xl border border-[#3c4043] space-y-1">
+                  <div className="text-gray-400">Eye Gaze</div>
+                  <div className="font-semibold text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Direct / Centered
+                  </div>
+                </div>
+                <div className="p-2.5 bg-[#2d2f34] rounded-xl border border-[#3c4043] space-y-1">
+                  <div className="text-gray-400">Posture & Pose</div>
+                  <div className="font-semibold text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Upright & Engaged
+                  </div>
+                </div>
+                <div className="p-2.5 bg-[#2d2f34] rounded-xl border border-[#3c4043] space-y-1">
+                  <div className="text-gray-400">Presence Check</div>
+                  <div className="font-semibold text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Single Candidate
+                  </div>
+                </div>
+                <div className="p-2.5 bg-[#2d2f34] rounded-xl border border-[#3c4043] space-y-1">
+                  <div className="text-gray-400">Speech Cadence</div>
+                  <div className="font-semibold text-blue-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    ~{analytics.paceWpm} WPM
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Warning History Log (if any) */}
+            {proctorWarnings.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-red-400 uppercase tracking-wider flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Active Conduct Warnings ({proctorWarnings.length})
+                </div>
+                <div className="space-y-1.5">
+                  {proctorWarnings.map((w, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 bg-red-950/30 border border-red-500/30 rounded-xl space-y-1"
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-red-300">
+                        <span>Warning #{w.warning_number || idx + 1}</span>
+                        <span className="text-[10px] text-gray-400 font-mono">{w.timestamp}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-300">{w.warning_message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Real-time Scratchpad Observations Feed */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-purple-400" />
+                  Interviewer Scratchpad Feed
+                </span>
+                <span className="text-[10px] text-gray-500 font-mono">
+                  {scratchpadNotes.length} notes
+                </span>
+              </div>
+              {scratchpadNotes.length === 0 ? (
+                <div className="p-3 bg-[#2d2f34]/50 border border-dashed border-[#3c4043] rounded-xl text-center text-gray-400 text-[11px]">
+                  Observations will appear here in real-time as the interviewer analyzes your communication, non-verbal cues, and technical answers.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-0.5">
+                  {scratchpadNotes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="p-2.5 bg-[#2d2f34] rounded-xl border border-[#3c4043] space-y-1 transition-all"
+                    >
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span
+                          className={`px-1.5 py-0.5 rounded font-medium capitalize ${
+                            note.sentiment === "positive" || note.sentiment === "green_flag"
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : note.sentiment === "concern" || note.sentiment === "yellow_flag"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : note.sentiment === "red_flag"
+                              ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                              : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                          }`}
+                        >
+                          {note.category.replace("_", " ")}
+                        </span>
+                        <span className="text-gray-400 font-mono">{note.timestamp}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-200 leading-snug">{note.observation}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -426,6 +426,7 @@ from fastapi import WebSocket, WebSocketDisconnect, Query
 from app.services.gemini_live_service import GeminiLiveSession
 from app.services.profile_service import profile_service
 
+@router.websocket("/live")
 @router.websocket("/live-ws")
 async def live_interview_websocket(
     websocket: WebSocket,

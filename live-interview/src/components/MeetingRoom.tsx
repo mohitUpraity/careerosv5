@@ -7,6 +7,8 @@ import {
   RubricStage,
   LiveAnalytics,
   EvaluationReport,
+  ProctorWarning,
+  ScratchpadNote,
 } from "../types";
 import { INITIAL_RUBRIC_STAGES } from "../data/interviewProfiles";
 import { AudioStreamingManager } from "../utils/audio";
@@ -19,7 +21,7 @@ import { SidePanel } from "./SidePanel";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { FloatingReactions, FloatingReactionItem } from "./FloatingReactions";
 import { EvaluationModal } from "./EvaluationModal";
-import { Sparkles, Radio, Maximize2, Minimize2 } from "lucide-react";
+import { Sparkles, Radio, Maximize2, Minimize2, ShieldCheck, AlertTriangle, Eye, X } from "lucide-react";
 
 interface MeetingRoomProps {
   config: InterviewConfig;
@@ -41,11 +43,22 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   onLeaveMeeting,
 }) => {
   const [activeLayout, setActiveLayout] = useState<MeetingLayout>("split");
-  const [activeSideTab, setActiveSideTab] = useState<"people" | "chat" | "rubric" | "notes" | null>(null);
+  const [activeSideTab, setActiveSideTab] = useState<"people" | "chat" | "rubric" | "notes" | "proctor" | null>(null);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+
+  // Proctoring & Noticing Radar states
+  const [proctorWarnings, setProctorWarnings] = useState<ProctorWarning[]>([]);
+  const [scratchpadNotes, setScratchpadNotes] = useState<ScratchpadNote[]>([]);
+  const [activeWarningBanner, setActiveWarningBanner] = useState<ProctorWarning | null>(null);
+  const [pushedChallenge, setPushedChallenge] = useState<{
+    challenge_title?: string;
+    language?: string;
+    starter_code?: string;
+    problem_description?: string;
+  } | null>(null);
 
   // Live Speech & Audio states
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -278,6 +291,40 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             ...prev,
             turnCount: prev.turnCount + 1,
           }));
+        } else if (msg.type === "interviewer_reaction") {
+          if (msg.data?.emoji) {
+            handleTriggerReaction(msg.data.emoji);
+          }
+        } else if (msg.type === "conduct_warning" || msg.type === "proctor_warning") {
+          const warningData = msg.data || msg.warning || {};
+          const warningItem: ProctorWarning = {
+            warning_number: warningData.warning_number || warningData.warning_level || (proctorWarnings.length + 1),
+            warning_message: warningData.warning_reason || warningData.warning_message || "Integrity alert: Please maintain eye contact with the camera.",
+            violation_type: warningData.violation_type || "suspicious_movement",
+            timestamp: warningData.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setProctorWarnings((prev) => [...prev, warningItem]);
+          setActiveWarningBanner(warningItem);
+          setTimeout(() => setActiveWarningBanner(null), 7000);
+        } else if (msg.type === "interviewer_observation" || msg.type === "scratchpad_updated") {
+          const noteData = msg.data || msg.note || {};
+          const noteItem: ScratchpadNote = {
+            id: noteData.id || `note-${Date.now()}-${Math.random()}`,
+            category: noteData.category || "general",
+            observation: noteData.note || noteData.observation || "",
+            sentiment: noteData.observation_type || noteData.sentiment || "neutral",
+            timestamp: noteData.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            confidence_score: noteData.score_delta || noteData.confidence_score,
+          };
+          setScratchpadNotes((prev) => [noteItem, ...prev]);
+        } else if (msg.type === "push_coding_challenge") {
+          const challenge = msg.data || {};
+          setPushedChallenge(challenge);
+          setActiveLayout("code_split");
+        } else if (msg.type === "update_whiteboard") {
+          setActiveLayout("whiteboard_split");
+        } else if (msg.type === "conclude_interview" || msg.type === "interview_terminated") {
+          handleEndCall();
         } else if (msg.type === "status") {
           // Model fallback progress updates from server
           console.log("[Live Status]", msg.message);
@@ -618,6 +665,38 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       {/* Floating Emojis Overlay */}
       <FloatingReactions reactions={reactions} />
 
+      {/* High-Impact Conduct Warning Banner (Proctored Mode) */}
+      {activeWarningBanner && (
+        <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 max-w-lg w-11/12 animate-bounce">
+          <div className="bg-red-950/95 border-2 border-red-500 text-white px-5 py-4 rounded-2xl shadow-2xl flex items-start space-x-3.5 backdrop-blur-md">
+            <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-sm text-red-200 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>Proctor Warning</span>
+                  <span className="px-2 py-0.5 bg-red-800 text-white rounded text-[11px]">
+                    {activeWarningBanner.warning_number}/3
+                  </span>
+                </span>
+                <button
+                  onClick={() => setActiveWarningBanner(null)}
+                  className="text-gray-400 hover:text-white p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-200 mt-1 leading-relaxed">
+                {activeWarningBanner.warning_message}
+              </p>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-red-800/50 text-[11px] text-amber-300">
+                <span>Maintain direct camera eye contact</span>
+                <span className="font-mono text-gray-400">{activeWarningBanner.timestamp}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Header Meeting Bar */}
       <header className="h-14 px-4 sm:px-6 bg-[#202124] border-b border-[#3c4043]/50 flex items-center justify-between z-20">
         <div className="flex items-center space-x-3">
@@ -638,15 +717,42 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           </div>
         </div>
 
-        {/* Top Right Controls & Hand Raise Indicator */}
+        {/* Top Right Controls & Status Indicators */}
         <div className="flex items-center space-x-2">
+          {/* Proctoring Status Pill */}
+          <button
+            onClick={() => setActiveSideTab(activeSideTab === "proctor" ? null : "proctor")}
+            className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+              proctorWarnings.length > 0
+                ? "bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30"
+                : "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
+            }`}
+            title="Click to toggle Proctor & Noticing Radar Drawer"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Proctored:</span>
+            <span className="font-bold">
+              {proctorWarnings.length === 0 ? "Active" : `${proctorWarnings.length}/3 Warnings`}
+            </span>
+          </button>
+
+          {/* Noticing Radar Pill */}
+          <button
+            onClick={() => setActiveSideTab(activeSideTab === "proctor" ? null : "proctor")}
+            className="hidden md:flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/15 border border-blue-500/40 text-blue-300 hover:bg-blue-500/25 transition-all"
+            title="Click to view live gaze, posture, and candidate observations"
+          >
+            <Eye className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+            <span>Noticing Radar</span>
+          </button>
+
           {isHandRaised && (
             <div className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-3 py-1 rounded-full font-semibold flex items-center gap-1.5 animate-bounce">
               <span>✋</span> Hand Raised
             </div>
           )}
 
-          <div className="hidden md:flex items-center space-x-1.5 bg-[#2d2f34] px-3 py-1 rounded-full border border-[#3c4043] text-xs text-gray-300">
+          <div className="hidden lg:flex items-center space-x-1.5 bg-[#2d2f34] px-3 py-1 rounded-full border border-[#3c4043] text-xs text-gray-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
             <span className="font-mono">REC Live</span>
           </div>
@@ -770,6 +876,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             analytics={analytics}
             isAiSpeaking={isAiSpeaking}
             userVolume={userVolume}
+            proctorWarnings={proctorWarnings}
+            scratchpadNotes={scratchpadNotes}
             onSendMessage={handleSendMessage}
             onClose={() => setActiveSideTab(null)}
           />
@@ -785,6 +893,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         activeLayout={activeLayout}
         activeSideTab={activeSideTab}
         isHandRaised={isHandRaised}
+        warningCount={proctorWarnings.length}
         userVolume={userVolume}
         onToggleMic={onToggleMic}
         onToggleVideo={onToggleVideo}

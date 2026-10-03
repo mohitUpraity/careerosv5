@@ -23,7 +23,6 @@ export interface InterviewerProfile {
 
 export interface InterviewConfig {
   candidateName: string;
-  company?: string;
   role: string;
   seniority: SeniorityLevel;
   format: InterviewFormat;
@@ -83,6 +82,23 @@ export interface RubricStage {
   targetMinutes: number;
   description: string;
   completed: boolean;
+}
+
+export interface ProctorWarning {
+  warning_number: number;
+  violation_type?: string;
+  warning_message: string;
+  warning_level?: number;
+  timestamp: string;
+}
+
+export interface ScratchpadNote {
+  id: string;
+  timestamp: string;
+  category: "technical_depth" | "voice_speech" | "body_language" | "eye_contact" | "behavioral" | string;
+  observation: string;
+  sentiment: "positive" | "neutral" | "concern" | "red_flag" | string;
+  confidence_score?: number;
 }
 
 export interface LiveAnalytics {
