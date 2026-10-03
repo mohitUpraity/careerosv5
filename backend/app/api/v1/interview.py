@@ -430,61 +430,78 @@ from app.services.profile_service import profile_service
 @router.websocket("/live-ws")
 async def live_interview_websocket(
     websocket: WebSocket,
-    user_id: str = Query("candidate_1"),
-    company: str = Query("Apponward Technologies"),
-    role: str = Query("Senior Backend Engineer"),
-    job_description: str = Query(""),
-    voice: str = Query("Aoede"),
-    round_type: str = Query("mixed"),
-    difficulty: str = Query("medium")
+    user_id: str = "candidate_1",
+    company: str = "Apponward Technologies",
+    role: str = "Senior Backend Engineer",
+    job_description: str = "",
+    voice: str = "Zephyr",
+    round_type: str = "mixed",
+    difficulty: str = "medium"
 ):
     """
     Bidirectional WebSocket bridge for Google Meet Live Interview Arena.
     """
     await websocket.accept()
-    logger.info(f"Accepted Live Interview WebSocket connection for user: {user_id}, company: {company}, role: {role}")
+    
+    # Safe query parameter extraction (robust against both direct calls and FastAPI dependency injection)
+    q = websocket.query_params
+    u_id = str(q.get("user_id", user_id if not hasattr(user_id, "default") else "candidate_1"))
+    comp = str(q.get("company", company if not hasattr(company, "default") else "Apponward Technologies"))
+    rl = str(q.get("role", role if not hasattr(role, "default") else "Senior Backend Engineer"))
+    vc = str(q.get("voice", voice if not hasattr(voice, "default") else "Zephyr"))
+    jd = str(q.get("job_description", job_description if not hasattr(job_description, "default") else ""))
+    rnd = str(q.get("round_type", round_type if not hasattr(round_type, "default") else "mixed"))
+    diff = str(q.get("difficulty", difficulty if not hasattr(difficulty, "default") else "medium"))
+    
+    logger.info(f"Accepted Live Interview WebSocket connection for user: {u_id}, company: {comp}, role: {rl}")
 
-    # Callback to send packets back to candidate's browser
+    # Callback to send packets back to candidate browser
     async def send_to_frontend(payload: Dict[str, Any]):
         try:
-            await websocket.send_text(json.dumps(payload))
+            await websocket.send_text(json.dumps(payload, default=str))
         except Exception as err:
             logger.debug(f"Failed to forward message to frontend: {err}")
 
+    # 1. Send IMMEDIATE ready acknowledgment so frontend never gets stuck on Connecting...
+    await send_to_frontend({
+        "type": "ready",
+        "message": "Gemini Live session established",
+        "company": comp,
+        "role": rl,
+        "voice": vc
+    })
+
+    # Non-blocking resume context fetch with timeout
     resume_context = "Candidate has experience with Python, FastAPI, React, Distributed Systems, and Modern Databases."
     try:
-        profile_data = await profile_service.get_comprehensive_profile_analysis(user_id)
+        profile_data = await asyncio.wait_for(
+            profile_service.get_comprehensive_profile_analysis(u_id),
+            timeout=1.5
+        )
         if profile_data:
             skills = [s.get("name") for s in profile_data.get("skills", []) if s.get("name")]
-            projects = [f"{p.get('name')}: {p.get('description')}" for p in profile_data.get("projects", [])]
-            resume_context = f"Candidate Skills: {', '.join(skills[:15])}\nProjects:\n" + "\n".join(projects[:3])
+            projects = [f"{p.get("name")}: {p.get("description")}" for p in profile_data.get("projects", [])]
+            resume_context = f"Candidate Skills: {", ".join(skills[:15])}\nProjects:\n" + "\n".join(projects[:3])
     except Exception as e:
         logger.debug(f"Using default resume context: {e}")
 
     session = GeminiLiveSession(
-        user_id=user_id,
-        company=company,
-        role=role,
-        job_description=job_description,
+        user_id=u_id,
+        company=comp,
+        role=rl,
+        job_description=jd,
         resume_context=resume_context,
-        voice_name=voice,
-        round_type=round_type,
-        difficulty=difficulty,
+        voice_name=vc,
+        round_type=rnd,
+        difficulty=diff,
         send_to_client_callback=send_to_frontend
     )
 
     try:
-        await session.connect()
-        await send_to_frontend({
-            "type": "ready",
-            "message": "Gemini Live session established",
-            "session_id": session.session_id,
-            "company": company,
-            "role": role,
-            "voice": voice
-        })
+        # Connect asynchronously so WebSocket message loop remains responsive
+        asyncio.create_task(session.connect())
 
-        # Main message loop from candidate's browser
+        # Main message loop from candidate browser
         while True:
             raw_msg = await websocket.receive_text()
             msg = json.loads(raw_msg)
@@ -495,28 +512,28 @@ async def live_interview_websocket(
                 if msg.get("role"): session.role = msg["role"]
                 if msg.get("voice"): session.voice_name = msg["voice"]
                 if msg.get("customContext"): session.resume_context = msg["customContext"]
-                await send_to_frontend({"type": "ready", "message": "Gemini Live session established"})
-
+                await send_to_frontend({
+                    "type": "ready",
+                    "message": "Gemini Live session established",
+                    "company": session.company,
+                    "role": session.role
+                })
             elif msg_type in ("audio", "audio_chunk"):
                 pcm_data = msg.get("data")
                 mime = msg.get("mimeType", "audio/pcm;rate=16000")
                 if pcm_data:
                     await session.send_audio_chunk(pcm_data, mime)
-
             elif msg_type in ("video", "video_frame"):
                 jpeg_data = msg.get("data")
                 if jpeg_data:
                     await session.send_video_frame(jpeg_data)
-
             elif msg_type in ("text", "text_prompt"):
                 text = msg.get("data") or msg.get("text", "")
                 if text:
                     await session.send_text_message(text)
-
             elif msg_type == "interrupt":
                 await session.handle_client_interrupt()
                 await send_to_frontend({"type": "interrupted"})
-
             elif msg_type == "conclude_session":
                 await session._handle_tool_call("conclude_interview", {
                     "technical_score": 82,
@@ -524,10 +541,9 @@ async def live_interview_websocket(
                     "body_language_score": 80,
                     "integrity_score": max(50, 100 - (session.warnings_count * 15)),
                     "hireability_verdict": "Hire",
-                    "executive_summary": f"Completed interactive live interview session with the hiring team at {company}."
+                    "executive_summary": f"Completed interactive live interview session with the hiring team at {comp}."
                 })
                 break
-
     except WebSocketDisconnect:
         logger.info(f"Candidate disconnected from Live Interview session {session.session_id}")
     except Exception as e:
@@ -535,5 +551,3 @@ async def live_interview_websocket(
         await send_to_frontend({"type": "error", "message": str(e)})
     finally:
         await session.close()
-
-

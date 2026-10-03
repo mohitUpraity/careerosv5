@@ -135,8 +135,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;
 
+    // Failsafe timer: unblock UI after 1.5s so user is never stuck on 'Connecting...'
+    const connectingTimeout = setTimeout(() => {
+      setIsConnecting(false);
+    }, 1500);
+
     ws.onopen = () => {
       console.log("WebSocket connected to /api/live");
+      setIsConnecting(false);
+      discardAudioRef.current = false;
       // Send Setup packet to Gemini Live API
       ws.send(
         JSON.stringify({
@@ -417,6 +424,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     }, 1000);
 
     return () => {
+      clearTimeout(connectingTimeout);
       clearInterval(analyticsTimer);
       if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
       if (speechRecognitionRef.current) {

@@ -208,7 +208,7 @@ IMPORTANT: You are speaking through audio — keep responses conversational, 2-4
                             model=model_name,
                             config=config
                         )
-                        self.live_session = await conn.__aenter__()
+                        self.live_session = await asyncio.wait_for(conn.__aenter__(), timeout=4.0)
                         self.is_active = True
                         self.engine_mode = "gemini_live"
                         self._receive_task = asyncio.create_task(self._listen_gemini_downstream())

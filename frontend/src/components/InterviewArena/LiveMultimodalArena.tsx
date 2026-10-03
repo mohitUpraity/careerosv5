@@ -132,9 +132,11 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
 
   const handleJoinMeeting = (config: InterviewConfig) => {
     setMeetingConfig(config);
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch (e) {}
   };
 
   const handleLeaveMeeting = async () => {
