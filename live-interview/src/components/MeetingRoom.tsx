@@ -118,57 +118,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     setAudioUnlocked(true);
   }, []);
 
-  // Human TTS Vocalizer for fallback when PCM is blocked by browser autoplay
-  const speakAiText = useCallback((text: string) => {
-    if (!("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.05;
-      utterance.pitch = 1.0;
-
-      const voices = window.speechSynthesis.getVoices();
-      const isFemale =
-        config.interviewerProfile.voice === "Zephyr" ||
-        config.interviewerProfile.voice === "Aoede" ||
-        config.interviewerProfile.name === "Sarah" ||
-        config.interviewerProfile.name === "Maya";
-
-      const preferredVoice = voices.find((v) =>
-        isFemale
-          ? v.name.includes("Samantha") ||
-            v.name.includes("Victoria") ||
-            v.name.includes("Karen") ||
-            v.name.includes("Zira") ||
-            v.name.includes("Google UK English Female") ||
-            v.name.includes("Female")
-          : v.name.includes("Daniel") ||
-            v.name.includes("Alex") ||
-            v.name.includes("David") ||
-            v.name.includes("Google UK English Male") ||
-            v.name.includes("Male")
-      );
-
-      if (preferredVoice) utterance.voice = preferredVoice;
-
-      utterance.onstart = () => {
-        setIsAiSpeaking(true);
-        setAiVolume(0.85);
-      };
-      utterance.onend = () => {
-        setIsAiSpeaking(false);
-        setAiVolume(0);
-      };
-      utterance.onerror = () => {
-        setIsAiSpeaking(false);
-        setAiVolume(0);
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn("Speech synthesis notice:", e);
+  // Unlock AudioContext on any user click
+  const handleUnlockAudio = useCallback(() => {
+    if (audioManagerRef.current) {
+      audioManagerRef.current.unlockAudioContext();
     }
-  }, [config]);
+    setAudioUnlocked(true);
+  }, []);
 
   // Initialize Audio & WebSocket Connection
   useEffect(() => {
@@ -269,7 +225,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           console.log("[Live] ⚡ Interrupted — discarding remaining audio");
           discardAudioRef.current = true;
           audioManager.stopPlayback();
-          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
           setIsAiSpeaking(false);
           setIsInterrupted(true);
           setAnalytics((prev) => ({
@@ -280,10 +235,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         } else if (msg.type === "turn_complete") {
           // Re-enable audio for the next AI turn (after interruption discard)
           discardAudioRef.current = false;
-          // Fallback: If no PCM audio arrived but captions did, vocalize via speech synthesis
-          if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
-            speakAiText(currentAiTurnTextRef.current.trim());
-          }
           hasPcmAudioRef.current = false;
           currentAiTurnTextRef.current = "";
 
