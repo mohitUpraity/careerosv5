@@ -33,9 +33,30 @@ import {
   ChevronRight,
   ShieldCheck,
   Flame,
-  ArrowRight
+  Star,
+  FolderGit2,
+  Trophy,
+  BadgeCheck,
+  TrendingUp,
+  Rocket,
+  DollarSign,
+  Clock,
+  CheckSquare,
+  Eye,
+  Lock,
+  ArrowUpRight,
+  BarChart3,
+  BookOpen,
+  Lightbulb,
+  Ban
 } from 'lucide-react';
-import { UserProfileDetails, UserPreferences, EducationEntry, ExperienceEntry } from '../../types';
+import { 
+  UserProfileDetails, 
+  UserPreferences, 
+  EducationEntry, 
+  ExperienceEntry,
+  MarketIntelligenceResponse 
+} from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -48,7 +69,15 @@ interface ProfilePreferencesProps {
   onOpenSyncLinkedIn?: () => void;
 }
 
-type SectionTab = 'preferences' | 'identity' | 'skills' | 'education' | 'experience';
+type SectionTab = 
+  | 'preferences' 
+  | 'goals_companies' 
+  | 'identity' 
+  | 'skills' 
+  | 'projects' 
+  | 'education' 
+  | 'experience' 
+  | 'honors';
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   primary_role: 'Backend Engineer',
@@ -61,6 +90,18 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   experience_level: 'Fresher / 0-3 yrs',
   min_salary: '₹8-18 LPA / $30k+ Remote',
   priority_factor: 'best_fit',
+  dream_companies: ['Google', 'Razorpay', 'CRED', 'Stripe', 'Zepto'],
+  blocked_companies: [],
+  notice_period: 'Immediate (0-15 days)',
+  work_authorization: 'Authorized in India & Remote Worldwide',
+  spoken_languages: ['English (Professional)', 'Hindi (Native)'],
+  career_goals: {
+    target_milestone: 'Targeting SDE-1 / SDE-2 High-Growth Role',
+    target_timeline: 'Next 30-90 Days',
+    target_ctc: '₹15-28 LPA',
+    focus_areas: ['Distributed Systems', 'Graph Databases', 'Agentic AI', 'High-Throughput APIs']
+  },
+  in_progress_skills: ['Kafka', 'Kubernetes', 'Vector Databases'],
   custom_locations: []
 };
 
@@ -94,6 +135,42 @@ const DEFAULT_PROFILE: UserProfileDetails = {
       end_date: 'Aug 2024',
       is_current: false,
       description: 'Engineered real-time anomalous network socket detection and automated packet analysis pipelines using Python and C++.'
+    }
+  ],
+  projects: [
+    {
+      name: 'CareerOS Navigation Engine',
+      description: 'Autonomous GraphRAG career copilot with Neo4j AST project verification and ATS scoring.',
+      repo_url: 'https://github.com/mohitupraity/careerosv5',
+      live_url: '',
+      primary_language: 'Python',
+      tech_stack: ['Python', 'FastAPI', 'Neo4j', 'React', 'TypeScript', 'Docker'],
+      stars: 4
+    },
+    {
+      name: 'RecoverIQ Incident Platform',
+      description: 'Automated cybersecurity threat intelligence and network socket analysis system.',
+      repo_url: '',
+      live_url: '',
+      primary_language: 'Python',
+      tech_stack: ['Python', 'C++', 'Docker', 'PostgreSQL'],
+      stars: 2
+    }
+  ],
+  certifications: [
+    {
+      name: 'Neo4j Certified Professional',
+      issuer: 'Neo4j GraphAcademy',
+      date: '2024',
+      url: ''
+    }
+  ],
+  achievements: [
+    {
+      title: 'Smart India Hackathon Finalist',
+      organization: 'AICTE & Ministry of Education',
+      date: '2024',
+      description: 'Built distributed intelligence solution selected among top national teams.'
     }
   ],
   skills: [
@@ -136,11 +213,41 @@ const DOMAIN_FOCUS_OPTIONS = [
   { id: 'Open Source & Developer Tooling', label: 'Open Source & Dev Tools', desc: 'Compilers, CLI tools, developer frameworks & SDKs' }
 ];
 
+const POPULAR_DREAM_COMPANIES = [
+  'Google', 'Razorpay', 'CRED', 'Stripe', 'Zepto', 'Uber', 'Atlassian', 
+  'Microsoft', 'Flipkart', 'Postman', 'Blinkit', 'Zomato', 'Swiggy', 'PhonePe', 'Amazon'
+];
+
+const NOTICE_PERIOD_OPTIONS = [
+  'Immediate (0-15 days)',
+  '15 - 30 Days',
+  '30 - 60 Days',
+  '60+ Days',
+  'Currently Studying / Student Intern'
+];
+
+const WORK_AUTH_OPTIONS = [
+  'Authorized in India & Remote Worldwide',
+  'Indian Citizen (Requires International Sponsorship)',
+  'US Citizen / Green Card Holder',
+  'EU / UK Work Permit Holder',
+  'Open to Relocation'
+];
+
 const POPULAR_SKILLS_SUGGESTIONS = [
   'Python', 'FastAPI', 'React', 'TypeScript', 'Node.js', 'Go', 'Java', 'C++',
   'Docker', 'Kubernetes', 'AWS', 'PostgreSQL', 'MongoDB', 'Redis', 'Neo4j',
   'GraphQL', 'Next.js', 'TailwindCSS', 'Kafka', 'System Design', 'Git', 'Linux'
 ];
+
+const normalizeArray = (val: any): string[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(Boolean).map(String);
+  if (typeof val === 'string') {
+    return val.split(/[,|/]/).map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+};
 
 export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
   onSuccessToast,
@@ -161,8 +268,12 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
   const [newSkillInput, setNewSkillInput] = useState('');
   const [newCityInput, setNewCityInput] = useState('');
   const [newRoleInput, setNewRoleInput] = useState('');
+  const [newDreamCompanyInput, setNewDreamCompanyInput] = useState('');
+  const [newBlockedCompanyInput, setNewBlockedCompanyInput] = useState('');
+  const [newLanguageInput, setNewLanguageInput] = useState('');
+  const [newFocusAreaInput, setNewFocusAreaInput] = useState('');
 
-  // Modals for adding Education / Experience
+  // Modals for adding Education / Experience / Projects / Certs / Achievements
   const [isAddingEdu, setIsAddingEdu] = useState(false);
   const [newEdu, setNewEdu] = useState<EducationEntry>({
     university: '',
@@ -184,6 +295,32 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
     description: '',
     bullets: []
   });
+
+  const [isAddingProj, setIsAddingProj] = useState(false);
+  const [newProj, setNewProj] = useState<{
+    name: string;
+    description: string;
+    repo_url: string;
+    live_url: string;
+    primary_language: string;
+    tech_stack: string[];
+    stars: number;
+  }>({
+    name: '',
+    description: '',
+    repo_url: '',
+    live_url: '',
+    primary_language: 'Python',
+    tech_stack: [],
+    stars: 0
+  });
+  const [projTechInput, setProjTechInput] = useState('');
+
+  const [isAddingCert, setIsAddingCert] = useState(false);
+  const [newCert, setNewCert] = useState({ name: '', issuer: '', date: '', url: '' });
+
+  const [isAddingAch, setIsAddingAch] = useState(false);
+  const [newAch, setNewAch] = useState({ title: '', organization: '', date: '', description: '' });
 
   useEffect(() => {
     loadProfileDetails();
@@ -326,14 +463,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
       ...prev,
       education: [...(prev.education || []), newEdu]
     }));
-    setNewEdu({
-      university: '',
-      degree: '',
-      field_of_study: '',
-      start_date: '',
-      end_date: '',
-      gpa: ''
-    });
+    setNewEdu({ university: '', degree: '', field_of_study: '', start_date: '', end_date: '', gpa: '' });
     setIsAddingEdu(false);
     setHasUnsavedChanges(true);
   };
@@ -356,16 +486,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
       ...prev,
       experience: [...(prev.experience || []), newExp]
     }));
-    setNewExp({
-      company: '',
-      role: '',
-      location: '',
-      start_date: '',
-      end_date: '',
-      is_current: false,
-      description: '',
-      bullets: []
-    });
+    setNewExp({ company: '', role: '', location: '', start_date: '', end_date: '', is_current: false, description: '', bullets: [] });
     setIsAddingExp(false);
     setHasUnsavedChanges(true);
   };
@@ -378,17 +499,86 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
     setHasUnsavedChanges(true);
   };
 
+  // Projects Helpers
+  const handleAddProj = () => {
+    if (!newProj.name) {
+      onErrorToast('Please enter a project title');
+      return;
+    }
+    setProfile(prev => ({
+      ...prev,
+      projects: [...(prev.projects || []), newProj]
+    }));
+    setNewProj({ name: '', description: '', repo_url: '', live_url: '', primary_language: 'Python', tech_stack: [], stars: 0 });
+    setIsAddingProj(false);
+    setHasUnsavedChanges(true);
+  };
+
+  const removeProj = (index: number) => {
+    setProfile(prev => ({
+      ...prev,
+      projects: (prev.projects || []).filter((_, i) => i !== index)
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Certifications Helpers
+  const handleAddCert = () => {
+    if (!newCert.name) {
+      onErrorToast('Please enter certification name');
+      return;
+    }
+    setProfile(prev => ({
+      ...prev,
+      certifications: [...(prev.certifications || []), newCert]
+    }));
+    setNewCert({ name: '', issuer: '', date: '', url: '' });
+    setIsAddingCert(false);
+    setHasUnsavedChanges(true);
+  };
+
+  const removeCert = (index: number) => {
+    setProfile(prev => ({
+      ...prev,
+      certifications: (prev.certifications || []).filter((_, i) => i !== index)
+    }));
+    setHasUnsavedChanges(true);
+  };
+
+  // Achievements Helpers
+  const handleAddAch = () => {
+    if (!newAch.title) {
+      onErrorToast('Please enter achievement title');
+      return;
+    }
+    setProfile(prev => ({
+      ...prev,
+      achievements: [...(prev.achievements || []), newAch]
+    }));
+    setNewAch({ title: '', organization: '', date: '', description: '' });
+    setIsAddingAch(false);
+    setHasUnsavedChanges(true);
+  };
+
+  const removeAch = (index: number) => {
+    setProfile(prev => ({
+      ...prev,
+      achievements: (prev.achievements || []).filter((_, i) => i !== index)
+    }));
+    setHasUnsavedChanges(true);
+  };
+
   // Calculate completeness score
   const calculateCompleteness = () => {
     let score = 20;
-    if (profile.full_name && profile.full_name !== 'Candidate') score += 15;
+    if (profile.full_name && profile.full_name !== 'Candidate') score += 10;
     if (profile.headline) score += 10;
-    if (profile.location) score += 10;
+    if (profile.location) score += 5;
     if (profile.skills && profile.skills.length >= 5) score += 15;
+    if (profile.projects && profile.projects.length > 0) score += 15;
     if (profile.education && profile.education.length > 0) score += 10;
     if (profile.experience && profile.experience.length > 0) score += 10;
     if (profile.github_username || profile.github_url) score += 5;
-    if (profile.linkedin_url) score += 5;
     return Math.min(score, 100);
   };
 
@@ -439,7 +629,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3 text-blue-600" />
-                  Dynamic Profile
+                  Live Graph Synced
                 </span>
                 {hasUnsavedChanges && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse">
@@ -457,7 +647,11 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </span>
                 <span className="flex items-center gap-1">
                   <Target className="w-3 h-3 text-indigo-600" />
-                  Primary: <strong>{profile.preferences.primary_role || 'Backend Engineer'}</strong>
+                  1st Choice: <strong>{profile.preferences.primary_role || 'Backend Engineer'}</strong>
+                </span>
+                <span className="flex items-center gap-1">
+                  <FolderGit2 className="w-3 h-3 text-purple-600" />
+                  {(profile.projects || []).length} Projects
                 </span>
               </div>
             </div>
@@ -574,11 +768,14 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
       {/* Navigation Sub-Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: 'var(--border-primary)' }}>
         {[
-          { id: 'preferences' as SectionTab, label: '🎯 Recommendations & Career Preferences', icon: SlidersHorizontal },
+          { id: 'preferences' as SectionTab, label: '🎯 Recommendations & Preferences', icon: SlidersHorizontal },
+          { id: 'goals_companies' as SectionTab, label: '🚀 Career Goals & Dream Companies', icon: Target },
           { id: 'identity' as SectionTab, label: '👤 Personal Info & Socials', icon: User },
           { id: 'skills' as SectionTab, label: '⚡ Skills & Tech Stack', icon: Code2 },
-          { id: 'education' as SectionTab, label: '🎓 Education History', icon: GraduationCap },
-          { id: 'experience' as SectionTab, label: '💼 Work & Internships', icon: Briefcase }
+          { id: 'projects' as SectionTab, label: '🚀 Featured Projects', icon: FolderGit2 },
+          { id: 'education' as SectionTab, label: '🎓 Education', icon: GraduationCap },
+          { id: 'experience' as SectionTab, label: '💼 Experience', icon: Briefcase },
+          { id: 'honors' as SectionTab, label: '🏆 Achievements & Certs', icon: Trophy }
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
@@ -586,7 +783,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveSection(tab.id)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
                 isActive
                   ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-102'
                   : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-gray-200 dark:border-gray-800'
@@ -616,9 +813,30 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 How your preferences power your recommendations
               </h4>
               <p className="text-blue-800/90 dark:text-blue-300">
-                CareerOS will prioritize <strong>{profile.preferences.primary_role || 'your target role'}</strong> opportunities matching <strong>{profile.preferences.priority_domain || 'your domain'}</strong> in <strong>{(profile.preferences.preferred_cities || []).slice(0, 3).join(', ')}</strong> across <strong>{profile.preferences.target_country}</strong>. Nothing is hardcoded — edits take effect across Opportunities Radar, Job Matchmaker, and Referral Hub immediately upon saving.
+                CareerOS prioritizes <strong>{profile.preferences.primary_role || 'your target role'}</strong> opportunities matching <strong>{profile.preferences.priority_domain || 'your domain'}</strong> in <strong>{(profile.preferences.preferred_cities || []).slice(0, 3).join(', ')}</strong> across <strong>{profile.preferences.target_country}</strong>. Nothing is hardcoded — edits take effect across Opportunities Radar, Job Matchmaker, and Referral Hub immediately upon saving.
               </p>
             </div>
+          </div>
+
+          {/* Quick link to Career Growth Hub */}
+          <div className="p-4 rounded-2xl border flex items-center justify-between gap-3 bg-gradient-to-r from-blue-50/60 via-indigo-50/60 to-purple-50/60 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center gap-2.5">
+              <TrendingUp className="w-4 h-4 text-blue-600 shrink-0" />
+              <div className="text-xs">
+                <span className="font-bold text-gray-900 dark:text-gray-100">Want to discover high-ROI skill gaps & start 2-week project sprints?</span>
+                <span className="block text-gray-500 dark:text-gray-400">See which missing skills unlock the most high-paying opportunities.</span>
+              </div>
+            </div>
+            {onNavigateToTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('growth')}
+                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 flex items-center gap-1 shadow-xs transition-all"
+              >
+                <span>Open Growth Hub</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -761,7 +979,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                       className={`p-3 rounded-2xl border text-left transition-all ${
                         isSelected
                           ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 font-bold shadow-sm ring-1 ring-blue-500'
-                          : 'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          : 'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
                       }`}
                     >
                       <div className="text-xs font-bold">{loc.label}</div>
@@ -811,7 +1029,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   );
                 })}
 
-                {/* Show any custom cities */}
+                {/* Custom Cities */}
                 {(profile.preferences.preferred_cities || [])
                   .filter(c => !POPULAR_INDIAN_CITIES.includes(c))
                   .map(c => (
@@ -1018,6 +1236,523 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
         </div>
       )}
 
+      {/* SECTION: Career Goals & Target Companies */}
+      {activeSection === 'goals_companies' && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div 
+            className="p-5 rounded-3xl border flex items-start gap-3.5 bg-gradient-to-r from-purple-50/80 via-indigo-50/80 to-blue-50/80 dark:from-purple-950/30 dark:via-indigo-950/30 dark:to-blue-950/30 border-purple-200 dark:border-purple-900 shadow-sm"
+          >
+            <div className="p-2.5 rounded-2xl bg-purple-600 text-white shrink-0 mt-0.5 shadow-md">
+              <Rocket className="w-5 h-5" />
+            </div>
+            <div className="space-y-1 text-xs">
+              <h4 className="font-bold text-sm text-purple-950 dark:text-purple-200">
+                Career Vision, Target Companies & Notice Period Matrix
+              </h4>
+              <p className="text-purple-900/90 dark:text-purple-300 leading-relaxed">
+                Define your ambitious target milestones, pin dream companies for priority matching, block unwanted recruiters, and set your availability date. CareerOS syncs these parameters directly with live opportunity scoring.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 1. Career Goals & Milestone */}
+            <div 
+              className="p-6 rounded-3xl border space-y-4 shadow-sm"
+              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600">
+                  <Target className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    1. Target Milestone & Timeline
+                  </h3>
+                  <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                    Your primary ambition and expected transition timeframe.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                    Target Role / Transition Milestone:
+                  </label>
+                  <input
+                    type="text"
+                    value={profile.preferences.career_goals?.target_milestone || ''}
+                    onChange={(e) => {
+                      const currentGoals = profile.preferences.career_goals || {};
+                      updatePreferenceField('career_goals', { ...currentGoals, target_milestone: e.target.value });
+                    }}
+                    placeholder="e.g. SDE-1 to SDE-2 High-Growth Role, Backend to AI Engineer..."
+                    className="input-base w-full text-xs font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                      Target Timeline:
+                    </label>
+                    <select
+                      value={profile.preferences.career_goals?.target_timeline || 'Next 30-90 Days'}
+                      onChange={(e) => {
+                        const currentGoals = profile.preferences.career_goals || {};
+                        updatePreferenceField('career_goals', { ...currentGoals, target_timeline: e.target.value });
+                      }}
+                      className="input-base w-full text-xs"
+                    >
+                      <option value="Immediate (Next 30 Days)">Immediate (Next 30 Days)</option>
+                      <option value="Next 30-90 Days">Next 30-90 Days</option>
+                      <option value="3 - 6 Months">3 - 6 Months</option>
+                      <option value="6 - 12 Months">6 - 12 Months</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                      Target CTC / Compensation:
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.preferences.career_goals?.target_ctc || ''}
+                      onChange={(e) => {
+                        const currentGoals = profile.preferences.career_goals || {};
+                        updatePreferenceField('career_goals', { ...currentGoals, target_ctc: e.target.value });
+                      }}
+                      placeholder="e.g. ₹15 - 28 LPA / $40k+ Remote"
+                      className="input-base w-full text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Focus Core Areas */}
+                <div className="pt-2">
+                  <label className="block font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Core Technical Focus Areas:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {(profile.preferences.career_goals?.focus_areas || []).map((area, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1.5"
+                      >
+                        <span>{area}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = profile.preferences.career_goals?.focus_areas || [];
+                            const updated = current.filter((_, i) => i !== idx);
+                            updatePreferenceField('career_goals', { ...(profile.preferences.career_goals || {}), focus_areas: updated });
+                          }}
+                          className="hover:text-purple-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add focus area (e.g. Distributed Consensus, GraphRAG)..."
+                      value={newFocusAreaInput}
+                      onChange={(e) => setNewFocusAreaInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newFocusAreaInput.trim();
+                          if (val) {
+                            const current = profile.preferences.career_goals?.focus_areas || [];
+                            if (!current.includes(val)) {
+                              updatePreferenceField('career_goals', { ...(profile.preferences.career_goals || {}), focus_areas: [...current, val] });
+                            }
+                            setNewFocusAreaInput('');
+                          }
+                        }
+                      }}
+                      className="input-base flex-1 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = newFocusAreaInput.trim();
+                        if (val) {
+                          const current = profile.preferences.career_goals?.focus_areas || [];
+                          if (!current.includes(val)) {
+                            updatePreferenceField('career_goals', { ...(profile.preferences.career_goals || {}), focus_areas: [...current, val] });
+                          }
+                          setNewFocusAreaInput('');
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-700"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Dream Companies (Wishlist) */}
+            <div 
+              className="p-6 rounded-3xl border space-y-4 shadow-sm"
+              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                      2. Dream Target Companies (Wishlist)
+                    </h3>
+                    <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                      Jobs from these companies get a +6% score boost & glowing badge.
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  +6% Priority Boost
+                </span>
+              </div>
+
+              {/* Active Dream Companies Tags */}
+              <div className="flex flex-wrap gap-1.5 min-h-[42px] p-2.5 rounded-2xl border bg-gray-50/50 dark:bg-gray-900/30" style={{ borderColor: 'var(--border-primary)' }}>
+                {(profile.preferences.dream_companies || []).map((comp) => (
+                  <span
+                    key={comp}
+                    className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Building2 className="w-3 h-3 text-emerald-600" />
+                    <span>{comp}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = profile.preferences.dream_companies || [];
+                        updatePreferenceField('dream_companies', current.filter(c => c.toLowerCase() !== comp.toLowerCase()));
+                      }}
+                      className="hover:text-emerald-600 ml-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {(!profile.preferences.dream_companies || profile.preferences.dream_companies.length === 0) && (
+                  <span className="text-xs text-gray-400 italic flex items-center gap-1">
+                    No dream companies pinned yet. Pick below or type to add.
+                  </span>
+                )}
+              </div>
+
+              {/* Add Custom Dream Company */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Type company name (e.g. Google, Stripe, CRED)..."
+                  value={newDreamCompanyInput}
+                  onChange={(e) => setNewDreamCompanyInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const c = newDreamCompanyInput.trim();
+                      if (c) {
+                        const current = profile.preferences.dream_companies || [];
+                        if (!current.some(x => x.toLowerCase() === c.toLowerCase())) {
+                          updatePreferenceField('dream_companies', [...current, c]);
+                        }
+                        setNewDreamCompanyInput('');
+                      }
+                    }
+                  }}
+                  className="input-base flex-1 text-xs font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = newDreamCompanyInput.trim();
+                    if (c) {
+                      const current = profile.preferences.dream_companies || [];
+                      if (!current.some(x => x.toLowerCase() === c.toLowerCase())) {
+                        updatePreferenceField('dream_companies', [...current, c]);
+                      }
+                      setNewDreamCompanyInput('');
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm"
+                >
+                  Pin Company
+                </button>
+              </div>
+
+              {/* Quick Suggestions */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-semibold text-gray-400">Popular Tech Unicorns:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {POPULAR_DREAM_COMPANIES.map(comp => {
+                    const isPinned = (profile.preferences.dream_companies || []).some(x => x.toLowerCase() === comp.toLowerCase());
+                    return (
+                      <button
+                        key={comp}
+                        type="button"
+                        onClick={() => {
+                          const current = profile.preferences.dream_companies || [];
+                          if (isPinned) {
+                            updatePreferenceField('dream_companies', current.filter(x => x.toLowerCase() !== comp.toLowerCase()));
+                          } else {
+                            updatePreferenceField('dream_companies', [...current, comp]);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all border ${
+                          isPinned
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {isPinned ? `✓ ${comp}` : `+ ${comp}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Availability & Notice Period */}
+            <div 
+              className="p-6 rounded-3xl border space-y-4 shadow-sm"
+              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    3. Notice Period & Work Authorization
+                  </h3>
+                  <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                    Recruiters filter aggressively on immediate joining and work permits.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                {/* Notice Period */}
+                <div>
+                  <label className="block font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Notice Period / Availability:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {NOTICE_PERIOD_OPTIONS.map((opt) => {
+                      const isSelected = profile.preferences.notice_period === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => updatePreferenceField('notice_period', opt)}
+                          className={`p-2.5 rounded-xl border text-left font-medium transition-all ${
+                            isSelected
+                              ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>{opt}</span>
+                            {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Work Authorization */}
+                <div>
+                  <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                    Work Authorization / Visa Status:
+                  </label>
+                  <select
+                    value={profile.preferences.work_authorization || WORK_AUTH_OPTIONS[0]}
+                    onChange={(e) => updatePreferenceField('work_authorization', e.target.value)}
+                    className="input-base w-full text-xs font-medium"
+                  >
+                    {WORK_AUTH_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Spoken Languages */}
+                <div>
+                  <label className="block font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                    Spoken Languages:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {(profile.preferences.spoken_languages || []).map((lang, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-xl text-xs font-semibold bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 flex items-center gap-1.5"
+                      >
+                        <Globe className="w-3 h-3 text-blue-500" />
+                        <span>{lang}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = profile.preferences.spoken_languages || [];
+                            updatePreferenceField('spoken_languages', current.filter((_, i) => i !== idx));
+                          }}
+                          className="hover:text-red-500"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add language (e.g. English - Professional, Hindi - Native)..."
+                      value={newLanguageInput}
+                      onChange={(e) => setNewLanguageInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newLanguageInput.trim();
+                          if (val) {
+                            const current = profile.preferences.spoken_languages || [];
+                            if (!current.includes(val)) {
+                              updatePreferenceField('spoken_languages', [...current, val]);
+                            }
+                            setNewLanguageInput('');
+                          }
+                        }
+                      }}
+                      className="input-base flex-1 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = newLanguageInput.trim();
+                        if (val) {
+                          const current = profile.preferences.spoken_languages || [];
+                          if (!current.includes(val)) {
+                            updatePreferenceField('spoken_languages', [...current, val]);
+                          }
+                          setNewLanguageInput('');
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs font-semibold hover:bg-gray-300"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Excluded / Blocked Companies */}
+            <div 
+              className="p-6 rounded-3xl border space-y-4 shadow-sm"
+              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-red-100 dark:bg-red-950 text-red-600">
+                    <Ban className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                      4. Excluded Companies (Blocklist)
+                    </h3>
+                    <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                      Organizations you never want to see in your Radar feeds.
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">
+                  Muted
+                </span>
+              </div>
+
+              {/* Active Blocked Companies Tags */}
+              <div className="flex flex-wrap gap-1.5 min-h-[42px] p-2.5 rounded-2xl border bg-gray-50/50 dark:bg-gray-900/30" style={{ borderColor: 'var(--border-primary)' }}>
+                {(profile.preferences.blocked_companies || []).map((comp) => (
+                  <span
+                    key={comp}
+                    className="px-3 py-1 rounded-xl text-xs font-bold bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200 border border-red-300 dark:border-red-800 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Ban className="w-3 h-3 text-red-600" />
+                    <span>{comp}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = profile.preferences.blocked_companies || [];
+                        updatePreferenceField('blocked_companies', current.filter(c => c.toLowerCase() !== comp.toLowerCase()));
+                      }}
+                      className="hover:text-red-600 ml-0.5"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {(!profile.preferences.blocked_companies || profile.preferences.blocked_companies.length === 0) && (
+                  <span className="text-xs text-gray-400 italic flex items-center gap-1">
+                    No blocked companies. Add any companies you want automatically filtered out.
+                  </span>
+                )}
+              </div>
+
+              {/* Add Custom Blocked Company */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Type company or agency to block..."
+                  value={newBlockedCompanyInput}
+                  onChange={(e) => setNewBlockedCompanyInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const c = newBlockedCompanyInput.trim();
+                      if (c) {
+                        const current = profile.preferences.blocked_companies || [];
+                        if (!current.some(x => x.toLowerCase() === c.toLowerCase())) {
+                          updatePreferenceField('blocked_companies', [...current, c]);
+                        }
+                        setNewBlockedCompanyInput('');
+                      }
+                    }
+                  }}
+                  className="input-base flex-1 text-xs font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = newBlockedCompanyInput.trim();
+                    if (c) {
+                      const current = profile.preferences.blocked_companies || [];
+                      if (!current.some(x => x.toLowerCase() === c.toLowerCase())) {
+                        updatePreferenceField('blocked_companies', [...current, c]);
+                      }
+                      setNewBlockedCompanyInput('');
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 shadow-sm"
+                >
+                  Block
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SECTION 2: Personal Information & Socials */}
       {activeSection === 'identity' && (
         <div 
@@ -1029,7 +1764,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               Personal Identity & Professional Bio
             </h3>
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              This information is used in AI Outreach Pitches, Resume Generation, and Knowledge Graph user identity.
+              Used in AI Outreach Pitches, Resume Generation, and Knowledge Graph user identity.
             </p>
           </div>
 
@@ -1309,7 +2044,221 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
         </div>
       )}
 
-      {/* SECTION 4: Education History */}
+      {/* SECTION 4: Featured Projects & Proof of Work */}
+      {activeSection === 'projects' && (
+        <div 
+          className="p-6 rounded-3xl border space-y-6 shadow-sm"
+          style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                Featured Projects & Code Proof-of-Work
+              </h3>
+              <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Projects built by you. Used for AST code verification in Job Matchmaker and automated referral pitches.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsAddingProj(true)}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Project</span>
+            </button>
+          </div>
+
+          {/* Project Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(profile.projects || []).map((proj, idx) => (
+              <div
+                key={idx}
+                className="p-5 rounded-2xl border flex flex-col justify-between gap-3 shadow-sm card-hover"
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+              >
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-600">
+                        <FolderGit2 className="w-4 h-4" />
+                      </div>
+                      <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                        {proj.name}
+                      </h4>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeProj(idx)}
+                      className="text-gray-400 hover:text-red-500 p-1"
+                      title="Delete Project"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                    {proj.description || 'No description provided.'}
+                  </p>
+
+                  {/* Tech Stack Chips */}
+                  {normalizeArray(proj.tech_stack).length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {normalizeArray(proj.tech_stack).map((t, tIdx) => (
+                        <span
+                          key={tIdx}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-white dark:bg-gray-800 border"
+                          style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Links */}
+                <div className="flex items-center justify-between pt-2 border-t text-xs" style={{ borderColor: 'var(--border-primary)' }}>
+                  <div className="flex items-center gap-2">
+                    {proj.repo_url && (
+                      <a
+                        href={proj.repo_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-mono text-[11px] text-blue-600 hover:underline"
+                      >
+                        <Github className="w-3 h-3" />
+                        <span>Code</span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    )}
+                    {proj.live_url && (
+                      <a
+                        href={proj.live_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:underline"
+                      >
+                        <Globe className="w-3 h-3" />
+                        <span>Live Demo</span>
+                      </a>
+                    )}
+                  </div>
+                  {proj.stars !== undefined && proj.stars > 0 && (
+                    <span className="flex items-center gap-1 text-[11px] font-mono text-amber-500">
+                      <Star className="w-3 h-3 fill-amber-500" />
+                      {proj.stars}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {(!profile.projects || profile.projects.length === 0) && (
+              <div className="p-8 text-center border rounded-2xl border-dashed text-xs text-gray-400 col-span-2">
+                No projects added yet. Click "Add Project" or sync your GitHub account.
+              </div>
+            )}
+          </div>
+
+          {/* Add Project Form */}
+          {isAddingProj && (
+            <div className="p-5 rounded-2xl border space-y-3 bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900">
+              <h4 className="text-xs font-bold text-purple-900 dark:text-purple-200">Add New Project</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block font-semibold mb-1">Project Title *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Distributed Task Queue"
+                    value={newProj.name}
+                    onChange={(e) => setNewProj(prev => ({ ...prev, name: e.target.value }))}
+                    className="input-base w-full text-xs"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Primary Language</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Python, TypeScript, Go"
+                    value={newProj.primary_language}
+                    onChange={(e) => setNewProj(prev => ({ ...prev, primary_language: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">GitHub Repo URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://github.com/username/project"
+                    value={newProj.repo_url}
+                    onChange={(e) => setNewProj(prev => ({ ...prev, repo_url: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Live Demo / Product URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://myproject.dev"
+                    value={newProj.live_url}
+                    onChange={(e) => setNewProj(prev => ({ ...prev, live_url: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-xs">Description & Architecture</label>
+                <textarea
+                  rows={2}
+                  placeholder="Explain what the project solves, throughput metrics, or key innovations..."
+                  value={newProj.description}
+                  onChange={(e) => setNewProj(prev => ({ ...prev, description: e.target.value }))}
+                  className="input-base w-full text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-xs">Technologies Used (comma separated)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. FastAPI, Neo4j, Redis, Docker, React"
+                  value={projTechInput}
+                  onChange={(e) => {
+                    setProjTechInput(e.target.value);
+                    setNewProj(prev => ({
+                      ...prev,
+                      tech_stack: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                    }));
+                  }}
+                  className="input-base w-full text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingProj(false)}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-gray-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddProj}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700"
+                >
+                  Save Project
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SECTION 5: Education History */}
       {activeSection === 'education' && (
         <div 
           className="p-6 rounded-3xl border space-y-6 shadow-sm"
@@ -1458,7 +2407,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
         </div>
       )}
 
-      {/* SECTION 5: Work Experience */}
+      {/* SECTION 6: Work Experience */}
       {activeSection === 'experience' && (
         <div 
           className="p-6 rounded-3xl border space-y-6 shadow-sm"
@@ -1637,6 +2586,182 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* SECTION 7: Achievements & Certifications */}
+      {activeSection === 'honors' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Achievements & Hackathons */}
+          <div 
+            className="p-6 rounded-3xl border space-y-4 shadow-sm"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600">
+                  <Trophy className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    Hackathons & Major Achievements
+                  </h3>
+                  <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                    Competitive wins & national challenge awards.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddingAch(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 flex items-center gap-1 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {(profile.achievements || []).map((ach, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-xl border flex items-start justify-between gap-2 text-xs"
+                  style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+                >
+                  <div>
+                    <h5 className="font-bold" style={{ color: 'var(--text-primary)' }}>{ach.title}</h5>
+                    <p className="text-amber-600 font-semibold text-[11px]">{ach.organization} {ach.date ? `• ${ach.date}` : ''}</p>
+                    {ach.description && <p className="text-gray-500 text-[11px] pt-0.5">{ach.description}</p>}
+                  </div>
+                  <button onClick={() => removeAch(idx)} className="text-gray-400 hover:text-red-500">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {(!profile.achievements || profile.achievements.length === 0) && (
+                <div className="p-6 text-center border rounded-xl border-dashed text-xs text-gray-400">
+                  No hackathons or achievements added yet.
+                </div>
+              )}
+            </div>
+
+            {isAddingAch && (
+              <div className="p-4 rounded-xl border space-y-2.5 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 text-xs">
+                <input
+                  type="text"
+                  placeholder="Achievement / Hackathon Title *"
+                  value={newAch.title}
+                  onChange={(e) => setNewAch(prev => ({ ...prev, title: e.target.value }))}
+                  className="input-base w-full text-xs"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Host / Organizer (e.g. AICTE)"
+                    value={newAch.organization}
+                    onChange={(e) => setNewAch(prev => ({ ...prev, organization: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Year / Date (e.g. 2024)"
+                    value={newAch.date}
+                    onChange={(e) => setNewAch(prev => ({ ...prev, date: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setIsAddingAch(false)} className="px-3 py-1 text-xs text-gray-500">Cancel</button>
+                  <button onClick={handleAddAch} className="px-3.5 py-1.5 rounded-xl bg-amber-600 text-white font-bold">Save</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Certifications */}
+          <div 
+            className="p-6 rounded-3xl border space-y-4 shadow-sm"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600">
+                  <BadgeCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    Certifications & Licenses
+                  </h3>
+                  <p className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                    AWS, Neo4j, Google Cloud, Docker, etc.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddingCert(true)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {(profile.certifications || []).map((cert, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-xl border flex items-start justify-between gap-2 text-xs"
+                  style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+                >
+                  <div>
+                    <h5 className="font-bold" style={{ color: 'var(--text-primary)' }}>{cert.name}</h5>
+                    <p className="text-emerald-600 font-semibold text-[11px]">{cert.issuer} {cert.date ? `• ${cert.date}` : ''}</p>
+                  </div>
+                  <button onClick={() => removeCert(idx)} className="text-gray-400 hover:text-red-500">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {(!profile.certifications || profile.certifications.length === 0) && (
+                <div className="p-6 text-center border rounded-xl border-dashed text-xs text-gray-400">
+                  No certifications added yet.
+                </div>
+              )}
+            </div>
+
+            {isAddingCert && (
+              <div className="p-4 rounded-xl border space-y-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 text-xs">
+                <input
+                  type="text"
+                  placeholder="Certification Name *"
+                  value={newCert.name}
+                  onChange={(e) => setNewCert(prev => ({ ...prev, name: e.target.value }))}
+                  className="input-base w-full text-xs"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Issuer (e.g. AWS, Neo4j)"
+                    value={newCert.issuer}
+                    onChange={(e) => setNewCert(prev => ({ ...prev, issuer: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Year (e.g. 2024)"
+                    value={newCert.date}
+                    onChange={(e) => setNewCert(prev => ({ ...prev, date: e.target.value }))}
+                    className="input-base w-full text-xs"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setIsAddingCert(false)} className="px-3 py-1 text-xs text-gray-500">Cancel</button>
+                  <button onClick={handleAddCert} className="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold">Save</button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -28,6 +28,10 @@
           sendResponse({ type: "OTHER", pageType: "LINKEDIN_PAGE", data: { raw_text: (document.body?.innerText || "").slice(0, 5000) } });
         }
         return false;
+      } else if (request.action === "EXTRACT_TARGET_PROFILE") {
+        const targetProfile = extractFullProfileData();
+        sendResponse({ type: "TARGET_PROFILE", data: targetProfile, success: true });
+        return false;
       } else if (request.action === "EXTRACT_POSTS") {
         const posts = extractRecentPosts();
         sendResponse({ type: "POSTS", data: posts });
@@ -40,7 +44,7 @@
         }).catch(err => {
           sendResponse({ type: "ERROR", message: err.message });
         });
-        return true; // only return true for async
+        return true;
       } else if (request.action === "NAVIGATE_TO") {
         if (request.url) {
           window.location.href = request.url;
@@ -55,40 +59,55 @@
     return false;
   });
 
-  // Deep Auto-Scroll Scanner for 800+ Connections
+  // Deep Auto-Scroll Scanner for Connections
   async function deepScanConnections(onProgress) {
     const connectionsMap = new Map();
     let prevCount = 0;
     let noNewCount = 0;
-    const maxScrolls = 20;
+    const maxScrolls = 150;
 
     for (let i = 0; i < maxScrolls; i++) {
       const batch = extractConnectionsData();
-      batch.forEach(c => connectionsMap.set(c.name, c));
+      batch.forEach(c => {
+        if (c.name) connectionsMap.set(c.name, c);
+      });
 
       const currentCount = connectionsMap.size;
-      if (onProgress) {
-        onProgress({ count: currentCount, isDone: false });
-      }
+      if (onProgress) onProgress({ count: currentCount, isDone: false });
 
       if (currentCount === prevCount && currentCount > 0) {
         noNewCount++;
-        if (noNewCount >= 3) break;
+        if (noNewCount >= 6) break;
+        window.scrollBy({ top: -500, behavior: "smooth" });
+        await new Promise(r => setTimeout(r, 400));
       } else {
         noNewCount = 0;
       }
       prevCount = currentCount;
 
-      window.scrollBy({ top: 1000, behavior: "smooth" });
-      await new Promise(r => setTimeout(r, 400));
+      document.querySelectorAll("button.scaffold-finite-scroll__load-button, button.artdeco-button--secondary").forEach(b => {
+        if (b.innerText && b.innerText.toLowerCase().includes("show more")) {
+          try { b.click(); } catch(e){}
+        }
+      });
+
+      window.scrollBy({ top: 1500, behavior: "instant" });
+      const scrollEl = document.scrollingElement || document.body || document.documentElement;
+      if (scrollEl) {
+        window.scrollTo({ top: scrollEl.scrollHeight, behavior: "instant" });
+      }
+      document.querySelectorAll("div, main, section").forEach(el => {
+        if (el.scrollHeight > el.clientHeight && el.clientHeight > 200) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+      await new Promise(r => setTimeout(r, 850));
     }
 
     window.scrollTo({ top: 0, behavior: "smooth" });
 
     const finalResults = Array.from(connectionsMap.values());
-    if (onProgress) {
-      onProgress({ count: finalResults.length, isDone: true });
-    }
+    if (onProgress) onProgress({ count: finalResults.length, isDone: true });
     return finalResults;
   }
 
@@ -98,75 +117,78 @@
     const seenUrls = new Set();
     const seenNames = new Set();
 
-    // Find all profile anchor links
     const allLinks = Array.from(document.querySelectorAll('a[href*="/in/"]'));
 
     allLinks.forEach((linkEl) => {
-      const href = linkEl.href ? linkEl.href.split("?")[0] : "";
-      if (!href || href.endsWith("/in/") || href.endsWith("/in/me") || href.endsWith("/in/me/") || seenUrls.has(href)) {
+      const rawHref = linkEl.getAttribute("href") || linkEl.href || "";
+      if (!rawHref) return;
+
+      const href = (linkEl.href || rawHref).split("?")[0].replace(/\/+$/, "") + "/";
+      if (!href || href.endsWith("/in/") || href.includes("/in/me") || seenUrls.has(href)) {
         return;
       }
 
-      // Find connection card ancestor
-      const card = linkEl.closest("li, .mn-connection-card, .entity-result, .artdeco-list__item, [data-view-name]") || linkEl.parentElement?.parentElement;
+      // Find enclosing card
+      const card = linkEl.closest("li, .mn-connection-card, .entity-result, .artdeco-list__item, [data-view-name], .mn-connections__list-item") || linkEl.parentElement?.parentElement?.parentElement || linkEl.parentElement?.parentElement;
       if (!card) return;
 
-      const cardText = card.innerText || "";
-      if (!cardText.includes("Connected") && !card.querySelector("button") && !card.className.includes("connection")) {
-        return;
-      }
+      const cardText = (card.innerText || "").trim();
 
       // Extract Name
       let name = "";
-      const nameEl = card.querySelector(".mn-connection-card__name, .t-bold, [aria-hidden='true'], h3, .entity-result__title-text, .t-16.t-black.t-bold");
+      const nameEl = card.querySelector(".mn-connection-card__name, .entity-result__title-text, .artdeco-entity-lockup__title, .t-16.t-black.t-bold, h3, [data-view-name*='actor'] a, span[dir='ltr']");
       if (nameEl) {
-        name = nameEl.innerText.trim().split("\n")[0];
+        name = (nameEl.innerText || "").trim().split("\n")[0];
       }
-      if (!name || name.toLowerCase().includes("view") || name.length > 50) {
-        name = linkEl.innerText.trim().split("\n")[0];
+      if (!name || name.length < 2 || name.toLowerCase().includes("view") || name.length > 50) {
+        const linkText = (linkEl.innerText || "").trim().split("\n")[0];
+        if (linkText && linkText.length >= 2 && !linkText.toLowerCase().includes("view") && !linkText.toLowerCase().includes("profile")) {
+          name = linkText;
+        }
       }
-      if (!name || name.toLowerCase().includes("connections") || seenNames.has(name) || name.length < 2) {
-        return;
+      if (!name || name.length < 2) {
+        const lines = cardText.split("\n").map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          if (line.length >= 2 && line.length <= 40 && !line.includes("Connected") && !line.includes("Message") && !line.includes("Connect") && !line.includes("Sort by") && !line.includes("connections")) {
+            name = line;
+            break;
+          }
+        }
       }
+
+      if (!name || name.toLowerCase().includes("connections") || name.toLowerCase().includes("linkedin member") || seenNames.has(name) || name.length < 2) return;
 
       seenUrls.add(href);
       seenNames.add(name);
 
-      // Extract Headline / Occupation
+      // Extract Occupation
       let occupation = "";
-      const occEl = card.querySelector(".mn-connection-card__occupation, .entity-result__primary-subtitle, .t-14.t-normal, .entity-result__summary");
+      const occEl = card.querySelector(".mn-connection-card__occupation, .entity-result__primary-subtitle, .artdeco-entity-lockup__caption, .artdeco-entity-lockup__subtitle, .t-14.t-normal, .entity-result__summary");
       if (occEl) {
-        occupation = occEl.innerText.trim();
+        occupation = (occEl.innerText || "").trim();
       } else {
         const lines = cardText.split("\n").map(l => l.trim()).filter(Boolean);
         const nameIndex = lines.indexOf(name);
-        if (nameIndex !== -1 && lines[nameIndex + 1] && !lines[nameIndex + 1].startsWith("Connected on")) {
+        if (nameIndex !== -1 && lines[nameIndex + 1] && !lines[nameIndex + 1].startsWith("Connected") && !lines[nameIndex + 1].startsWith("Message")) {
           occupation = lines[nameIndex + 1];
         }
       }
 
-      // Extract Connected Date
       let connectedOn = "Recent";
-      const dateMatch = cardText.match(/Connected on\s+([A-Za-z]+\s+\d+,\s+\d{4})/i);
-      if (dateMatch) {
-        connectedOn = dateMatch[1];
-      }
+      const dateMatch = cardText.match(/Connected on\s+([A-Za-z]+\s+\d+,\s+\d{4})/i) || cardText.match(/Connected\s+([A-Za-z]+\s+\d+,\s+\d{4})/i);
+      if (dateMatch) connectedOn = dateMatch[1];
 
-      // Parse Company & Role
       let company = "";
       let position = occupation || "Professional";
       if (occupation.includes(" at ")) {
-        const parts = occupation.split(" at ");
-        position = parts[0].trim();
-        company = parts.slice(1).join(" at ").trim();
+        position = occupation.split(" at ")[0].trim();
+        company = occupation.split(" at ").slice(1).join(" at ").trim();
       } else if (occupation.includes(" @ ")) {
-        const parts = occupation.split(" @ ");
-        position = parts[0].trim();
-        company = parts.slice(1).join(" @ ").trim();
+        position = occupation.split(" @ ")[0].trim();
+        company = occupation.split(" @ ").slice(1).join(" @ ").trim();
       } else if (occupation.includes(" student at ")) {
-        const parts = occupation.split(" student at ");
-        position = parts[0].trim();
-        company = parts.slice(1).join(" student at ").trim();
+        position = occupation.split(" student at ")[0].trim();
+        company = occupation.split(" student at ").slice(1).join(" student at ").trim();
       } else if (occupation.toLowerCase().includes("sharda")) {
         company = "Sharda University";
       } else if (occupation.toLowerCase().includes("hindustan") || occupation.toLowerCase().includes("hcst")) {
@@ -190,7 +212,6 @@
     return connections;
   }
 
-  // Extract from Feed Left Sidebar
   function extractFeedSidebarProfile() {
     const nameElem = document.querySelector(".feed-identity-module__actor-meta a, .profile-rail-card__actor-link, .identity-headline, a[href*='/in/'] > .t-16");
     const name = nameElem ? nameElem.innerText.trim() : (document.querySelector(".feed-identity-module")?.innerText?.split("\n")[0] || "Candidate");
@@ -210,70 +231,116 @@
     };
   }
 
-  // Extract from full /in/ profile page
+  // Enhanced Universal Target Profile Extractor (Works on /in/username, /recent-activity/*, etc.)
   function extractFullProfileData() {
-    const nameElem = document.querySelector("h1.text-heading-xlarge, h1.top-card-layout__title, h1.inline.t-24");
-    const name = nameElem ? nameElem.innerText.trim() : "";
+    const url = window.location.href;
 
-    const headlineElem = document.querySelector("div.text-body-medium.break-words, h2.top-card-layout__headline, .text-body-medium");
-    const headline = headlineElem ? headlineElem.innerText.trim() : "";
+    // 1. Try Top Card on Profile Page
+    let nameElem = document.querySelector("h1.text-heading-xlarge, h1.top-card-layout__title, h1.inline.t-24, h1");
+    let name = nameElem ? nameElem.innerText.trim().split("\n")[0] : "";
 
-    const locationElem = document.querySelector("span.text-body-small.inline.t-black--light.break-words, .pv-top-card--list-bullet > li");
-    const location = locationElem ? locationElem.innerText.trim() : "";
+    let headlineElem = document.querySelector("div.text-body-medium.break-words, h2.top-card-layout__headline, .text-body-medium");
+    let headline = headlineElem ? headlineElem.innerText.trim() : "";
 
-    let about = "";
-    const aboutSection = document.querySelector("#about ~ div.display-flex, section[data-section='summary'], .pv-about-section");
-    if (aboutSection) {
-      about = aboutSection.innerText.trim();
+    // 2. If on /recent-activity/* or other subpages, inspect Left Rail Identity Card
+    if (!name || name.toLowerCase().includes("activity") || name.length > 40) {
+      const railNameElem = document.querySelector(".feed-identity-module__actor-meta a, .profile-rail-card__actor-link, div[class*='feed-identity'] h3, .artdeco-card a[href*='/in/']");
+      if (railNameElem) {
+        name = railNameElem.innerText.trim().split("\n")[0];
+      }
     }
 
-    const experiences = [];
-    const expItems = document.querySelectorAll("#experience ~ div.pvs-list__outer-container > ul > li, .pv-profile-section__list-item");
-    expItems.forEach(item => {
-      const text = item.innerText.trim();
-      if (text) experiences.push(text);
-    });
+    // 3. Check post actor name if still missing
+    if (!name || name.toLowerCase().includes("activity")) {
+      const actorNameElem = document.querySelector(".update-components-actor__name, .feed-shared-actor__name, a.update-components-actor__meta-link");
+      if (actorNameElem) {
+        name = actorNameElem.innerText.trim().split("\n")[0];
+      }
+    }
 
-    const education = [];
-    const eduItems = document.querySelectorAll("#education ~ div.pvs-list__outer-container > ul > li");
-    eduItems.forEach(item => {
-      const text = item.innerText.trim();
-      if (text) education.push(text);
-    });
+    // 4. Fallback URL slug parser: /in/dj-suryansh/... -> DJ Suryansh
+    if (!name || name.toLowerCase().includes("activity") || name.toLowerCase().includes("member")) {
+      const match = url.match(/\/in\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1] && match[1] !== "me") {
+        name = match[1].replace(/[-_]/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+      }
+    }
+
+    // Headline fallback from sidebar or actor description
+    if (!headline || headline.length < 3) {
+      const railHeadline = document.querySelector(".feed-identity-module__headline, .feed-identity-module .t-12, .update-components-actor__description, .feed-shared-actor__description");
+      if (railHeadline) {
+        headline = railHeadline.innerText.trim();
+      }
+    }
+
+    // Company & Role parsing from headline
+    let company = "";
+    let role = headline;
+    if (headline.includes(" @ ")) {
+      const parts = headline.split(" @ ");
+      role = parts[0].trim();
+      company = parts[1].split("|")[0].split("•")[0].split(",")[0].trim();
+    } else if (headline.includes(" at ")) {
+      const parts = headline.split(" at ");
+      role = parts[0].trim();
+      company = parts[1].split("|")[0].split("•")[0].split(",")[0].trim();
+    } else if (headline.includes("Intern @")) {
+      const match = headline.match(/Intern\s*@\s*([^|•,\n]+)/i);
+      if (match) company = match[1].trim();
+    } else if (headline.includes("@")) {
+      const match = headline.match(/@\s*([^|•,\n]+)/);
+      if (match) company = match[1].trim();
+    }
+
+    // College Detection
+    let sharedCollege = "";
+    const fullText = document.body.innerText;
+    if (fullText.includes("Sharda University") || headline.includes("Sharda")) {
+      sharedCollege = "Sharda University";
+    } else if (fullText.includes("Hindustan College") || fullText.includes("HCST")) {
+      sharedCollege = "Hindustan College of Science and Technology";
+    } else if (fullText.includes("Stanford")) {
+      sharedCollege = "Stanford University";
+    }
 
     return {
-      name: name || "Candidate",
-      headline,
-      location,
-      about,
-      experiences,
-      education,
-      source: "FULL_PROFILE",
-      raw_text: document.body.innerText.slice(0, 20000)
+      name: name || "LinkedIn Member",
+      headline: headline || "Software Engineer",
+      company: company || "Industry Network",
+      role: role || headline,
+      location: "",
+      profile_url: url.split("?")[0],
+      shared_college: sharedCollege,
+      source: "UNIVERSAL_PROFILE_EXTRACTOR",
+      raw_text: fullText.slice(0, 20000)
     };
   }
 
-  // Extract Posts & Milestones
+  // Enhanced Universal Recent Posts Extractor
   function extractRecentPosts() {
+    // 1. Expand all '...see more' buttons
+    document.querySelectorAll("button.feed-shared-inline-show-more-text__see-more-less-toggle, button.see-more, [aria-label*='more'], button[class*='see-more']").forEach(b => {
+      try { b.click(); } catch(e) {}
+    });
+
     const posts = [];
+    const seen = new Set();
+
     const postElements = document.querySelectorAll(
-      "div.feed-shared-update-v2, div.feed-shared-text, div.update-components-text, .feed-shared-inline-show-more-text, .update-components-update-v2__commentary, .feed-shared-text-view, div[data-view-name='feed-full-update']"
+      "div.feed-shared-update-v2, div[data-view-name*='update'], .update-components-update-v2__commentary, .feed-shared-update-v2__description, .feed-shared-text, .update-components-text, .feed-shared-inline-show-more-text, .feed-shared-text-view, article[data-activity-id], div.occludable-update"
     );
 
     postElements.forEach(el => {
-      const text = el.innerText.trim();
-      if (text && text.length > 25 && !posts.includes(text)) {
+      let text = (el.innerText || "").trim();
+      // Clean noise
+      text = text.replace(/…see more|see less|\.\.\.more/gi, "").trim();
+
+      if (text && text.length > 15 && !text.startsWith("Like\n") && !text.startsWith("Comment\n") && !text.startsWith("All activity") && !seen.has(text)) {
+        seen.add(text);
         posts.push(text);
       }
     });
-
-    if (posts.length === 0) {
-      const activityItems = document.querySelectorAll(".profile-creator-shared-feed-update__container, .artdeco-card");
-      activityItems.forEach(item => {
-        const t = item.innerText.trim();
-        if (t && t.length > 30) posts.push(t);
-      });
-    }
 
     return posts.slice(0, 15);
   }
@@ -283,10 +350,6 @@
     const company = document.querySelector("a.job-details-jobs-unified-top-card__primary-description-container-item, a.topcard__org-name-link")?.innerText?.trim() || "";
     const description = document.querySelector("div.jobs-description-content__text, div.description__text")?.innerText?.trim() || "";
 
-    return {
-      title,
-      company,
-      description
-    };
+    return { title, company, description };
   }
 })();

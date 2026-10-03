@@ -178,6 +178,7 @@ export interface Opportunity {
   description: string;
   eligibility?: string;
   verified?: boolean;
+  is_dream_company?: boolean;
 }
 
 export interface OpportunitiesResponse {
@@ -193,6 +194,13 @@ export interface OpportunitiesResponse {
   opportunities: Opportunity[];
 }
 
+export interface CareerGoals {
+  target_milestone?: string;
+  target_timeline?: string;
+  target_ctc?: string;
+  focus_areas?: string[];
+}
+
 export interface UserPreferences {
   primary_role?: string;
   priority_domain?: string;
@@ -204,6 +212,13 @@ export interface UserPreferences {
   experience_level?: string;
   min_salary?: string;
   priority_factor?: 'best_fit' | 'urgency' | 'compensation' | 'remote_first';
+  dream_companies?: string[];
+  blocked_companies?: string[];
+  notice_period?: string;
+  work_authorization?: string;
+  spoken_languages?: string[];
+  career_goals?: CareerGoals;
+  in_progress_skills?: string[];
   custom_locations?: string[];
 }
 
@@ -236,8 +251,78 @@ export interface UserProfileDetails {
     is_current?: boolean;
     description?: string;
   }>;
+  projects?: Array<{
+    id?: string;
+    name: string;
+    description?: string;
+    repo_url?: string;
+    live_url?: string;
+    primary_language?: string;
+    tech_stack?: string[];
+    stars?: number;
+  }>;
+  certifications?: Array<{
+    name: string;
+    issuer?: string;
+    date?: string;
+    url?: string;
+  }>;
+  achievements?: Array<{
+    title: string;
+    organization?: string;
+    date?: string;
+    description?: string;
+  }>;
   skills?: string[];
   preferences: UserPreferences;
+}
+
+export interface MarketDemandSkill {
+  skill: string;
+  demand_percentage: number;
+  job_count: number;
+  status: 'mastered' | 'missing' | 'in_progress';
+  trend: 'up' | 'stable' | 'explosive';
+  avg_salary_boost?: string;
+}
+
+export interface HighRoiUnlockSkill {
+  skill: string;
+  category: string;
+  unlocked_jobs_count: number;
+  avg_ctc_impact: string;
+  priority: 'Critical' | 'High' | 'Medium';
+  is_in_progress?: boolean;
+  recommended_project: {
+    title: string;
+    description: string;
+    tech_stack: string[];
+    deliverables: string[];
+  };
+  learning_sprint: {
+    duration: string;
+    week1_focus: string;
+    week2_focus: string;
+    key_concepts: string[];
+  };
+}
+
+export interface MarketIntelligenceResponse {
+  status: string;
+  target_role: string;
+  target_domain: string;
+  analyzed_jobs_count: number;
+  user_readiness_score: number;
+  in_progress_skills: string[];
+  market_summary: {
+    top_demanded_skills: MarketDemandSkill[];
+    high_roi_unlocks: HighRoiUnlockSkill[];
+    emerging_boom_technologies: Array<{
+      name: string;
+      growth: string;
+      reason: string;
+    }>;
+  };
 }
 
 
@@ -294,3 +379,123 @@ export interface BenchmarkComparisonResult {
     hiring_manager_verdict: string;
   };
 }
+
+export interface ExtractedJobNotice {
+  company: string;
+  role: string;
+  location: string;
+  work_mode: string;
+  opportunity_type: string;
+  ctc_stipend: string;
+  eligibility: {
+    eligible_batches: string[];
+    degrees: string[];
+    min_cgpa: string;
+    backlog_allowed: string;
+    other_criteria?: string;
+  };
+  skills_required: string[];
+  selection_rounds: Array<{
+    round_number: number;
+    round_name: string;
+    description: string;
+  }>;
+  deadline?: string;
+  apply_url?: string;
+  summary: string;
+}
+
+export interface JobIntelligence {
+  company_intel: {
+    company_name: string;
+    business_overview: string;
+    engineering_culture: string;
+    tech_stack_footprint: string[];
+    recent_focus_areas: string[];
+  };
+  candidate_fit_assessment: {
+    match_score: number;
+    verdict: string;
+    key_advantages: string[];
+    critical_gaps: string[];
+    tailored_pitch: string;
+  };
+  interview_rounds_blueprint: Array<{
+    round_name: string;
+    focus: string;
+    duration: string;
+    weightage: string;
+  }>;
+  top_interview_questions: Array<{
+    id: string;
+    category: string;
+    question: string;
+    why_asked: string;
+    hint: string;
+    expected_structure: string;
+    common_pitfall: string;
+  }>;
+  cheat_sheet: {
+    key_concepts_to_revise: string[];
+    system_design_checklist: string[];
+    red_flags_to_avoid: string[];
+  };
+}
+
+export interface InterviewHistoryItem {
+  step: number;
+  question: string;
+  category?: string;
+  hint?: string;
+  answer?: string;
+  score?: number;
+  strengths?: string[];
+  gaps?: string[];
+  model_answer?: string;
+  interviewer_reaction?: string;
+}
+
+export interface InterviewSessionState {
+  session_id: string;
+  company: string;
+  role: string;
+  round_type: string;
+  difficulty: string;
+  candidate_name: string;
+  current_step: number;
+  total_steps: number;
+  interviewer_message: string;
+  current_question: string;
+  question_category: string;
+  context_hints: string;
+  history: InterviewHistoryItem[];
+}
+
+export interface InterviewEvaluationResponse {
+  step: number;
+  score: number;
+  strengths: string[];
+  gaps: string[];
+  model_answer: string;
+  interviewer_reaction: string;
+  next_question?: string | null;
+  next_category?: string | null;
+  next_hint?: string | null;
+  is_completed: boolean;
+}
+
+export interface InterviewScorecard {
+  overall_score: number;
+  verdict: string;
+  verdict_summary: string;
+  competency_breakdown: {
+    technical_depth: number;
+    system_architecture: number;
+    problem_solving: number;
+    communication_star: number;
+  };
+  top_superpowers: string[];
+  areas_for_improvement: string[];
+  fast_track_study_plan: string[];
+}
+

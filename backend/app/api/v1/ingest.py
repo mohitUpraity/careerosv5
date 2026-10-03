@@ -347,3 +347,34 @@ async def ingest_linkedin_user_posts(
         "graph_nodes_merged": nodes_merged
     }
 
+class TargetProfileIngestRequest(BaseModel):
+    name: str
+    headline: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
+    location: Optional[str] = None
+    profile_url: Optional[str] = None
+    shared_college: Optional[str] = None
+    skills: Optional[List[str]] = None
+    recent_posts: Optional[List[str]] = None
+    connections_preview: Optional[List[Dict[str, Any]]] = None
+
+@router.post("/linkedin/target-profile")
+async def ingest_scanned_target_profile(
+    payload: TargetProfileIngestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Ingests any viewed LinkedIn profile scanned by the CareerOS Chrome Extension.
+    Maps their current company, college alumni edge, and computes instant referral bridges.
+    """
+    user_id = current_user["id"]
+    logger.info(f"Ingesting scanned target profile: {payload.name} @ {payload.company} for user {user_id}")
+
+    res = await neo4j_service.upsert_target_scanned_profile(
+        user_id=user_id,
+        target_data=payload.model_dump()
+    )
+
+    return res
+

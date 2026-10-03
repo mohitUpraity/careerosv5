@@ -366,6 +366,8 @@ class OpportunitiesService:
         target_country = location_filter or user_prefs.get("target_country", "India")
         preferred_cities = user_prefs.get("preferred_cities", ["Bengaluru", "Noida", "Delhi NCR", "Hyderabad", "Pune", "Remote"])
         work_modes = user_prefs.get("work_modes", ["Remote", "Hybrid", "Onsite"])
+        dream_companies = [c.strip().lower() for c in user_prefs.get("dream_companies", []) if c.strip()]
+        blocked_companies = [c.strip().lower() for c in user_prefs.get("blocked_companies", []) if c.strip()]
 
         # 2. Fetch live opportunities (from 6-hr cache or live API refresh)
         all_opportunities = await cls.fetch_live_job_feeds(force_refresh=force_refresh)
@@ -390,6 +392,15 @@ class OpportunitiesService:
         today = datetime.now()
 
         for opp in all_opportunities:
+            org_lower = opp.get("organization", "").lower().strip()
+
+            # Filter out blocked companies
+            if blocked_companies and any(b in org_lower or org_lower in b for b in blocked_companies):
+                continue
+
+            # Check if this is a Dream Company
+            is_dream = bool(dream_companies and any(d in org_lower or org_lower in d for d in dream_companies))
+
             # Filter by Category
             if category and category.lower() != "all" and opp["category"] != category.lower():
                 continue
@@ -441,6 +452,10 @@ class OpportunitiesService:
             else:
                 calculated_match_score = 85
 
+            # Dream Company score boost (+6%)
+            if is_dream:
+                calculated_match_score = min(99, calculated_match_score + 6)
+
             # Calculate Days Remaining
             try:
                 deadline_dt = datetime.strptime(opp["deadline_date"], "%Y-%m-%d")
@@ -458,13 +473,14 @@ class OpportunitiesService:
 
             scored_item = {
                 **opp,
-                "match_score": min(98, max(68, calculated_match_score)),
+                "match_score": min(99, max(68, calculated_match_score)),
                 "matched_skills": matched_skills,
                 "missing_skills": missing_skills,
                 "days_left": max(0, days_left),
                 "is_urgent": days_left <= 5,
                 "urgency_level": urgency,
-                "deadline_formatted": deadline_formatted
+                "deadline_formatted": deadline_formatted,
+                "is_dream_company": is_dream
             }
             scored_opportunities.append(scored_item)
 

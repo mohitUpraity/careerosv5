@@ -478,13 +478,29 @@ class Neo4jService:
         Defaults to India & Global Remote target profile.
         """
         default_prefs = {
+            "primary_role": "Backend Engineer",
+            "priority_domain": "Distributed Systems & Cloud",
             "target_country": "India",
             "preferred_cities": ["Bengaluru", "Noida", "Delhi NCR", "Hyderabad", "Pune", "Mumbai", "Remote"],
             "work_modes": ["Remote", "Hybrid", "Onsite"],
             "preferred_roles": ["Backend Engineer", "Full Stack Developer", "Software Engineer", "AI/ML Engineer"],
             "opportunity_types": ["jobs", "internships", "hackathons", "opensource"],
             "experience_level": "Fresher / 0-3 yrs",
-            "min_salary": "₹6-15 LPA / $25k+ Remote"
+            "min_salary": "₹8-18 LPA / $30k+ Remote",
+            "priority_factor": "best_fit",
+            "dream_companies": ["Google", "Razorpay", "CRED", "Stripe", "Zepto"],
+            "blocked_companies": [],
+            "notice_period": "Immediate (0-15 days)",
+            "work_authorization": "Authorized in India & Remote Worldwide",
+            "spoken_languages": ["English (Professional)", "Hindi (Native)"],
+            "career_goals": {
+                "target_milestone": "Targeting SDE-1 / SDE-2 High-Growth Role",
+                "target_timeline": "Next 30-90 Days",
+                "target_ctc": "₹15-28 LPA",
+                "focus_areas": ["Distributed Systems", "Graph Databases", "Agentic AI", "High-Throughput APIs"]
+            },
+            "in_progress_skills": ["Kafka", "Kubernetes", "Vector Databases"],
+            "custom_locations": []
         }
 
         if not neo4j_client.driver or not neo4j_client.is_connected:
@@ -544,14 +560,27 @@ class Neo4jService:
         shared_college: Optional[str] = "Anand Engineering College"
     ) -> int:
         """
-        Upserts LinkedIn professional connections, companies, and alumni edges into Neo4j AuraDB.
+        Upserts LinkedIn professional connections, companies, universities, skills, and verified alumni edges into Neo4j AuraDB.
         """
         if not neo4j_client.driver or not neo4j_client.is_connected:
             logger.warning("Neo4j driver offline. Skipping live LinkedIn graph upsert.")
             return len(connections)
 
+        # 1. Clean up any previous corrupt blanket ATTENDED edges for this user's connections
+        try:
+            cleanup_query = """
+            MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)-[r:ATTENDED]->(univ:University)
+            WHERE p.is_alumni IS NULL OR p.is_alumni = false
+            DELETE r;
+            """
+            await neo4j_client.execute_query(cleanup_query, {"user_id": user_id})
+        except Exception as e:
+            logger.warning(f"Notice during old edge cleanup: {e}")
+
+        # 2. Main Connection Upsert with Entity Segregation
         query = """
         MERGE (u:User {id: $user_id})
+        WITH u
         UNWIND $connections AS conn
         MERGE (p:Person {id: conn.id})
         ON CREATE SET p.name = conn.name,
@@ -561,17 +590,33 @@ class Neo4jService:
                       p.headline = conn.position,
                       p.connected_on = conn.connected_on,
                       p.profile_url = conn.profile_url,
-                      p.linkedin_url = conn.profile_url
-        ON MATCH SET p.position = conn.position,
-                     p.headline = conn.position,
-                     p.linkedin_url = conn.profile_url
+                      p.linkedin_url = conn.profile_url,
+                      p.is_alumni = coalesce(conn.is_alumni, false)
+        ON MATCH SET p.name = CASE WHEN conn.name <> '' THEN conn.name ELSE p.name END,
+                     p.position = CASE WHEN conn.position <> '' THEN conn.position ELSE p.position END,
+                     p.headline = CASE WHEN conn.position <> '' THEN conn.position ELSE p.headline END,
+                     p.linkedin_url = CASE WHEN conn.profile_url <> '' THEN conn.profile_url ELSE p.linkedin_url END,
+                     p.is_alumni = coalesce(conn.is_alumni, p.is_alumni, false)
         MERGE (u)-[:CONNECTED_TO {source: 'linkedin'}]->(p)
         
-        // Link Person to Company only for valid, non-generic companies
-        WITH p, conn, u
-        WHERE conn.company <> '' AND toLower(conn.company) <> 'industry network' AND size(conn.company) > 2
-        MERGE (c:Company {name: conn.company})
-        MERGE (p)-[:WORKS_AT {title: conn.position}]->(c)
+        // Dynamic Company Linking
+        FOREACH (_ IN CASE WHEN conn.company IS NOT NULL AND conn.company <> '' AND toLower(conn.company) <> 'industry network' AND size(conn.company) > 2 THEN [1] ELSE [] END |
+            MERGE (c:Company {name: conn.company})
+            MERGE (p)-[:WORKS_AT {title: conn.position}]->(c)
+        )
+
+        // Dynamic University / Education Linking (Only if genuine educational institution)
+        FOREACH (_ IN CASE WHEN conn.university IS NOT NULL AND conn.university <> '' AND size(conn.university) > 2 THEN [1] ELSE [] END |
+            MERGE (univ:University {name: conn.university})
+            MERGE (p)-[:ATTENDED]->(univ)
+        )
+
+        // Dynamic Skills / Domain Extraction
+        FOREACH (skill_name IN coalesce(conn.skills, []) |
+            MERGE (s:Skill {name: skill_name})
+            MERGE (p)-[:SKILLED_IN]->(s)
+        )
+
         RETURN count(p) AS imported_count;
         """
         await neo4j_client.execute_query(query, {
@@ -579,7 +624,7 @@ class Neo4jService:
             "connections": connections
         })
 
-        # 2. Seed Sharda Group of Institutions (SGI) Semantic Hierarchy
+        # 3. Seed Sharda Group of Institutions (SGI) Semantic Hierarchy
         sgi_query = """
         MERGE (g:EducationGroup {name: 'Sharda Group of Institutions (SGI)'})
         
@@ -603,12 +648,11 @@ class Neo4jService:
         """
         await neo4j_client.execute_query(sgi_query)
 
-        # 3. Link Alumni edges across entire Sharda Group / AEC network
+        # 4. Link ONLY Genuine Verified Alumni to College
         alumni_query = """
-        MATCH (u:User {id: $user_id})-[:ATTENDED]->(univ:University)
-        OPTIONAL MATCH (univ)-[:AFFILIATED_WITH]->(grp:EducationGroup)
-        MATCH (u)-[:CONNECTED_TO]->(p:Person)
-        // Link alumni across direct college or group cluster
+        MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)
+        WHERE p.is_alumni = true
+        MATCH (univ:University {name: 'Anand Engineering College'})
         MERGE (p)-[:ATTENDED]->(univ)
         RETURN count(p) AS alumni_linked;
         """
@@ -682,5 +726,132 @@ class Neo4jService:
             "title": lead_data["job_title"],
             "referral_bridges": bridges
         }
+
+    @classmethod
+    async def upsert_target_scanned_profile(
+        cls,
+        user_id: str,
+        target_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Ingests a target LinkedIn profile scanned via Chrome Extension into the user's Knowledge Graph.
+        Links the Person to their Company, Education, and computes instant referral bridges to the User.
+        """
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return {"status": "success", "person_id": "simulated", "nodes_merged": 1, "referral_bridges": []}
+
+        name = (target_data.get("name") or "LinkedIn Contact").strip()
+        headline = (target_data.get("headline") or "").strip()
+        company = (target_data.get("company") or "").strip()
+        role = (target_data.get("role") or headline or "Professional").strip()
+        profile_url = (target_data.get("profile_url") or "").strip()
+        shared_college = (target_data.get("shared_college") or "").strip()
+        skills = target_data.get("skills") or []
+        posts = target_data.get("recent_posts") or []
+
+        person_id = profile_url.replace("https://", "").replace("http://", "").strip("/") if profile_url else f"person:{name.lower().replace(' ', '_')}"
+
+        query = """
+        MERGE (u:User {id: $user_id})
+        MERGE (p:Person {id: $person_id})
+        ON CREATE SET p.name = $name,
+                      p.headline = $headline,
+                      p.position = $role,
+                      p.linkedin_url = $profile_url,
+                      p.created_at = datetime()
+        ON MATCH SET p.headline = $headline,
+                     p.position = $role,
+                     p.linkedin_url = $profile_url,
+                     p.updated_at = datetime()
+        MERGE (u)-[r:TRACKED_CONNECTION {source: 'extension_scan'}]->(p)
+        SET r.scanned_at = datetime()
+        
+        WITH p, u
+        WHERE $company <> '' AND toLower($company) <> 'industry network'
+        MERGE (c:Company {name: $company})
+        MERGE (p)-[:WORKS_AT {title: $role}]->(c)
+        
+        WITH p, u, c
+        RETURN p.name AS name, p.id AS id;
+        """
+        await neo4j_client.execute_query(query, {
+            "user_id": user_id,
+            "person_id": person_id,
+            "name": name,
+            "headline": headline,
+            "role": role,
+            "company": company,
+            "profile_url": profile_url
+        })
+
+        nodes_merged = 2
+
+        # Link college if present
+        if shared_college:
+            edu_query = """
+            MATCH (p:Person {id: $person_id})
+            MERGE (univ:University {name: $university_name})
+            MERGE (p)-[:ATTENDED]->(univ)
+            """
+            await neo4j_client.execute_query(edu_query, {
+                "person_id": person_id,
+                "university_name": shared_college
+            })
+            nodes_merged += 1
+
+        # Link skills if present
+        if skills:
+            skill_query = """
+            MATCH (p:Person {id: $person_id})
+            UNWIND $skills AS skill_name
+            MERGE (s:Skill {name: skill_name})
+            MERGE (p)-[:HAS_SKILL]->(s)
+            """
+            await neo4j_client.execute_query(skill_query, {
+                "person_id": person_id,
+                "skills": skills[:15]
+            })
+            nodes_merged += len(skills[:15])
+
+        # Check for warm referral paths and opportunities matching this company
+        bridge_query = """
+        MATCH (u:User {id: $user_id})
+        MATCH (p:Person {id: $person_id})
+        OPTIONAL MATCH (p)-[:WORKS_AT]->(c:Company)
+        OPTIONAL MATCH (u)-[:ATTENDED]->(univ:University)<-[:ATTENDED]-(p)
+        RETURN p.name AS name,
+               p.position AS position,
+               coalesce(c.name, 'Industry Network') AS company,
+               coalesce(univ.name, '') AS shared_school,
+               (univ IS NOT NULL) AS is_alumni;
+        """
+        bridges = await neo4j_client.execute_query(bridge_query, {
+            "user_id": user_id,
+            "person_id": person_id
+        })
+
+        return {
+            "status": "success",
+            "person_id": person_id,
+            "name": name,
+            "company": company,
+            "role": role,
+            "nodes_merged": nodes_merged,
+            "bridges": bridges
+        }
+
+    @classmethod
+    async def run_query(cls, query: str, **params) -> List[Dict[str, Any]]:
+        """
+        Executes a Cypher query with keyword arguments and returns records as dictionaries.
+        """
+        if not neo4j_client.driver:
+            logger.warning("Neo4j driver offline. Skipping query execution.")
+            return []
+        try:
+            return await neo4j_client.execute_query(query, params)
+        except Exception as e:
+            logger.error(f"Error executing Neo4j Cypher query: {e}")
+            return []
 
 neo4j_service = Neo4jService()

@@ -11,11 +11,16 @@ import {
   ExternalLink,
   Code2,
   GitCompare,
-  Compass
+  Compass,
+  UserCog,
+  Sparkles,
+  TrendingUp,
+  Rocket,
+  Swords
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export type ActiveTab = 'graph' | 'opportunities' | 'matcher' | 'benchmark' | 'referrals' | 'resume';
+export type ActiveTab = 'graph' | 'opportunities' | 'growth' | 'interview' | 'matcher' | 'benchmark' | 'referrals' | 'resume' | 'profile' | 'brain';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -26,6 +31,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
   const { activeProfile } = useAuth();
 
   const navItems = [
+    {
+      id: 'brain' as ActiveTab,
+      label: 'Brain Chat AI',
+      sublabel: 'GraphRAG Copilot',
+      icon: Sparkles,
+      highlight: true
+    },
+    {
+      id: 'interview' as ActiveTab,
+      label: 'Interview Arena & Prep',
+      sublabel: 'AI Simulation & Intel',
+      icon: Swords,
+    },
+    {
+      id: 'growth' as ActiveTab,
+      label: 'Career Growth & Skills',
+      sublabel: 'High-ROI Gap & Sprints',
+      icon: TrendingUp,
+    },
+    {
+      id: 'profile' as ActiveTab,
+      label: 'Profile & Preferences',
+      sublabel: 'Roles, Locations & Skills',
+      icon: UserCog,
+    },
     {
       id: 'graph' as ActiveTab,
       label: 'Knowledge Graph',
@@ -74,12 +104,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     >
       {/* Top Section: User Profile Card & Navigation */}
       <div className="space-y-4">
-        {/* Active Profile Card */}
+        {/* Active Profile Card - Clickable to open Profile & Preferences */}
         <div
-          className="p-3 rounded-lg"
+          onClick={() => setActiveTab('profile')}
+          className="p-3 rounded-xl cursor-pointer hover:border-blue-500 transition-all group"
+          title="Click to edit profile & matching preferences"
           style={{
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
+            backgroundColor: activeTab === 'profile' ? 'var(--brand-50)' : 'var(--bg-secondary)',
+            border: activeTab === 'profile' ? '1px solid var(--brand-600)' : '1px solid var(--border-primary)',
           }}
         >
           <div className="flex items-center gap-3">

@@ -30,7 +30,10 @@ import {
   X,
   SlidersHorizontal,
   Check,
-  Plus
+  Plus,
+  Target,
+  Layers,
+  Swords
 } from 'lucide-react';
 import { Opportunity, UserPreferences } from '../../types';
 import { apiService } from '../../services/api';
@@ -39,6 +42,7 @@ import { useAuth } from '../../context/AuthContext';
 interface OpportunitiesRadarProps {
   onTailorResume: (role: string, company: string, jd: string) => void;
   onFindReferral: (company: string) => void;
+  onPrepareInterview?: (role: string, company: string, jd: string) => void;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
 }
@@ -80,6 +84,7 @@ const AVAILABLE_ROLES = [
 export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   onTailorResume,
   onFindReferral,
+  onPrepareInterview,
   onError,
   onSuccess,
 }) => {
@@ -109,6 +114,11 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   const [isUrlModalOpen, setIsUrlModalOpen] = useState(false);
   const [jobUrlInput, setJobUrlInput] = useState('');
   const [isParsingUrl, setIsParsingUrl] = useState(false);
+
+  // College Notice / Raw JD Extraction Modal
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
+  const [rawNoticeInput, setRawNoticeInput] = useState('');
+  const [isExtractingNotice, setIsExtractingNotice] = useState(false);
 
   // Bookmarked Opportunities
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
@@ -220,6 +230,58 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
       onError(err.message || 'Failed to parse job URL');
     } finally {
       setIsParsingUrl(false);
+    }
+  };
+
+  const handleExtractNoticeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawText = rawNoticeInput.trim();
+    if (!rawText) {
+      onError('Please paste unstructured notice or JD text.');
+      return;
+    }
+
+    setIsExtractingNotice(true);
+    try {
+      const res = await apiService.extractJobNotice(rawText, getAuthHeaders());
+      if (res.extracted_job) {
+        const job = res.extracted_job;
+        const newOpp: Opportunity = {
+          id: `custom_notice_${Date.now()}`,
+          title: job.role || 'Software Development Engineer',
+          organization: job.company || 'Placement Drive',
+          category: job.opportunity_type?.toLowerCase().includes('intern') ? 'internships' : 'jobs',
+          opportunity_type: job.opportunity_type || 'Job Opening',
+          description: job.summary || `${job.role} at ${job.company}. Eligibility: ${job.eligibility?.eligible_batches?.join(', ') || 'All batches'}. ${job.eligibility?.min_cgpa || ''}`,
+          skills_required: job.skills_required && job.skills_required.length > 0 ? job.skills_required : ['Problem Solving', 'Data Structures', 'Core CS'],
+          location: job.location || 'India',
+          work_mode: (job.work_mode as any) || 'Hybrid',
+          deadline: job.deadline || 'Upcoming Drive',
+          deadline_formatted: job.deadline || 'Upcoming',
+          days_left: 14,
+          is_urgent: false,
+          match_score: 96,
+          match_reasons: [
+            'Extracted directly from custom college/placement circular',
+            `Eligibility: ${job.eligibility?.eligible_batches?.join(', ') || 'All batches'}`,
+            `Package: ${job.ctc_stipend || 'Competitive'}`
+          ],
+          missing_skills: [],
+          salary_or_prize: job.ctc_stipend || 'Competitive Industry Package',
+          apply_url: job.apply_url || '#',
+          source: 'College Placement Notice'
+        };
+
+        setOpportunities(prev => [newOpp, ...prev]);
+        setActiveCategory('all');
+        setIsNoticeModalOpen(false);
+        setRawNoticeInput('');
+        onSuccess(`Extracted "${newOpp.title}" at ${newOpp.organization}! Ready for Mock Interview, Tailored Resume & Applying.`);
+      }
+    } catch (err: any) {
+      onError(err.message || 'Failed to extract job notice');
+    } finally {
+      setIsExtractingNotice(false);
     }
   };
 
@@ -351,6 +413,15 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* + Paste College Notice / Raw JD Button */}
+          <button
+            onClick={() => setIsNoticeModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-sm transition-all"
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>+ Paste College Notice / Raw JD</span>
+          </button>
+
           {/* Preferences Settings Button */}
           <button
             onClick={() => setIsPreferencesModalOpen(true)}
@@ -702,6 +773,91 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
         </div>
       )}
 
+      {/* College Placement Notice / Raw JD Extraction Modal */}
+      {isNoticeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div 
+            className="w-full max-w-2xl p-6 rounded-3xl border space-y-4 shadow-2xl"
+            style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--border-primary)' }}>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                    Paste College Notice / Raw WhatsApp Job Post
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    AI will automatically extract company, role, eligibility, package, and selection rounds into a full job card.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsNoticeModalOpen(false)} 
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExtractNoticeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  Paste Raw Notice / Circular / Telegram Post:
+                </label>
+                <textarea
+                  rows={8}
+                  placeholder={`Example:\n🚀 Placement Drive Announcement!\nCompany: Apponward Technologies\nRole: SDE Intern / Backend Developer\nEligibility: 2025/2026 Batch B.Tech/MCA (CGPA > 7.0)\nStipend: ₹45,000/month (PPO: ₹14-18 LPA)\nLocation: Noida / Hybrid\nSkills: Python, FastAPI, React, SQL\nDeadline: Oct 15, 2026`}
+                  value={rawNoticeInput}
+                  onChange={(e) => setRawNoticeInput(e.target.value)}
+                  className="w-full p-3 rounded-2xl border text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                  style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-[11px] text-gray-500 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                  Extracts skills, eligibility, package & rounds
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsNoticeModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-medium"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isExtractingNotice}
+                    className="px-5 py-2.5 rounded-full text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isExtractingNotice ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Extracting Structured Job...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Add to Opportunities Feed</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Category Tabs Bar */}
       <div className="flex flex-wrap items-center gap-2">
         {[
@@ -895,6 +1051,27 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   {/* Badges: Match Score, Opportunity Type, Reward */}
                   <div className="flex items-center gap-2 flex-wrap pt-1">
                     {getMatchScoreBadge(opp.match_score)}
+
+                    {opp.is_primary_choice && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                        <Target className="w-3 h-3 text-indigo-600" />
+                        1st Choice Fit
+                      </span>
+                    )}
+
+                    {opp.is_priority_domain_match && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-purple-600" />
+                        Domain Priority
+                      </span>
+                    )}
+
+                    {opp.is_dream_company && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-sm">
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        Dream Company
+                      </span>
+                    )}
                     
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
                       {opp.opportunity_type}
@@ -948,8 +1125,24 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                     </span>
                   </div>
 
-                  {/* Actions: Tailor Resume, Find Referral, Apply */}
-                  <div className="flex items-center gap-2">
+                  {/* Actions: Prepare & Interview, Tailor Resume, Find Referral, Apply */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Prepare & Interview Button */}
+                    {onPrepareInterview && (
+                      <button
+                        onClick={() => onPrepareInterview(
+                          opp.title,
+                          opp.organization,
+                          `${opp.title} at ${opp.organization}\n\nRequired Skills:\n${opp.skills_required.join(', ')}\n\nDescription:\n${opp.description}`
+                        )}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all shadow-sm"
+                        title="Open AI Mock Interview Arena & 360° Company Intelligence"
+                      >
+                        <Swords className="w-3.5 h-3.5" />
+                        <span>Prepare & Interview</span>
+                      </button>
+                    )}
+
                     {/* Tailor Resume Button */}
                     <button
                       onClick={() => onTailorResume(

@@ -224,10 +224,38 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
               </div>
             </div>
 
+            {/* Active Account Identity for Extension */}
+            <div 
+              className="p-3.5 rounded-xl border flex items-center justify-between"
+              style={{
+                backgroundColor: 'var(--brand-50)',
+                borderColor: 'var(--brand-100)'
+              }}
+            >
+              <div className="flex flex-col min-w-0 pr-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                  Active CareerOS Account ID (For Extension)
+                </span>
+                <span className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {useAuth().user?.uid || useAuth().user?.email || 'candidate-workspace'}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  const id = useAuth().user?.uid || useAuth().user?.email || 'candidate-workspace';
+                  navigator.clipboard.writeText(id);
+                  onSuccessToast('Account ID copied to clipboard!');
+                }}
+                className="px-3 py-1 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs shrink-0 transition-colors"
+              >
+                Copy ID
+              </button>
+            </div>
+
             <div className="p-4 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-xs flex items-center gap-3">
               <Sparkles className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
               <p className="text-sky-800 dark:text-sky-200 leading-relaxed">
-                The extension runs locally and respects LinkedIn privacy guidelines. No passwords or scraping cookies are ever stored.
+                When you open the extension while this tab is active, it will automatically link your account. No manual login required.
               </p>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, 
   Printer, 
@@ -44,7 +44,11 @@ import {
   BookmarkPlus,
   ChevronDown,
   FolderOpen,
-  Settings2
+  Settings2,
+  Link2,
+  HelpCircle,
+  PlusCircle,
+  CheckCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -248,14 +252,153 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       `Looking for a strong Software Engineer with experience in building scalable backend services, modern APIs, graph databases, and high-performance frontend architectures.`
   );
 
+  // Skill Gap & Evidence Verification Assistant State
+  interface ConfirmedSkillDecision {
+    skill: string;
+    hasExperience: boolean;
+    evidenceUrl?: string;
+    notes?: string;
+  }
+  const [skillDecisions, setSkillDecisions] = useState<{ [skill: string]: ConfirmedSkillDecision }>({});
+  const [customSkillToAdd, setCustomSkillToAdd] = useState('');
+  const [customEvidenceToAdd, setCustomEvidenceToAdd] = useState('');
+  const [showAddCustomSkill, setShowAddCustomSkill] = useState(false);
+
+  // Common technical skills/keywords dictionary for extraction
+  const COMMON_SKILL_KEYWORDS = [
+    'React', 'TypeScript', 'JavaScript', 'Node.js', 'Python', 'Go', 'Golang', 'Rust', 'Java', 'C++', 'C#',
+    'FastAPI', 'Django', 'Flask', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Kafka', 'RabbitMQ',
+    'Docker', 'Kubernetes', 'AWS', 'GCP', 'Azure', 'GraphQL', 'REST APIs', 'gRPC', 'CI/CD',
+    'GitHub Actions', 'Microservices', 'Distributed Systems', 'System Design', 'Terraform',
+    'Next.js', 'TailwindCSS', 'Elasticsearch', 'LLM', 'LangChain', 'PyTorch', 'TensorFlow',
+    'Vector Databases', 'OpenAPI', 'WebSockets', 'WebRTC', 'Linux', 'Security', 'OAuth',
+    'Unit Testing', 'Jest', 'Pytest', 'Neo4j', 'Supabase', 'SQL', 'NoSQL', 'DevOps'
+  ];
+
+  // Extracted JD Skills & Gap Analysis
+  const analyzedSkills = useMemo(() => {
+    if (!jd.trim()) return { matched: [], missing: [] };
+    const jdLower = jd.toLowerCase();
+    
+    // User's current skills from master resume
+    const userSkillSet = new Set<string>();
+    (masterBlueprint.skills || []).forEach(cat => {
+      (cat.skills || []).forEach(s => userSkillSet.add(s.toLowerCase().trim()));
+    });
+    (masterBlueprint.experience || []).forEach(e => {
+      (e.bullets || []).forEach(b => {
+        COMMON_SKILL_KEYWORDS.forEach(kw => {
+          if (b.toLowerCase().includes(kw.toLowerCase())) userSkillSet.add(kw.toLowerCase());
+        });
+      });
+    });
+    (masterBlueprint.projects || []).forEach(p => {
+      if (p.tech_stack) {
+        p.tech_stack.split(/[,|/]/).forEach(t => userSkillSet.add(t.toLowerCase().trim()));
+      }
+    });
+
+    const jdMatched: string[] = [];
+    const jdMissing: string[] = [];
+
+    COMMON_SKILL_KEYWORDS.forEach(kw => {
+      const kwLower = kw.toLowerCase();
+      // Match token with boundaries in JD
+      const regex = new RegExp(`(^|[^a-zA-Z0-9_+])${kwLower.replace('+', '\\+')}([^a-zA-Z0-9_+]|$)`, 'i');
+      if (regex.test(jdLower)) {
+        let isUserHasSkill = userSkillSet.has(kwLower);
+        if (!isUserHasSkill) {
+          for (const us of userSkillSet) {
+            if (us.includes(kwLower) || kwLower.includes(us)) {
+              isUserHasSkill = true;
+              break;
+            }
+          }
+        }
+
+        if (isUserHasSkill) {
+          jdMatched.push(kw);
+        } else {
+          jdMissing.push(kw);
+        }
+      }
+    });
+
+    return { matched: jdMatched, missing: jdMissing };
+  }, [jd, masterBlueprint]);
+
+  const handleToggleSkillExperience = (skillName: string, hasExp: boolean, statusNote?: string) => {
+    setSkillDecisions(prev => ({
+      ...prev,
+      [skillName]: {
+        skill: skillName,
+        hasExperience: hasExp,
+        evidenceUrl: prev[skillName]?.evidenceUrl || '',
+        notes: statusNote !== undefined ? statusNote : (prev[skillName]?.notes || ''),
+      }
+    }));
+  };
+
+  const handleUpdateSkillEvidence = (skillName: string, evidenceUrl: string) => {
+    setSkillDecisions(prev => ({
+      ...prev,
+      [skillName]: {
+        skill: skillName,
+        hasExperience: prev[skillName]?.hasExperience ?? true,
+        evidenceUrl,
+        notes: prev[skillName]?.notes,
+      }
+    }));
+  };
+
+  const handleUpdateSkillNotes = (skillName: string, notes: string) => {
+    setSkillDecisions(prev => ({
+      ...prev,
+      [skillName]: {
+        skill: skillName,
+        hasExperience: prev[skillName]?.hasExperience ?? true,
+        evidenceUrl: prev[skillName]?.evidenceUrl,
+        notes,
+      }
+    }));
+  };
+
+  const handleAddCustomSkill = () => {
+    const trimmed = customSkillToAdd.trim();
+    if (!trimmed) return;
+    setSkillDecisions(prev => ({
+      ...prev,
+      [trimmed]: {
+        skill: trimmed,
+        hasExperience: true,
+        evidenceUrl: customEvidenceToAdd.trim() || undefined,
+        notes: undefined,
+      }
+    }));
+    setCustomSkillToAdd('');
+    setCustomEvidenceToAdd('');
+    setShowAddCustomSkill(false);
+  };
+
   // Helper for adding new skill chips
   const [newSkillInput, setNewSkillInput] = useState<{ [categoryIdx: number]: string }>({});
+
+  // Auto-switch to Tailor tab if initial parameters passed (e.g. from Opportunities Radar or Matchmaker)
+  useEffect(() => {
+    if (initialRole || initialCompany || initialJd) {
+      if (initialRole) setRole(initialRole);
+      if (initialCompany) setCompany(initialCompany);
+      if (initialJd) setJd(initialJd);
+      setActiveTab('tailor');
+    }
+  }, [initialRole, initialCompany, initialJd]);
 
   // Fetch Master Resume and Saved Templates on Mount
   useEffect(() => {
     fetchMasterResume();
     loadSavedTemplates();
   }, [user]);
+
 
   const getStorageKey = () => `careeros_saved_templates_${user?.uid || 'local'}`;
 
@@ -436,11 +579,22 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
     setLoading(true);
     try {
+      // Build confirmed skills with user-verified evidence
+      const confirmedList = Object.values(skillDecisions)
+        .filter(d => d.hasExperience)
+        .map(d => ({
+          skill: d.skill,
+          has_experience: d.hasExperience,
+          evidence_url: d.evidenceUrl?.trim() || undefined,
+          notes: d.notes?.trim() || undefined,
+        }));
+
       const data = await apiService.tailorResume(
         {
           target_role: role.trim() || 'Software Engineer',
           target_company: company.trim() || 'Target Company',
           job_description: jd.trim(),
+          confirmed_skills: confirmedList.length > 0 ? confirmedList : undefined,
         },
         getAuthHeaders()
       );
@@ -2093,26 +2247,37 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       {/* Tab 2: Dedicated Job Tailor Parameters Box */}
       {activeTab === 'tailor' && (
         <div 
-          className="no-print p-5 rounded-2xl border space-y-4 shadow-sm bg-purple-50/20 dark:bg-purple-950/10"
+          className="no-print p-6 rounded-2xl border space-y-5 shadow-sm bg-gradient-to-b from-purple-50/30 to-blue-50/20 dark:from-purple-950/20 dark:to-blue-950/10"
           style={{ borderColor: 'var(--border-primary)' }}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-600" />
-              <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                Target Job Description Optimizer
-              </h3>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3" style={{ borderColor: 'var(--border-primary)' }}>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Target className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                  Job Application Tailor & Evidence Assistant
+                </h3>
+                <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  Align your STAR experience bullets, verify skill requirements, and weave authentic project evidence into your resume.
+                </p>
+              </div>
             </div>
             {atsScore !== null && (
-              <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                <Award className="w-3.5 h-3.5" /> Tailored ATS Match: {atsScore}%
+              <span className="px-3 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1.5 shrink-0 self-start sm:self-center shadow-sm">
+                <Award className="w-3.5 h-3.5 text-emerald-600" /> Tailored ATS Match: {atsScore}%
               </span>
             )}
           </div>
 
+          {/* Role & Company Inputs */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Role Title</label>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                Target Role Title
+              </label>
               <input
                 type="text"
                 placeholder="e.g. Senior Backend / Distributed Systems Engineer"
@@ -2122,7 +2287,9 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               />
             </div>
             <div>
-              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company Name</label>
+              <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+                Target Company Name
+              </label>
               <input
                 type="text"
                 placeholder="e.g. Google, Stripe, Microsoft, DRDO"
@@ -2133,37 +2300,295 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             </div>
           </div>
 
+          {/* JD Textarea */}
           <div>
-            <label className="block font-semibold mb-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Target Job Description (JD) / Key Requirements
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block font-semibold text-xs" style={{ color: 'var(--text-secondary)' }}>
+                Target Job Description (JD) / Requirements
+              </label>
+              <span className="text-[11px] font-mono text-purple-600 dark:text-purple-400">
+                {analyzedSkills.matched.length + analyzedSkills.missing.length > 0 && 
+                  `${analyzedSkills.matched.length} Matched | ${analyzedSkills.missing.length} Missing Skills`}
+              </span>
+            </div>
             <textarea
               rows={3}
-              placeholder="Paste target job description to synthesize STAR impact bullets and align keyword density..."
+              placeholder="Paste target job description to analyze required skills and synthesize STAR bullets..."
               value={jd}
               onChange={(e) => setJd(e.target.value)}
               className="input-base w-full text-xs font-mono leading-relaxed"
             />
           </div>
 
-          <div className="flex items-center justify-between pt-1">
-            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
-              * Tailoring generates a dedicated job copy and never alters your Master Base Resume without your explicit approval.
-            </p>
+          {/* Interactive Skill Gap & Evidence Verification Assistant */}
+          <div 
+            className="p-4 rounded-xl border space-y-3.5 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm"
+            style={{ borderColor: 'var(--border-primary)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-purple-600" />
+                <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                  Skill Gap & Verification Assistant
+                </h4>
+              </div>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-medium">
+                AI Keyword & Evidence Verification
+              </span>
+            </div>
+
+            {/* Matched Skills Badges */}
+            {analyzedSkills.matched.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Already in your profile ({analyzedSkills.matched.length}):</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {analyzedSkills.matched.map((skill, idx) => (
+                    <span 
+                      key={idx}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                    >
+                      <Check className="w-3 h-3" /> {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Missing Skills Questions & Evidence Attachment */}
+            <div className="space-y-2.5 pt-1">
+              <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Skills requested in JD ({analyzedSkills.missing.length + Object.keys(skillDecisions).filter(k => !analyzedSkills.missing.includes(k)).length}):</span>
+              </div>
+
+              {analyzedSkills.missing.length === 0 && Object.keys(skillDecisions).length === 0 ? (
+                <p className="text-xs text-gray-500 italic">
+                  Paste a JD above to automatically detect missing skills and verify your experience.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2.5">
+                  {/* Standard Detected Missing Skills + Custom Added Skills */}
+                  {Array.from(new Set([...analyzedSkills.missing, ...Object.keys(skillDecisions)])).map((skillName) => {
+                    const decision = skillDecisions[skillName];
+                    const hasExp = decision ? decision.hasExperience : false;
+                    const isDecided = decision !== undefined;
+
+                    return (
+                      <div 
+                        key={skillName}
+                        className="p-3 rounded-xl border space-y-2.5 transition-all"
+                        style={{ 
+                          backgroundColor: hasExp ? 'rgba(16, 185, 129, 0.04)' : 'var(--bg-secondary)',
+                          borderColor: hasExp ? '#10B981' : 'var(--border-primary)'
+                        }}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300">
+                              {skillName}
+                            </span>
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                              Do you have experience with <strong style={{ color: 'var(--text-primary)' }}>{skillName}</strong>?
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSkillExperience(skillName, true)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
+                                hasExp
+                                  ? 'bg-emerald-600 text-white shadow-sm'
+                                  : 'border hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                              }`}
+                              style={{
+                                borderColor: hasExp ? undefined : 'var(--border-primary)',
+                                color: hasExp ? '#ffffff' : 'var(--text-secondary)'
+                              }}
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Yes, I know this</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSkillExperience(skillName, false, 'No / Skip')}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-all ${
+                                isDecided && !hasExp && decision?.notes !== 'Learning'
+                                  ? 'bg-gray-700 text-white shadow-sm'
+                                  : 'border hover:bg-gray-100 dark:hover:bg-gray-800'
+                              }`}
+                              style={{
+                                borderColor: isDecided && !hasExp && decision?.notes !== 'Learning' ? undefined : 'var(--border-primary)',
+                                color: isDecided && !hasExp && decision?.notes !== 'Learning' ? '#ffffff' : 'var(--text-secondary)'
+                              }}
+                            >
+                              <X className="w-3 h-3" />
+                              <span>No / Skip</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSkillExperience(skillName, false, 'Learning')}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-all ${
+                                decision?.notes === 'Learning'
+                                  ? 'bg-amber-500 text-white shadow-sm'
+                                  : 'border hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                              }`}
+                              style={{
+                                borderColor: decision?.notes === 'Learning' ? undefined : 'var(--border-primary)',
+                                color: decision?.notes === 'Learning' ? '#ffffff' : 'var(--text-secondary)'
+                              }}
+                            >
+                              <span>Learning</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Expandable Evidence Form when "Yes" is confirmed */}
+                        {hasExp && (
+                          <div 
+                            className="p-2.5 rounded-lg border space-y-2 animate-in fade-in duration-150"
+                            style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-primary)' }}
+                          >
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <label className="block text-[11px] font-semibold mb-0.5 flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
+                                  <Link2 className="w-3 h-3 text-blue-500" /> Evidence / Project / GitHub Link (Optional)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. https://github.com/myaccount/redis-cache-service"
+                                  value={decision?.evidenceUrl || ''}
+                                  onChange={(e) => handleUpdateSkillEvidence(skillName, e.target.value)}
+                                  className="input-base w-full text-xs font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold mb-0.5 flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
+                                  <FileText className="w-3 h-3 text-purple-500" /> Context / What you built (Optional)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. Built microservice handling 5k rps using this skill"
+                                  value={decision?.notes || ''}
+                                  onChange={(e) => handleUpdateSkillNotes(skillName, e.target.value)}
+                                  className="input-base w-full text-xs"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add Custom Skill & Evidence Trigger */}
+              {!showAddCustomSkill ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomSkill(true)}
+                  className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 pt-1"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" /> + Add Another Missing Skill / Tech Manually
+                </button>
+              ) : (
+                <div 
+                  className="p-3 rounded-xl border space-y-2 animate-in fade-in duration-150"
+                  style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                      Add Custom Skill & Evidence
+                    </span>
+                    <button onClick={() => setShowAddCustomSkill(false)} className="text-gray-400 hover:text-gray-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <input
+                      type="text"
+                      placeholder="Skill name (e.g. WebRTC, Terraform)"
+                      value={customSkillToAdd}
+                      onChange={(e) => setCustomSkillToAdd(e.target.value)}
+                      className="input-base w-full text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Evidence URL (Optional, e.g. GitHub link)"
+                      value={customEvidenceToAdd}
+                      onChange={(e) => setCustomEvidenceToAdd(e.target.value)}
+                      className="input-base w-full text-xs font-mono"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomSkill(false)}
+                      className="px-2.5 py-1 rounded text-xs"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddCustomSkill}
+                      className="px-3 py-1 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700"
+                    >
+                      Add & Confirm Skill
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Template Selection for Tailored Resume & Action Bar */}
+          <div 
+            className="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/50 dark:bg-gray-900/50"
+            style={{ borderColor: 'var(--border-primary)' }}
+          >
+            {/* Selected Resume Template Selector */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+              <label className="text-xs font-bold flex items-center gap-1.5 shrink-0" style={{ color: 'var(--text-primary)' }}>
+                <Palette className="w-3.5 h-3.5 text-purple-600" />
+                <span>Resume Template:</span>
+              </label>
+              <select
+                value={activeTemplateId}
+                onChange={(e) => handleSwitchTemplate(e.target.value)}
+                className="input-base text-xs font-semibold"
+                style={{ height: '34px', minWidth: '220px' }}
+              >
+                <option value="master-default">Onyx ATS Standard (Minimalist)</option>
+                {savedTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Optimize Button */}
             <button
               onClick={handleTailorResume}
               disabled={loading}
-              className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-purple-600 hover:bg-purple-700 shadow-sm transition-all flex items-center gap-2 disabled:opacity-50 shrink-0"
+              className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
             >
               {loading ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Synthesizing Tailored STAR Bullets...</span>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Synthesizing Tailored STAR Bullets & Incorporating Evidence...</span>
                 </>
               ) : (
                 <>
                   <Wand2 className="w-4 h-4" />
-                  <span>Optimize Resume for this JD</span>
+                  <span>Optimize Resume with Verified Skills & Evidence</span>
                 </>
               )}
             </button>

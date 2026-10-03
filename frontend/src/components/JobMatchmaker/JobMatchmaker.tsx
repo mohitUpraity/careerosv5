@@ -11,7 +11,8 @@ import {
   ExternalLink,
   ChevronRight,
   TrendingUp,
-  Cpu
+  Cpu,
+  Swords
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MatchAnalysisResponse } from '../../types';
@@ -21,6 +22,7 @@ import { useAuth } from '../../context/AuthContext';
 interface JobMatchmakerProps {
   onSelectTailorResume: (role: string, company: string, jd: string) => void;
   onNavigateToReferrals: (company: string) => void;
+  onPrepareInterview?: (role: string, company: string, jd: string) => void;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
 }
@@ -83,6 +85,7 @@ Responsibilities:
 export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   onSelectTailorResume,
   onNavigateToReferrals,
+  onPrepareInterview,
   onError,
   onSuccess,
 }) => {
@@ -389,13 +392,23 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                {onPrepareInterview && (
+                  <button
+                    onClick={() => onPrepareInterview(role, company, jobDescription)}
+                    className="w-full sm:flex-1 py-3 px-4 rounded-lg text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                  >
+                    <Swords className="w-4 h-4 text-amber-500" />
+                    Prepare & Interview
+                  </button>
+                )}
+
                 <button
                   onClick={() => onSelectTailorResume(role, company, jobDescription)}
                   className="w-full sm:flex-1 py-3 px-4 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
                   style={{ backgroundColor: 'var(--brand-600)' }}
                 >
                   <Sparkles className="w-4 h-4" />
-                  Tailor Resume for {company}
+                  Tailor Resume
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
 

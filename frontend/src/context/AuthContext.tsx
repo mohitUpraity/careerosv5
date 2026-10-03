@@ -65,14 +65,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const token = await firebaseUser.getIdToken();
           setIdToken(token);
-          setActiveProfile({
+          const profile = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || 'Candidate',
             role: 'Software Engineer',
             type: 'candidate',
             avatar: firebaseUser.photoURL || '',
             githubUser: ''
-          });
+          };
+          setActiveProfile(profile);
+          try {
+            localStorage.setItem('careeros_user_id', firebaseUser.uid);
+            localStorage.setItem('careeros_user', JSON.stringify({
+              uid: firebaseUser.uid,
+              id: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL
+            }));
+          } catch(e) {}
         } catch (err) {
           console.error('Failed to get Firebase ID token:', err);
         }
@@ -80,6 +91,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
         setIdToken(null);
         setActiveProfile(ANONYMOUS_PROFILE);
+        try {
+          localStorage.removeItem('careeros_user_id');
+          localStorage.removeItem('careeros_user');
+        } catch(e) {}
       }
       setAuthLoading(false);
     });

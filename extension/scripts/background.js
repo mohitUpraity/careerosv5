@@ -30,6 +30,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
       const apiBase = await getApiBase();
       
+      const storedUser = await chrome.storage.local.get(["userId"]);
+      const effectiveUserId = request.userId || storedUser.userId || "4JzJQX61eshV7BAfG1OxHTBY0Xp2";
+
       if (request.action === "HEALTH_CHECK") {
         try {
           const res = await fetch(`${apiBase}/health`);
@@ -45,7 +48,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const res = await fetch(`${apiBase}/ingest/linkedin/posts`, {
           method: "POST",
           headers: {
-            "x-user-id": request.userId || "candidate-workspace"
+            "x-user-id": effectiveUserId
           },
           body: formData
         });
@@ -56,7 +59,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-user-id": request.userId || "candidate-workspace"
+            "x-user-id": effectiveUserId
           },
           body: JSON.stringify({
             job_description: request.jobDescription,

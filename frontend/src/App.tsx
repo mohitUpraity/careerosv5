@@ -8,6 +8,10 @@ import { JobMatchmaker } from './components/JobMatchmaker/JobMatchmaker';
 import { ReferralHub } from './components/ReferralHub/ReferralHub';
 import { ResumeStudio } from './components/ResumeStudio/ResumeStudio';
 import { BenchmarkLab } from './components/BenchmarkLab/BenchmarkLab';
+import { ProfilePreferences } from './components/ProfilePreferences/ProfilePreferences';
+import { CareerGrowthHub } from './components/CareerGrowth/CareerGrowthHub';
+import { InterviewArena } from './components/InterviewArena';
+import { BrainChat } from './components/BrainChat/BrainChat';
 import { StartFreshModal } from './components/StartFreshModal';
 import { SyncGitHubModal } from './components/SyncGitHubModal';
 import { SyncResumeModal } from './components/SyncResumeModal';
@@ -38,7 +42,13 @@ const MainLayout: React.FC = () => {
     company: 'Apponward Technologies',
     jd: '',
   });
+  const [interviewParams, setInterviewParams] = useState<{ role: string; company: string; jd: string }>({
+    role: 'Senior Backend Engineer',
+    company: 'Apponward Technologies',
+    jd: '',
+  });
   const [referralCompanyFilter, setReferralCompanyFilter] = useState<string>('');
+  const [graphFilterQuery, setGraphFilterQuery] = useState<string>('');
 
   const addToast = (type: 'success' | 'error' | 'info', message: string) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -82,6 +92,11 @@ const MainLayout: React.FC = () => {
     setActiveTab('resume');
   };
 
+  const handleNavigateToInterview = (role: string, company: string, jd: string) => {
+    setInterviewParams({ role, company, jd });
+    setActiveTab('interview');
+  };
+
   const handleNavigateToReferrals = (company: string) => {
     setReferralCompanyFilter(company);
     setActiveTab('referrals');
@@ -106,10 +121,44 @@ const MainLayout: React.FC = () => {
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto min-h-[calc(100vh-57px)]">
+          {activeTab === 'profile' && (
+            <ProfilePreferences
+              onSuccessToast={(msg) => {
+                addToast('success', msg);
+                loadProfileData();
+              }}
+              onErrorToast={(msg) => addToast('error', msg)}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as ActiveTab)}
+              onOpenSyncResume={() => setIsSyncResumeModalOpen(true)}
+              onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
+              onOpenSyncLinkedIn={() => setIsSyncLinkedInModalOpen(true)}
+            />
+          )}
+
+          {activeTab === 'growth' && (
+            <CareerGrowthHub
+              onNavigateToTab={(tab: string) => setActiveTab(tab as ActiveTab)}
+              onErrorToast={(msg) => addToast('error', msg)}
+              onSuccessToast={(msg) => addToast('success', msg)}
+            />
+          )}
+
+          {activeTab === 'interview' && (
+            <InterviewArena
+              initialJob={interviewParams}
+              onTailorResume={handleSelectTailorResume}
+              onNavigateToTab={(tab: string) => setActiveTab(tab as ActiveTab)}
+              onErrorToast={(msg) => addToast('error', msg)}
+              onSuccessToast={(msg) => addToast('success', msg)}
+            />
+          )}
+
           {activeTab === 'graph' && (
             <KnowledgeGraph 
               graphData={graphData} 
               loading={loading} 
+              initialNlpQuery={graphFilterQuery}
+              onClearInitialQuery={() => setGraphFilterQuery('')}
               onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
             />
           )}
@@ -117,6 +166,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'opportunities' && (
             <OpportunitiesRadar
               onTailorResume={handleSelectTailorResume}
+              onPrepareInterview={handleNavigateToInterview}
               onFindReferral={handleNavigateToReferrals}
               onError={(msg) => addToast('error', msg)}
               onSuccess={(msg) => addToast('success', msg)}
@@ -126,6 +176,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'matcher' && (
             <JobMatchmaker
               onSelectTailorResume={handleSelectTailorResume}
+              onPrepareInterview={handleNavigateToInterview}
               onNavigateToReferrals={handleNavigateToReferrals}
               onError={(msg) => addToast('error', msg)}
               onSuccess={(msg) => addToast('success', msg)}
@@ -157,6 +208,19 @@ const MainLayout: React.FC = () => {
               onSuccess={(msg) => addToast('success', msg)}
             />
           )}
+
+          <div className={activeTab === 'brain' ? 'block' : 'hidden'}>
+            <BrainChat
+              onNavigateToTab={(tab: string) => setActiveTab(tab as ActiveTab)}
+              onNavigateToGraphQuery={(query: string) => {
+                setGraphFilterQuery(query);
+                setActiveTab('graph');
+              }}
+              onTailorResume={handleSelectTailorResume}
+              onError={(msg) => addToast('error', msg)}
+              onSuccess={(msg) => addToast('success', msg)}
+            />
+          </div>
         </main>
       </div>
 

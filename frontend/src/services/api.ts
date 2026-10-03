@@ -1,6 +1,8 @@
 import { GraphData, Contact, MatchAnalysisResponse, PitchResponse, TailoredResumeResponse } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || '');
 
 export interface ProfileAnalysis {
   repos_count: number;
@@ -12,23 +14,45 @@ export interface ProfileAnalysis {
 
 export const apiService = {
   async getGraph(headers: Record<string, string>): Promise<GraphData> {
-    const res = await fetch(`${API_BASE}/api/v1/profile/graph`, { headers });
-    if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
-    return await res.json();
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/profile/graph`, {
+        headers,
+        signal: AbortSignal.timeout(6000)
+      });
+      if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
+      return await res.json();
+    } catch (err) {
+      console.warn("Graph fetch failed or timed out, returning fallback graph:", err);
+      return { nodes: [], links: [] };
+    }
   },
 
   async getAnalysis(headers: Record<string, string>): Promise<ProfileAnalysis> {
-    const res = await fetch(`${API_BASE}/api/v1/profile/analysis`, { headers });
-    if (!res.ok) throw new Error(`Failed to load profile analysis (${res.status})`);
-    const data = await res.json();
-    return {
-      repos_count: data.repos_count ?? data.metrics?.total_projects ?? 0,
-      connections_count: data.connections_count ?? data.metrics?.network_reach_connections ?? 0,
-      alumni_count: data.alumni_count ?? 0,
-      top_skills: data.top_skills ?? [],
-      graph_nodes_count: data.graph_nodes_count ?? 0,
-      ...data
-    };
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/profile/analysis`, {
+        headers,
+        signal: AbortSignal.timeout(6000)
+      });
+      if (!res.ok) throw new Error(`Failed to load profile analysis (${res.status})`);
+      const data = await res.json();
+      return {
+        repos_count: data.repos_count ?? data.metrics?.total_projects ?? 0,
+        connections_count: data.connections_count ?? data.metrics?.network_reach_connections ?? 0,
+        alumni_count: data.alumni_count ?? 0,
+        top_skills: data.top_skills ?? [],
+        graph_nodes_count: data.graph_nodes_count ?? 0,
+        ...data
+      };
+    } catch (err) {
+      console.warn("Analysis fetch failed or timed out, returning fallback:", err);
+      return {
+        repos_count: 0,
+        connections_count: 0,
+        alumni_count: 0,
+        top_skills: [],
+        graph_nodes_count: 0,
+      };
+    }
   },
 
   async getConnections(query: string = '', headers: Record<string, string>): Promise<Contact[]> {
@@ -79,7 +103,17 @@ export const apiService = {
   },
 
   async tailorResume(
-    payload: { target_role: string; target_company: string; job_description: string },
+    payload: { 
+      target_role: string; 
+      target_company: string; 
+      job_description: string;
+      confirmed_skills?: Array<{
+        skill: string;
+        has_experience: boolean;
+        evidence_url?: string;
+        notes?: string;
+      }>;
+    },
     headers: Record<string, string>
   ): Promise<TailoredResumeResponse> {
     const res = await fetch(`${API_BASE}/api/v1/resume/tailor`, {
@@ -93,6 +127,7 @@ export const apiService = {
     }
     return await res.json();
   },
+
 
   async getMasterResume(headers: Record<string, string>): Promise<{
     status: string;
@@ -339,6 +374,32 @@ export const apiService = {
     return await res.json();
   },
 
+  async getMarketIntelligence(headers: Record<string, string>): Promise<import('../types').MarketIntelligenceResponse> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/market-intelligence`, { headers });
+    if (!res.ok) throw new Error(`Failed to load market intelligence (${res.status})`);
+    return await res.json();
+  },
+
+  async toggleLearningAction(
+    skillName: string,
+    action: 'start_learning' | 'mark_mastered' | 'remove',
+    headers: Record<string, string>
+  ): Promise<{ status: string; message: string; action: string }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/learning-action`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ skill_name: skillName, action }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Learning action failed (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async getOpportunities(
     params: { category?: string; search?: string; remote_only?: boolean; location_filter?: string; sort_by?: string; refresh?: boolean } = {},
     headers: Record<string, string> = {}
@@ -394,5 +455,200 @@ export const apiService = {
       throw new Error(err.detail || `Failed to parse job URL (${res.status})`);
     }
     return await res.json();
-  }
+  },
+
+  async chatWithBrain(
+    query: string,
+    history: Array<{ role: string; content: string }>,
+    contextMode: string = 'general',
+    headers: Record<string, string> = {}
+  ): Promise<{
+    status: string;
+    reply: string;
+    citations: Array<{ type: string; label: string; detail: string }>;
+    graph_nodes_referenced: string[];
+    graph_lens?: {
+      query: string;
+      title: string;
+      explanation: string;
+    } | null;
+    suggested_followups: string[];
+    context_stats?: {
+      verified_skills_count: number;
+      projects_count: number;
+      opportunities_found: number;
+    };
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/brain/chat`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query,
+        conversation_history: history,
+        context_mode: contextMode
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Brain Chat request failed (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async queryGraphNLP(
+    query: string,
+    headers: Record<string, string> = {}
+  ): Promise<{
+    status: string;
+    query: string;
+    title: string;
+    explanation: string;
+    total_nodes: number;
+    matched_nodes_count: number;
+    matched_node_ids: string[];
+    subgraph: GraphData;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/brain/graph-query`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Smart graph query failed (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async extractJobNotice(rawText: string, headers: Record<string, string>): Promise<{
+    status: string;
+    extracted_job: import('../types').ExtractedJobNotice;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/interview/extract-notice`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ raw_text: rawText }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to extract job notice (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getJobIntelligence(
+    payload: { company: string; role: string; job_description?: string },
+    headers: Record<string, string>
+  ): Promise<{
+    status: string;
+    intelligence: import('../types').JobIntelligence;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/interview/job-intelligence`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to generate job intelligence (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async startInterviewSession(
+    payload: {
+      company: string;
+      role: string;
+      job_description?: string;
+      round_type?: string;
+      difficulty?: string;
+      blueprint_override?: any;
+    },
+    headers: Record<string, string>
+  ): Promise<import('../types').InterviewSessionState> {
+    const res = await fetch(`${API_BASE}/api/v1/interview/session/start`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to start interview session (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async respondInterviewSession(
+    payload: {
+      company: string;
+      role: string;
+      round_type: string;
+      current_question: string;
+      candidate_answer: string;
+      step: number;
+      total_steps: number;
+      history?: any[];
+    },
+    headers: Record<string, string>
+  ): Promise<{
+    status: string;
+    evaluation: import('../types').InterviewEvaluationResponse;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/interview/session/respond`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to submit interview answer (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async finishInterviewSession(
+    payload: {
+      company: string;
+      role: string;
+      round_type: string;
+      history: any[];
+    },
+    headers: Record<string, string>
+  ): Promise<{
+    status: string;
+    scorecard: import('../types').InterviewScorecard;
+  }> {
+    const res = await fetch(`${API_BASE}/api/v1/interview/session/finish`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to generate interview scorecard (${res.status})`);
+    }
+    return await res.json();
+  },
 };
+

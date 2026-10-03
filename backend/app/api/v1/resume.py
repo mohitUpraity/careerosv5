@@ -20,11 +20,19 @@ router = APIRouter(prefix="/resume", tags=["Resume Tailoring & Blueprints"])
 
 resume_service = ResumeService()
 
+class ConfirmedSkillItem(BaseModel):
+    skill: str
+    has_experience: bool = True
+    evidence_url: Optional[str] = None
+    notes: Optional[str] = None
+
 class ResumeTailorRequest(BaseModel):
     job_description: str
     target_role: Optional[str] = None
     target_company: Optional[str] = None
     blueprint: Optional[Dict[str, Any]] = None
+    confirmed_skills: Optional[List[ConfirmedSkillItem]] = None
+
 
 @router.get("/master", response_model=Dict[str, Any])
 async def get_master_resume(
@@ -164,8 +172,9 @@ async def tailor_resume(
             "job_title": payload.target_role or "Software Engineer",
             "company_name": payload.target_company or "Target Company"
         }
+        confirmed_skills_dicts = [cs.model_dump() for cs in payload.confirmed_skills] if payload.confirmed_skills else None
+        tailored_bp = await resume_service.tailor_blueprint_to_job(base_blueprint, job_info, confirmed_skills=confirmed_skills_dicts)
 
-        tailored_bp = await resume_service.tailor_blueprint_to_job(base_blueprint, job_info)
         
         # Build flattened helper structures for ResumeStudio UI
         experience_bullets = []

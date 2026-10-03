@@ -160,6 +160,41 @@ async def reset_profile(
         logger.error(f"Failed to reset profile for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/market-intelligence", response_model=Dict[str, Any])
+async def get_market_intelligence(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Calculates live market skill demand percentages, high-ROI missing skill unlock metrics,
+    and actionable project sprints for bridging gaps.
+    """
+    user_id = current_user["id"]
+    try:
+        data = await profile_service.get_market_intelligence(user_id=user_id)
+        return data
+    except Exception as e:
+        logger.error(f"Failed to calculate market intelligence for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/learning-action", response_model=Dict[str, Any])
+async def toggle_learning_action(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Interactively toggles a skill between learning, mastered (synced to graph), or removed.
+    """
+    user_id = current_user["id"]
+    skill_name = payload.get("skill_name", "")
+    action = payload.get("action", "")
+    try:
+        res = await profile_service.toggle_learning_skill(user_id=user_id, skill_name=skill_name, action=action)
+        return res
+    except Exception as e:
+        logger.error(f"Failed to execute learning action for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 
 

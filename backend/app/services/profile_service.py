@@ -480,23 +480,26 @@ class ProfileService:
                     add_node(sid, sname, "skill", s.get("category") or "Technical Skill", {"verified": True})
                     add_link(f"user_{user_id}", sid, "HAS_SKILL")
 
-                # 7. Connections & Alumni Bridges (Inter-relations)
+                # 7. Connections & Alumni Bridges (Inter-relations with individual companies, schools, & skills)
                 conn_res = await neo4j_client.execute_query(
                     """
                     MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)
                     OPTIONAL MATCH (p)-[:WORKS_AT]->(c:Company)
                     OPTIONAL MATCH (p)-[:ATTENDED]->(univ:University)
+                    OPTIONAL MATCH (p)-[:SKILLED_IN]->(s:Skill)
                     RETURN p.id as pid, p.name as name,
                            coalesce(p.headline, p.position, '') as headline,
                            coalesce(p.linkedin_url, p.profile_url, '') as url,
-                           c.name as company, univ.name as univ
-                    LIMIT 100
+                           c.name as company, univ.name as univ,
+                           collect(DISTINCT s.name) as person_skills,
+                           p.is_alumni as is_alumni
+                    LIMIT 150
                     """,
                     {"user_id": user_id}
                 )
                 for c in conn_res:
                     pid = f"person_{c['pid'] or c['name']}"
-                    is_alumni = bool(c.get("univ"))
+                    is_alumni = bool(c.get("is_alumni"))
                     add_node(pid, c["name"], "person", "Alumni Bridge" if is_alumni else "1st-Degree Connection", {
                         "headline": c.get("headline", ""),
                         "company": c.get("company", ""),
@@ -518,21 +521,95 @@ class ProfileService:
                             uid = f"univ_{uname}"
                             add_node(uid, uname, "university", "University / College")
                             add_link(pid, uid, "ATTENDED")
-                            add_link(f"user_{user_id}", uid, "ATTENDED")
+
+                    for sname in c.get("person_skills", []):
+                        if sname and sname.lower() not in invalid_comp_set and len(sname) < 25:
+                            sid = f"skill_{sname.lower()}"
+                            add_node(sid, sname, "skill", "Technical Skill")
+                            add_link(pid, sid, "SKILLED_IN")
+
+                # 8. Career Aspirations & Target Roles
+                pref_res = await neo4j_client.execute_query(
+                    """
+                    MATCH (u:User {id: $user_id})
+                    RETURN u.target_role as target_role, u.target_location as target_loc, u.target_salary as target_sal
+                    """,
+                    {"user_id": user_id}
+                )
+                if pref_res and pref_res[0]:
+                    target_role = pref_res[0].get("target_role") or "Full Stack AI Engineer"
+                    aid = f"asp_role_{target_role.lower().replace(' ', '_')}"
+                    add_node(aid, f"Target: {target_role}", "aspiration", "Career Aspiration", {
+                        "role": target_role,
+                        "location": pref_res[0].get("target_loc", "Remote / Hybrid"),
+                        "salary": pref_res[0].get("target_sal", "₹15-28 LPA")
+                    })
+                    add_link(f"user_{user_id}", aid, "ASPIRES_TO")
 
         except Exception as e:
             logger.warning(f"Error building graph topology from Neo4j: {e}")
 
+        # Post-processing: Compute degree centrality and neighbor relationships for each node
+        node_map = {n["id"]: n for n in nodes}
+        node_neighbors = {n["id"]: [] for n in nodes}
+
+        # Clean links to ensure both endpoints exist in node_set
+        valid_links = []
+        for l in links:
+            s_id = l["source"]
+            t_id = l["target"]
+            if s_id in node_map and t_id in node_map:
+                valid_links.append(l)
+                # Register neighbor relationships
+                node_neighbors[s_id].append({
+                    "id": t_id,
+                    "label": node_map[t_id]["label"],
+                    "type": node_map[t_id]["type"],
+                    "category": node_map[t_id].get("category", ""),
+                    "relation": l.get("label") or l.get("type") or "RELATES"
+                })
+                node_neighbors[t_id].append({
+                    "id": s_id,
+                    "label": node_map[s_id]["label"],
+                    "type": node_map[s_id]["type"],
+                    "category": node_map[s_id].get("category", ""),
+                    "relation": l.get("label") or l.get("type") or "RELATES"
+                })
+
+        # Filter out orphan nodes that have no relationships (except the user root node)
+        filtered_nodes = []
+        user_node_id = f"user_{user_id}"
+        for n in nodes:
+            nid = n["id"]
+            n_degree = len(node_neighbors.get(nid, []))
+            n["connections_count"] = n_degree
+            n["neighbors"] = node_neighbors.get(nid, [])
+            # Dynamic node sizing based on degree
+            base_val = 30 if n["type"] == "user" else (22 if n["type"] in ["project", "company", "university"] else (16 if n["type"] == "person" else 12))
+            n["val"] = min(base_val + n_degree * 2, 45)
+
+            if n_degree > 0 or nid == user_node_id or len(nodes) == 1:
+                filtered_nodes.append(n)
+
         # If empty, return clean user node only
-        if len(nodes) == 0:
-            add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "Candidate Profile"})
+        if len(filtered_nodes) == 0:
+            filtered_nodes = [{
+                "id": user_node_id,
+                "label": user_name,
+                "type": "user",
+                "category": "Candidate",
+                "val": 30,
+                "headline": "Candidate Profile",
+                "connections_count": 0,
+                "neighbors": []
+            }]
 
         return {
             "status": "success",
-            "nodes_count": len(nodes),
-            "links_count": len(links),
-            "nodes": nodes,
-            "links": links
+            "nodes_count": len(filtered_nodes),
+            "links_count": len(valid_links),
+            "nodes": filtered_nodes,
+            "links": valid_links
         }
 
     @classmethod
@@ -653,6 +730,18 @@ class ProfileService:
                 "experience_level": "Fresher / 0-3 yrs",
                 "min_salary": "₹8-18 LPA / $30k+ Remote",
                 "priority_factor": "best_fit",
+                "dream_companies": ["Google", "Razorpay", "CRED", "Stripe", "Zepto"],
+                "blocked_companies": [],
+                "notice_period": "Immediate (0-15 days)",
+                "work_authorization": "Authorized in India & Remote Worldwide",
+                "spoken_languages": ["English (Professional)", "Hindi (Native)"],
+                "career_goals": {
+                    "target_milestone": "Targeting SDE-1 / SDE-2 High-Growth Role",
+                    "target_timeline": "Next 30-90 Days",
+                    "target_ctc": "₹15-28 LPA",
+                    "focus_areas": ["Distributed Systems", "Graph Databases", "Agentic AI", "High-Throughput APIs"]
+                },
+                "in_progress_skills": ["Kafka", "Kubernetes", "Vector Databases"],
                 "custom_locations": []
             }
         }
@@ -727,16 +816,54 @@ class ProfileService:
             exp_res = await neo4j_client.execute_query(exp_query, {"user_id": user_id})
             experience = exp_res if exp_res else []
 
-            # 4. Fetch Skills
+            # 4. Fetch Skills (Unified from User nodes, Project ASTs, and Resume claims)
             skills_query = """
-            MATCH (u:User {id: $user_id})-[:HAS_SKILL]->(s:Skill)
-            RETURN DISTINCT s.name AS name
-            ORDER BY s.name ASC
+            MATCH (u:User {id: $user_id})
+            OPTIONAL MATCH (u)-[:HAS_SKILL]->(s1:Skill)
+            OPTIONAL MATCH (u)-[:BUILT]->(:Project)-[:USES_TECH]->(s2:Skill)
+            WITH collect(DISTINCT s1.name) + collect(DISTINCT s2.name) AS all_s
+            UNWIND all_s AS sname
+            WITH DISTINCT sname WHERE sname IS NOT NULL AND sname <> ''
+            RETURN sname AS name
+            ORDER BY name ASC
             """
             skills_res = await neo4j_client.execute_query(skills_query, {"user_id": user_id})
             skills = [s["name"] for s in skills_res if s.get("name")] if skills_res else []
 
-            # 5. Check Blueprint if available to backfill any empty details
+            # 5. Fetch Projects
+            proj_query = """
+            MATCH (u:User {id: $user_id})-[:BUILT]->(p:Project)
+            OPTIONAL MATCH (p)-[:USES_TECH]->(s:Skill)
+            RETURN p.id AS id,
+                   p.name AS name,
+                   p.description AS description,
+                   p.repo_url AS repo_url,
+                   p.live_url AS live_url,
+                   p.stars_count AS stars,
+                   p.primary_language AS primary_language,
+                   collect(DISTINCT s.name) AS tech_stack
+            ORDER BY p.stars_count DESC, p.name ASC
+            """
+            projects_res = await neo4j_client.execute_query(proj_query, {"user_id": user_id})
+            projects = projects_res if projects_res else []
+
+            # 6. Fetch Certifications
+            cert_query = """
+            MATCH (u:User {id: $user_id})-[:EARNED]->(c:Certification)
+            RETURN c.name AS name, c.issuer AS issuer, c.date AS date, c.url AS url
+            """
+            certs_res = await neo4j_client.execute_query(cert_query, {"user_id": user_id})
+            certifications = certs_res if certs_res else []
+
+            # 7. Fetch Achievements & Hackathons
+            ach_query = """
+            MATCH (u:User {id: $user_id})-[:ACHIEVED]->(a:Achievement)
+            RETURN a.title AS title, a.organization AS organization, a.date AS date, a.description AS description
+            """
+            ach_res = await neo4j_client.execute_query(ach_query, {"user_id": user_id})
+            achievements = ach_res if ach_res else []
+
+            # 8. Check Blueprint if available to backfill any empty details
             if u_record.get("blueprint_json"):
                 try:
                     bp = json.loads(u_record["blueprint_json"])
@@ -759,6 +886,12 @@ class ProfileService:
                         education = bp.get("education")
                     if not experience and bp.get("experience"):
                         experience = bp.get("experience")
+                    if not projects and bp.get("projects"):
+                        projects = bp.get("projects")
+                    if not certifications and bp.get("certifications"):
+                        certifications = [{"name": c, "issuer": "Verified Issuer"} for c in bp.get("certifications", [])]
+                    if not achievements and bp.get("achievements"):
+                        achievements = [{"title": a, "organization": "Hackathon / Competition"} for a in bp.get("achievements", [])]
                     if not skills and bp.get("skills"):
                         for cat in bp.get("skills", []):
                             for sk in cat.get("skills", []):
@@ -781,6 +914,9 @@ class ProfileService:
                 "portfolio_url": u_record.get("portfolio_url") or "",
                 "education": education if education else default_details["education"],
                 "experience": experience if experience else default_details["experience"],
+                "projects": projects,
+                "certifications": certifications,
+                "achievements": achievements,
                 "skills": skills if skills else default_details["skills"],
                 "preferences": prefs
             }
@@ -939,7 +1075,109 @@ class ProfileService:
                             "description": exp.get("description", "")
                         })
 
-            # 5. Keep Master Resume Blueprint in sync
+            # 5. Update Projects if provided
+            projects = payload.get("projects")
+            if isinstance(projects, list):
+                purge_proj_query = """
+                MATCH (u:User {id: $user_id})-[r:BUILT]->(p:Project)
+                DETACH DELETE p;
+                """
+                await neo4j_client.execute_query(purge_proj_query, {"user_id": user_id})
+
+                for p in projects:
+                    pname = (p.get("name") or "").strip()
+                    if pname:
+                        pid = p.get("id") or f"proj_{pname.lower().replace(' ', '_')}"
+                        ins_proj_query = """
+                        MATCH (u:User {id: $user_id})
+                        MERGE (p:Project {id: $pid})
+                        SET p.name = $name,
+                            p.description = $description,
+                            p.repo_url = $repo_url,
+                            p.live_url = $live_url,
+                            p.primary_language = $primary_language,
+                            p.stars_count = $stars
+                        MERGE (u)-[:BUILT]->(p);
+                        """
+                        await neo4j_client.execute_query(ins_proj_query, {
+                            "user_id": user_id,
+                            "pid": pid,
+                            "name": pname,
+                            "description": p.get("description", ""),
+                            "repo_url": p.get("repo_url", ""),
+                            "live_url": p.get("live_url", ""),
+                            "primary_language": p.get("primary_language", "Code"),
+                            "stars": p.get("stars", 0)
+                        })
+
+                        # Link tech stack
+                        tech = p.get("tech_stack", [])
+                        if isinstance(tech, list) and tech:
+                            link_tech_query = """
+                            MATCH (p:Project {id: $pid})
+                            UNWIND $tech AS sname
+                            MERGE (s:Skill {name: sname})
+                            MERGE (p)-[:USES_TECH]->(s);
+                            """
+                            await neo4j_client.execute_query(link_tech_query, {"pid": pid, "tech": tech})
+
+            # 6. Update Certifications if provided
+            certifications = payload.get("certifications")
+            if isinstance(certifications, list):
+                purge_cert_query = """
+                MATCH (u:User {id: $user_id})-[r:EARNED]->(c:Certification)
+                DETACH DELETE c;
+                """
+                await neo4j_client.execute_query(purge_cert_query, {"user_id": user_id})
+
+                for cert in certifications:
+                    cname = (cert.get("name") or "").strip()
+                    if cname:
+                        ins_cert_query = """
+                        MATCH (u:User {id: $user_id})
+                        MERGE (c:Certification {name: $name})
+                        SET c.issuer = $issuer,
+                            c.date = $date,
+                            c.url = $url
+                        MERGE (u)-[:EARNED]->(c);
+                        """
+                        await neo4j_client.execute_query(ins_cert_query, {
+                            "user_id": user_id,
+                            "name": cname,
+                            "issuer": cert.get("issuer", ""),
+                            "date": cert.get("date", ""),
+                            "url": cert.get("url", "")
+                        })
+
+            # 7. Update Achievements if provided
+            achievements = payload.get("achievements")
+            if isinstance(achievements, list):
+                purge_ach_query = """
+                MATCH (u:User {id: $user_id})-[r:ACHIEVED]->(a:Achievement)
+                DETACH DELETE a;
+                """
+                await neo4j_client.execute_query(purge_ach_query, {"user_id": user_id})
+
+                for ach in achievements:
+                    atitle = (ach.get("title") or ach.get("name") or "").strip()
+                    if atitle:
+                        ins_ach_query = """
+                        MATCH (u:User {id: $user_id})
+                        MERGE (a:Achievement {title: $title})
+                        SET a.organization = $organization,
+                            a.date = $date,
+                            a.description = $description
+                        MERGE (u)-[:ACHIEVED]->(a);
+                        """
+                        await neo4j_client.execute_query(ins_ach_query, {
+                            "user_id": user_id,
+                            "title": atitle,
+                            "organization": ach.get("organization", ""),
+                            "date": ach.get("date", ""),
+                            "description": ach.get("description", "")
+                        })
+
+            # 8. Keep Master Resume Blueprint in sync
             try:
                 current_bp = await neo4j_service.get_user_resume_blueprint(user_id) or {}
                 updated_bp = {
@@ -954,8 +1192,10 @@ class ProfileService:
                     "summary": bio,
                     "experience": experience if experience else current_bp.get("experience", []),
                     "education": education if education else current_bp.get("education", []),
-                    "projects": current_bp.get("projects", []),
-                    "skills": [{"category": "Core & Technical Skills", "skills": skills}] if skills else current_bp.get("skills", [])
+                    "projects": projects if projects else current_bp.get("projects", []),
+                    "skills": [{"category": "Core & Technical Skills", "skills": skills}] if skills else current_bp.get("skills", []),
+                    "certifications": [c.get("name") for c in certifications if c.get("name")] if certifications else current_bp.get("certifications", []),
+                    "achievements": [a.get("title") for a in achievements if a.get("title")] if achievements else current_bp.get("achievements", [])
                 }
                 sync_bp_query = """
                 MATCH (u:User {id: $user_id})
@@ -1024,6 +1264,292 @@ class ProfileService:
             logger.error(f"Error resetting profile for {user_id}: {e}")
             raise e
 
+    @classmethod
+    async def get_market_intelligence(cls, user_id: str) -> Dict[str, Any]:
+        """
+        Calculates live market demand distribution, high-ROI missing skill unlock metrics,
+        and hands-on actionable project sprints for bridging gaps dynamically.
+        """
+        from app.services.opportunities_service import opportunities_service
+        
+        # 1. Fetch user profile and current preferences
+        profile_data = await cls.get_user_profile_details(user_id)
+        user_skills = [s.lower().strip() for s in profile_data.get("skills", []) if s]
+        user_skills_set = set(user_skills)
+        
+        prefs = profile_data.get("preferences", {})
+        target_role = prefs.get("primary_role") or "Backend Engineer"
+        target_domain = prefs.get("priority_domain") or "Distributed Systems & Cloud"
+        in_progress_skills = [s.strip() for s in prefs.get("in_progress_skills", []) if s]
+        in_progress_set = set(s.lower() for s in in_progress_skills)
+
+        # 2. Fetch live opportunities
+        live_opps = await opportunities_service.fetch_live_job_feeds()
+
+        # 3. Aggregate skill frequencies from live opportunities
+        skill_counts: Dict[str, int] = {}
+        total_opps = max(1, len(live_opps))
+
+        for opp in live_opps:
+            for s in opp.get("skills_required", []):
+                cleaned = s.strip()
+                if cleaned:
+                    skill_counts[cleaned] = skill_counts.get(cleaned, 0) + 1
+
+        # Calculate demand percentages
+        top_demands = []
+        for sname, count in sorted(skill_counts.items(), key=lambda x: x[1], reverse=True)[:18]:
+            s_lower = sname.lower()
+            is_mastered = any(us == s_lower or us in s_lower or s_lower in us for us in user_skills_set)
+            is_learning = any(ip == s_lower or ip in s_lower or s_lower in ip for ip in in_progress_set)
+            
+            status = "mastered" if is_mastered else ("in_progress" if is_learning else "missing")
+            pct = int(min(98, max(25, (count / total_opps) * 100 * 2.2)))
+
+            # Trend estimation
+            explosive_keywords = ["agentic", "graph", "kafka", "rust", "ebpf", "vector", "kubernetes", "langchain", "llm", "ai"]
+            trend = "explosive" if any(k in s_lower for k in explosive_keywords) else ("up" if count >= 3 else "stable")
+
+            top_demands.append({
+                "skill": sname,
+                "demand_percentage": pct,
+                "job_count": count,
+                "status": status,
+                "trend": trend,
+                "avg_salary_boost": "+₹3.5 - 6.0 LPA / +$18k Remote"
+            })
+
+        # 4. High-ROI Unlock Calculations
+        # Curated catalog of high-impact skills with practical project blueprints
+        high_roi_catalog = [
+            {
+                "skill": "Apache Kafka & Event Streaming",
+                "category": "Distributed Systems",
+                "avg_ctc_impact": "+₹4.5 - 7.5 LPA",
+                "priority": "Critical",
+                "recommended_project": {
+                    "title": "Real-time High-Throughput Event Ingestion Pipeline",
+                    "description": "Architect a fault-tolerant event broker pipeline using Apache Kafka and FastAPI that consumes 10k+ telemetry events/sec, applies idempotent deduplication, and persists to Neo4j/PostgreSQL.",
+                    "tech_stack": ["FastAPI", "Apache Kafka", "Docker", "Python", "Redis"],
+                    "deliverables": [
+                        "Consumer group rebalancing & partition keying",
+                        "Dead-letter queue (DLQ) with exponential backoff retries",
+                        "Live Docker Compose cluster with Grafana metrics dashboard"
+                    ]
+                },
+                "learning_sprint": {
+                    "duration": "2-Week Sprint",
+                    "week1_focus": "Kafka Architecture, Partitions, Consumer Offsets, and Producer Acks (all/1)",
+                    "week2_focus": "Building async producers/consumers in Python with aiokafka and Dockerized broker testing",
+                    "key_concepts": ["Consumer Groups", "Idempotence", "Partition Keys", "At-least-once Delivery"]
+                }
+            },
+            {
+                "skill": "Kubernetes & Cloud Infrastructure (K8s / Helm)",
+                "category": "DevOps & Cloud Native",
+                "avg_ctc_impact": "+₹5.0 - 8.0 LPA",
+                "priority": "Critical",
+                "recommended_project": {
+                    "title": "Production-Grade Microservices Deployment with Helm & K8s",
+                    "description": "Containerize fullstack applications with multi-stage Dockerfiles and deploy to a local Minikube/K8s cluster with Ingress routing, Horizontal Pod Autoscaling (HPA), and ConfigMaps/Secrets.",
+                    "tech_stack": ["Kubernetes", "Helm", "Docker", "NGINX Ingress", "Prometheus"],
+                    "deliverables": [
+                        "Declarative Helm Chart with parameterized values.yaml",
+                        "Readiness & Liveness probes with zero-downtime rolling updates",
+                        "HPA CPU-based autoscaling simulation under load test"
+                    ]
+                },
+                "learning_sprint": {
+                    "duration": "2-Week Sprint",
+                    "week1_focus": "Pods, Deployments, Services (ClusterIP/NodePort/Ingress), Namespaces",
+                    "week2_focus": "Helm templating, Secrets management, and CI/CD automated deployment workflow",
+                    "key_concepts": ["Rolling Updates", "HPA", "ConfigMaps", "Ingress Controllers"]
+                }
+            },
+            {
+                "skill": "Vector Databases & GraphRAG (Qdrant / Milvus / Neo4j)",
+                "category": "AI / GenAI Engineering",
+                "avg_ctc_impact": "+₹6.0 - 10.0 LPA",
+                "priority": "Critical",
+                "recommended_project": {
+                    "title": "Hybrid Vector + GraphRAG Autonomous Agent Knowledge Engine",
+                    "description": "Build an advanced hybrid retrieval engine combining dense vector embeddings (cosine similarity) and multi-hop Neo4j knowledge graph traversals for hallucination-free document QA.",
+                    "tech_stack": ["Neo4j", "Qdrant", "LangChain", "FastAPI", "OpenAI / Gemini"],
+                    "deliverables": [
+                        "Entity extraction & knowledge graph link generation",
+                        "Hybrid search reranking (Vector Cosine + Graph Path centrality)",
+                        "Benchmark evaluation with Ragas & precision/recall metrics"
+                    ]
+                },
+                "learning_sprint": {
+                    "duration": "2-Week Sprint",
+                    "week1_focus": "Embedding models, HNSW indexing, Vector distance metrics, and Cypher GraphRAG",
+                    "week2_focus": "Agentic tool calling, memory state machines, and evaluation frameworks",
+                    "key_concepts": ["HNSW Indexing", "Graph Traversal", "RAG Triad", "Semantic Chunking"]
+                }
+            },
+            {
+                "skill": "Redis Caching & Distributed Locking",
+                "category": "Backend Performance",
+                "avg_ctc_impact": "+₹3.0 - 5.0 LPA",
+                "priority": "High",
+                "recommended_project": {
+                    "title": "High-Concurrency Flash Sale Rate Limiter & Token Bucket",
+                    "description": "Implement a distributed rate limiter and distributed mutex lock (Redlock) to prevent race conditions during high-volume API requests.",
+                    "tech_stack": ["Redis", "FastAPI", "Lua Scripts", "Python"],
+                    "deliverables": [
+                        "Atomic Lua script for token bucket rate limiting",
+                        "Cache-aside pattern with TTL cache invalidation",
+                        "Distributed lock mechanism tested against concurrent threads"
+                    ]
+                },
+                "learning_sprint": {
+                    "duration": "1-Week Sprint",
+                    "week1_focus": "Data structures (Hashes, Sorted Sets, Streams), Pub/Sub, Lua Scripting, Redlock",
+                    "week2_focus": "Cache stampede prevention, write-through caching, and benchmark testing",
+                    "key_concepts": ["Redlock", "Cache Invalidation", "Token Bucket", "Lua Atomic Operations"]
+                }
+            },
+            {
+                "skill": "Rust Systems Programming & WASM",
+                "category": "High-Performance Systems",
+                "avg_ctc_impact": "+₹6.5 - 12.0 LPA",
+                "priority": "High",
+                "recommended_project": {
+                    "title": "Ultra-Fast CLI Log Analyzer & WebAssembly Tokenizer",
+                    "description": "Write a memory-safe multi-threaded log parser in Rust compiled to native binary and WebAssembly for lightning-fast edge processing.",
+                    "tech_stack": ["Rust", "Tokio", "WASM", "Rayon"],
+                    "deliverables": [
+                        "Zero-cost abstraction memory management without garbage collection",
+                        "Multi-threaded SIMD chunk parsing",
+                        "WebAssembly wrapper running in the browser"
+                    ]
+                },
+                "learning_sprint": {
+                    "duration": "2-Week Sprint",
+                    "week1_focus": "Ownership, Borrowing, Lifetimes, Traits, and Pattern Matching",
+                    "week2_focus": "Async Rust with Tokio, Concurrency primitives, and wasm-pack bindings",
+                    "key_concepts": ["Ownership & Borrowing", "Zero-cost abstractions", "Tokio Async", "WASM"]
+                }
+            }
+        ]
+
+        high_roi_unlocks = []
+        for item in high_roi_catalog:
+            sk_clean = item["skill"].split("&")[0].split("/")[0].strip().lower()
+            # Calculate unlocked jobs count dynamically
+            matching_jobs_count = sum(
+                1 for opp in live_opps 
+                if any(sk_clean in req.lower() for req in opp.get("skills_required", []))
+            )
+            # Default to a healthy market unlock estimate if job pool is small
+            unlocked_count = max(4, matching_jobs_count * 2 + 3)
+            
+            # Check if user already has it
+            has_it = any(sk_clean in us for us in user_skills_set)
+            is_learning = any(sk_clean in ip for ip in in_progress_set)
+
+            if not has_it:
+                high_roi_unlocks.append({
+                    **item,
+                    "unlocked_jobs_count": unlocked_count,
+                    "is_in_progress": is_learning
+                })
+
+        # 5. Emerging 2025/2026 Boom Technologies
+        emerging_boom = [
+            {
+                "name": "Agentic Workflows & Multi-Agent Graph Frameworks",
+                "growth": "+185% YoY Demand",
+                "reason": "Enterprises are rapidly replacing simple chatbot prompts with autonomous multi-agent task loops that execute deterministic tool actions."
+            },
+            {
+                "name": "eBPF & Kernel-Level Observability",
+                "growth": "+120% YoY Demand",
+                "reason": "High-throughput cloud native platforms require zero-overhead network packet filtering and runtime security directly in the Linux kernel."
+            },
+            {
+                "name": "Event-Driven Microservices (Kafka / RabbitMQ)",
+                "growth": "+95% YoY Demand",
+                "reason": "Standard synchronous REST architectures are choking under high scale; fintech and logistics companies are standardizing on event streams."
+            },
+            {
+                "name": "Vector Databases & GraphRAG Architectures",
+                "growth": "+210% YoY Demand",
+                "reason": "Standard vector embeddings lack entity relationships. Companies need Hybrid Graph + Vector retrieval for enterprise precision."
+            }
+        ]
+
+        # Calculate user readiness score (0-100) based on coverage of top market skills
+        mastered_top_count = sum(1 for d in top_demands if d["status"] == "mastered")
+        total_top = max(1, len(top_demands))
+        readiness_score = int(min(96, max(45, (mastered_top_count / total_top) * 100 + 35)))
+
+        return {
+            "status": "success",
+            "target_role": target_role,
+            "target_domain": target_domain,
+            "analyzed_jobs_count": len(live_opps),
+            "user_readiness_score": readiness_score,
+            "in_progress_skills": in_progress_skills,
+            "market_summary": {
+                "top_demanded_skills": top_demands,
+                "high_roi_unlocks": high_roi_unlocks,
+                "emerging_boom_technologies": emerging_boom
+            }
+        }
+
+    @classmethod
+    async def toggle_learning_skill(cls, user_id: str, skill_name: str, action: str) -> Dict[str, Any]:
+        """
+        Interactively toggles a skill between 'in_progress', 'mastered' (added to profile & graph),
+        or 'removed'.
+        When 'mastered', it dynamically injects the skill into the user's Neo4j profile,
+        re-scoring all radar jobs immediately!
+        """
+        clean_skill = skill_name.strip()
+        if not clean_skill:
+            return {"status": "error", "message": "Invalid skill name"}
+
+        profile = await cls.get_user_profile_details(user_id)
+        prefs = profile.get("preferences", {})
+        in_progress = prefs.get("in_progress_skills", [])
+        current_skills = profile.get("skills", [])
+
+        if action == "start_learning":
+            if clean_skill not in in_progress:
+                in_progress.append(clean_skill)
+            prefs["in_progress_skills"] = in_progress
+            await cls.update_user_profile_details(user_id, {**profile, "preferences": prefs})
+            return {"status": "success", "message": f"Added '{clean_skill}' to your active Learning Sprint!", "action": action}
+
+        elif action == "mark_mastered":
+            # Remove from in_progress
+            in_progress = [s for s in in_progress if s.lower() != clean_skill.lower()]
+            prefs["in_progress_skills"] = in_progress
+            # Add to actual skills
+            if clean_skill not in current_skills:
+                current_skills.append(clean_skill)
+            await cls.update_user_profile_details(user_id, {
+                **profile,
+                "skills": current_skills,
+                "preferences": prefs
+            })
+            return {
+                "status": "success", 
+                "message": f"🎉 Congratulations! '{clean_skill}' is now verified in your Profile Graph. Radar match scores recalculated!",
+                "action": action
+            }
+
+        elif action == "remove":
+            in_progress = [s for s in in_progress if s.lower() != clean_skill.lower()]
+            prefs["in_progress_skills"] = in_progress
+            await cls.update_user_profile_details(user_id, {**profile, "preferences": prefs})
+            return {"status": "success", "message": f"Removed '{clean_skill}' from in-progress list", "action": action}
+
+        return {"status": "error", "message": "Unknown action"}
+
 profile_service = ProfileService()
+
 
 

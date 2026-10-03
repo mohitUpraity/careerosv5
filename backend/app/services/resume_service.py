@@ -470,20 +470,32 @@ JSON Schema:
     async def tailor_blueprint_to_job(
         self,
         base_blueprint: ResumeBlueprint,
-        job_info: Dict[str, Any]
+        job_info: Dict[str, Any],
+        confirmed_skills: Optional[List[Dict[str, Any]]] = None
     ) -> ResumeBlueprint:
         """
         Uses Groq / Gemini to tailor bullet points to target role keywords while preserving 100% layout structure.
+        Incorporates user-confirmed skills and provided project/code evidence into impact STAR bullets.
         """
         from app.services.llm_service import llm_service
 
-        system_prompt = "You are an elite ATS resume optimizer. Rewrite experience and project bullet points into high-impact STAR method bullet points tailored to the target job description while strictly retaining existing facts."
+        confirmed_skills_prompt = ""
+        if confirmed_skills:
+            active_confirmed = [cs for cs in confirmed_skills if cs.get("has_experience", True)]
+            if active_confirmed:
+                confirmed_skills_prompt = "\n\nCandidate's Confirmed Skills & Evidence to Highlight:\n"
+                for cs in active_confirmed:
+                    sk_name = cs.get("skill")
+                    ev = cs.get("evidence_url") or cs.get("notes") or ""
+                    confirmed_skills_prompt += f"- {sk_name}" + (f" (Evidence / Project details: {ev})" if ev else "") + "\n"
+
+        system_prompt = "You are an elite ATS resume optimizer. Rewrite experience and project bullet points into high-impact STAR method bullet points tailored to the target job description while strictly retaining existing facts and weaving in the candidate's confirmed skills and evidence."
         user_prompt = f"""
 Target Role: {job_info.get('job_title', 'Software Engineer')}
 Target Company: {job_info.get('company_name', 'Target Company')}
 Job Description:
 {job_info.get('job_description', '')[:10000]}
-
+{confirmed_skills_prompt}
 Original Experience:
 {[e.model_dump() for e in base_blueprint.experience]}
 
@@ -527,8 +539,21 @@ Return JSON with tailored bullet points:
                             if new_proj.get("bullets"):
                                 orig_p.bullets = new_proj["bullets"]
 
+        # Incorporate confirmed new skills into Skill Categories
+        tailored_skills = [s.model_copy(deep=True) for s in base_blueprint.skills]
+        if confirmed_skills:
+            active_skills = [cs.get("skill") for cs in confirmed_skills if cs.get("has_experience", True) and cs.get("skill")]
+            existing_skill_set = {s.lower() for cat in tailored_skills for s in cat.skills}
+            new_skills_to_add = [sk for sk in active_skills if sk.lower() not in existing_skill_set]
+            
+            if new_skills_to_add:
+                if tailored_skills:
+                    tailored_skills[0].skills.extend(new_skills_to_add)
+                else:
+                    tailored_skills.append(SkillCategory(category="Technical Skills", skills=new_skills_to_add))
+
         top_skills_list = []
-        for s in base_blueprint.skills:
+        for s in tailored_skills:
             if s.skills:
                 top_skills_list.extend(s.skills[:2])
 
@@ -540,10 +565,11 @@ Return JSON with tailored bullet points:
             experience=tailored_exp,
             education=base_blueprint.education,
             projects=tailored_proj,
-            skills=base_blueprint.skills,
+            skills=tailored_skills,
             certifications=getattr(base_blueprint, "certifications", []),
             achievements=getattr(base_blueprint, "achievements", []),
             raw_text=base_blueprint.raw_text
         )
+
 
 resume_service = ResumeService()
