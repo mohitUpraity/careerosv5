@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Dict, Any, Optional, List
@@ -480,8 +481,9 @@ async def live_interview_websocket(
         )
         if profile_data:
             skills = [s.get("name") for s in profile_data.get("skills", []) if s.get("name")]
-            projects = [f"{p.get("name")}: {p.get("description")}" for p in profile_data.get("projects", [])]
-            resume_context = f"Candidate Skills: {", ".join(skills[:15])}\nProjects:\n" + "\n".join(projects[:3])
+            projects = [f"{p.get('name')}: {p.get('description')}" for p in profile_data.get("projects", [])]
+            skills_str = ", ".join(skills[:15])
+            resume_context = f"Candidate Skills: {skills_str}\nProjects:\n" + "\n".join(projects[:3])
     except Exception as e:
         logger.debug(f"Using default resume context: {e}")
 
