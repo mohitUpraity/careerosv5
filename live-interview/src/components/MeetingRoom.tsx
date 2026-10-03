@@ -118,14 +118,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     setAudioUnlocked(true);
   }, []);
 
-  // Unlock AudioContext on any user click
-  const handleUnlockAudio = useCallback(() => {
-    if (audioManagerRef.current) {
-      audioManagerRef.current.unlockAudioContext();
-    }
-    setAudioUnlocked(true);
-  }, []);
-
   // Initialize Audio & WebSocket Connection
   useEffect(() => {
     const audioManager = new AudioStreamingManager();
@@ -440,7 +432,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         ws.close();
       }
     };
-  }, [config, speakAiText]);
+  }, [config]);
 
   // Update mute state in Audio Manager
   useEffect(() => {
