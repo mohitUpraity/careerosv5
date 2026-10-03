@@ -65,7 +65,7 @@ class LLMService:
                         "response_format": {"type": "json_object"}
                     }
 
-                    async with httpx.AsyncClient(timeout=20.0) as client:
+                    async with httpx.AsyncClient(timeout=4.0) as client:
                         resp = await client.post(cls.GROQ_URL, headers=headers, json=payload)
                         if resp.status_code == 200:
                             data = resp.json()
@@ -80,11 +80,10 @@ class LLMService:
         # 2. Fallback to Gemini if configured
         if settings.GEMINI_API_KEY:
             for gem_model_name in [
-                "gemini-3.8-flash",
-                "gemini-3.5-flash-lite",
-                "gemini-flash-latest",
-                "gemini-flash-lite-latest",
-                "gemini-2.5-flash"
+                "gemini-1.5-flash",
+                "gemini-2.0-flash-exp",
+                "gemini-1.5-pro",
+                "gemini-flash-latest"
             ]:
                 try:
                     import google.generativeai as genai
@@ -165,7 +164,7 @@ class LLMService:
                         "messages": groq_messages,
                         "temperature": temperature
                     }
-                    async with httpx.AsyncClient(timeout=20.0) as client:
+                    async with httpx.AsyncClient(timeout=4.0) as client:
                         resp = await client.post(cls.GROQ_URL, headers=headers, json=payload)
                         if resp.status_code == 200:
                             data = resp.json()
@@ -177,7 +176,7 @@ class LLMService:
 
         # 2. Try Gemini
         if settings.GEMINI_API_KEY:
-            for gem_model in ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash"]:
+            for gem_model in ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"]:
                 try:
                     import google.generativeai as genai
                     import asyncio

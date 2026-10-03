@@ -236,10 +236,8 @@ IMPORTANT: You are speaking through audio — keep responses conversational, 2-4
         self.engine_mode = "autonomous_llm"
         logger.info(f"Autonomous AI Recruiter Engine active for session {self.session_id}")
 
-        # Dispatch opening greeting
-        asyncio.create_task(self._trigger_autonomous_turn(
-            user_input="[Candidate joined the room with camera and microphone active]"
-        ))
+        # Dispatch instant opening greeting
+        asyncio.create_task(self._send_instant_welcome())
 
     async def send_audio_chunk(self, pcm_base64: str, mime_type: str = "audio/pcm;rate=16000"):
         """Send real-time audio from candidate's microphone to Gemini Live."""
