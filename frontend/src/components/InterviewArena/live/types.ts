@@ -23,6 +23,7 @@ export interface InterviewerProfile {
 
 export interface InterviewConfig {
   candidateName: string;
+  company?: string;
   role: string;
   seniority: SeniorityLevel;
   format: InterviewFormat;

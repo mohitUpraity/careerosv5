@@ -139,6 +139,14 @@ export class AudioStreamingManager {
   }
 
   /**
+   * Returns true if AI audio sources are currently scheduled/playing.
+   * Used to avoid stale React state closures for interruption detection.
+   */
+  public hasActivePlayback(): boolean {
+    return this.scheduledSources.length > 0;
+  }
+
+  /**
    * Converts Float32Array (-1.0 to 1.0) into 16-bit PCM (little-endian) and encodes to Base64
    */
   private floatTo16BitPCMBase64(float32Array: Float32Array): string {
