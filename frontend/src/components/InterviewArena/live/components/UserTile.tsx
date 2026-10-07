@@ -26,6 +26,7 @@ export const UserTile: React.FC<UserTileProps> = ({
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
     }
   }, [stream, isVideoOff]);
 
@@ -61,7 +62,15 @@ export const UserTile: React.FC<UserTileProps> = ({
                   .toUpperCase()
               : <User className="w-10 h-10 text-white/90" />}
           </div>
-          <p className="text-sm font-medium text-gray-300 mt-3">{candidateName || "You"}</p>
+          <p className="text-sm font-medium text-gray-300 mt-2">{candidateName || "You"}</p>
+          <button
+            type="button"
+            onClick={onToggleVideo}
+            className="mt-2.5 px-3 py-1 bg-[#3c4043] hover:bg-blue-600 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+          >
+            <Video className="w-3.5 h-3.5" />
+            <span>Turn On Video</span>
+          </button>
         </div>
       )}
 

@@ -119,14 +119,40 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
     }
   };
 
-  const handleToggleVideo = () => {
-    if (userStream) {
-      userStream.getVideoTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setIsVideoOff(!isVideoOff);
-    } else {
-      setIsVideoOff(!isVideoOff);
+  const handleToggleVideo = async () => {
+    try {
+      if (!userStream) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true,
+        });
+        setUserStream(stream);
+        setIsVideoOff(false);
+        return;
+      }
+
+      const existingTracks = userStream.getVideoTracks();
+      if (existingTracks.length === 0) {
+        // Stream previously only had audio; request camera permission now
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+        const newTrack = videoStream.getVideoTracks()[0];
+        if (newTrack) {
+          userStream.addTrack(newTrack);
+          // New MediaStream reference triggers re-render in React video tags
+          setUserStream(new MediaStream(userStream.getTracks()));
+          setIsVideoOff(false);
+        }
+      } else {
+        const willBeOff = !isVideoOff;
+        existingTracks.forEach((track) => {
+          track.enabled = !willBeOff;
+        });
+        setIsVideoOff(willBeOff);
+      }
+    } catch (err: any) {
+      console.warn("Could not toggle camera:", err);
     }
   };
 

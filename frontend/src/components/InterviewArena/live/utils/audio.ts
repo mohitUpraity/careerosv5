@@ -100,15 +100,14 @@ export class AudioStreamingManager {
       }
       const rms = Math.sqrt(sumSquares / channelData.length);
 
-      // Prevent acoustic echo: If AI is actively speaking through speakers,
-      // only forward mic audio if candidate intentionally speaks above echo bleed
+      // Prevent acoustic echo when AI speaks (ignore low-to-mid speaker feedback)
       const isAiSpeaking = this.scheduledSources.length > 0;
-      if (isAiSpeaking && rms < 0.04) {
+      if (isAiSpeaking && rms < 0.025) {
         return;
       }
 
-      // Ignore pure background silence to keep Gemini Live streaming clean
-      if (!isAiSpeaking && rms < 0.003) {
+      // Ignore pure background silence when candidate is speaking
+      if (!isAiSpeaking && rms < 0.002) {
         return;
       }
 
@@ -216,7 +215,7 @@ export class AudioStreamingManager {
       // Schedule gapless playback
       const currentTime = this.outputAudioCtx.currentTime;
       if (this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime;
+        this.nextPlayTime = currentTime + 0.04; // 40ms smooth lead time for gapless audio
       }
 
       sourceNode.start(this.nextPlayTime);

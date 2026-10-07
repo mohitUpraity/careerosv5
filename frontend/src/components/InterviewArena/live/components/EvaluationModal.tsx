@@ -92,7 +92,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {isLoading ? (
+          {isLoading && (
             <div className="py-20 flex flex-col items-center justify-center space-y-4">
               <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
               <div className="text-center">
@@ -104,7 +104,29 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 </p>
               </div>
             </div>
-          ) : report ? (
+          )}
+
+          {!isLoading && !report && (
+            <div className="text-center py-10 text-gray-400 text-sm">
+              No evaluation data available.
+            </div>
+          )}
+
+          {!isLoading && report && (report as any).detail && (
+            <div className="py-12 flex flex-col items-center justify-center space-y-3 text-center">
+              <AlertTriangle className="w-12 h-12 text-amber-400" />
+              <h3 className="text-lg font-bold text-white">Evaluation Notice</h3>
+              <p className="text-sm text-gray-300 max-w-md">{(report as any).detail}</p>
+              <button
+                onClick={onRetake}
+                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold"
+              >
+                Return to Interview
+              </button>
+            </div>
+          )}
+
+          {!isLoading && report && !(report as any).detail && (
             <>
               {/* Score & Decision Hero Card */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -168,16 +190,16 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                   Competency Score Breakdown
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {report.metrics.map((metric) => (
-                    <div key={metric.category} className="space-y-1.5">
+                  {(Array.isArray(report.metrics) ? report.metrics : []).map((metric) => (
+                    <div key={metric.category || Math.random()} className="space-y-1.5">
                       <div className="flex justify-between text-xs">
                         <span className="font-semibold text-gray-200">{metric.category}</span>
-                        <span className="font-mono text-blue-400 font-bold">{metric.score}/100</span>
+                        <span className="font-mono text-blue-400 font-bold">{metric.score ?? 80}/100</span>
                       </div>
                       <div className="w-full bg-[#1e1e24] h-2 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                          style={{ width: `${metric.score}%` }}
+                          style={{ width: `${metric.score ?? 80}%` }}
                         />
                       </div>
                       <p className="text-[11px] text-gray-400 leading-tight">
@@ -196,7 +218,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                     <CheckCircle2 className="w-4 h-4" /> Standout Strengths
                   </h3>
                   <ul className="space-y-1.5">
-                    {report.topStrengths.map((s, i) => (
+                    {(Array.isArray(report.topStrengths) ? report.topStrengths : []).map((s, i) => (
                       <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
                         <span className="text-emerald-400 font-bold">•</span>
                         <span>{s}</span>
@@ -211,7 +233,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                     <AlertTriangle className="w-4 h-4" /> Growth & Improvement Areas
                   </h3>
                   <ul className="space-y-1.5">
-                    {report.areasForImprovement.map((a, i) => (
+                    {(Array.isArray(report.areasForImprovement) ? report.areasForImprovement : []).map((a, i) => (
                       <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
                         <span className="text-amber-400 font-bold">•</span>
                         <span>{a}</span>
@@ -222,7 +244,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
               </div>
 
               {/* Actionable Study Roadmap */}
-              {report.actionableStudyRoadmap && report.actionableStudyRoadmap.length > 0 && (
+              {Array.isArray(report.actionableStudyRoadmap) && report.actionableStudyRoadmap.length > 0 && (
                 <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] space-y-3">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-purple-400" />
@@ -244,10 +266,6 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 </div>
               )}
             </>
-          ) : (
-            <div className="text-center py-10 text-gray-400 text-sm">
-              No evaluation data available.
-            </div>
           )}
         </div>
 

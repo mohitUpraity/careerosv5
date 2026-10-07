@@ -3,6 +3,7 @@ import os
 import httpx
 from contextlib import asynccontextmanager
 import logging
+from typing import Dict, Any
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -95,10 +96,14 @@ from fastapi.responses import JSONResponse
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
-    return JSONResponse(
+    origin = request.headers.get("origin", "*")
+    response = JSONResponse(
         status_code=500,
         content={"detail": str(exc), "status": "error"}
     )
+    response.headers["Access-Control-Allow-Origin"] = origin if origin else "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 # Register API Routers
 app.include_router(health.router, prefix="/api/v1")
@@ -110,11 +115,33 @@ app.include_router(benchmark.router, prefix="/api/v1")
 app.include_router(opportunities.router, prefix="/api/v1")
 app.include_router(brain.router, prefix="/api/v1")
 app.include_router(interview.router, prefix="/api/v1")
+from app.gemini_live import live_router
+app.include_router(live_router, prefix="/api/v1")
 
 @app.websocket("/api/live")
-async def live_websocket_alias(websocket: WebSocket):
-    from app.api.v1.interview import live_interview_websocket
-    await live_interview_websocket(websocket=websocket)
+async def live_websocket_alias(
+    websocket: WebSocket,
+    user_id: str = "candidate_1",
+    company: str = "Google",
+    role: str = "Senior Backend Engineer",
+    candidate_name: str = "Candidate",
+    voice: str = "Zephyr"
+):
+    from app.gemini_live.router import gemini_live_websocket
+    await gemini_live_websocket(
+        websocket=websocket,
+        user_id=user_id,
+        company=company,
+        role=role,
+        candidate_name=candidate_name,
+        voice=voice,
+    )
+
+@app.post("/api/evaluate-interview")
+@app.post("/api/v1/evaluate-interview")
+async def evaluate_interview_alias(req: Dict[str, Any]):
+    from app.api.v1.interview import evaluate_interview_full
+    return await evaluate_interview_full(req)
 
 # Mount Static Frontend
 frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
@@ -125,6 +152,15 @@ if os.path.exists(frontend_dir):
 @app.get("/health")
 async def root_health_check():
     return {"status": "healthy", "service": "CareerOS-v5"}
+
+from fastapi.responses import RedirectResponse, FileResponse
+
+@app.get("/live-test")
+async def live_test_page():
+    test_html = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "public", "live_voice_test.html"))
+    if os.path.exists(test_html):
+        return FileResponse(test_html)
+    return {"status": "error", "message": "live_voice_test.html not found"}
 
 @app.get("/")
 async def root():

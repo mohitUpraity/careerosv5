@@ -145,6 +145,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
     }
   }, [stream, isVideoOff]);
 
@@ -336,9 +337,17 @@ export const Lobby: React.FC<LobbyProps> = ({
                   {candidateName ? candidateName.slice(0, 2).toUpperCase() : <User className="w-8 h-8 text-gray-400" />}
                 </div>
                 <p className="text-sm font-semibold text-gray-200">Camera is Off</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-xs">
-                  You can toggle your camera on or off anytime during the interview.
+                <p className="text-xs text-gray-400 mt-1 max-w-xs">
+                  Enable your camera to preview your video feed before entering the arena.
                 </p>
+                <button
+                  type="button"
+                  onClick={onToggleVideo}
+                  className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  <span>Turn On Camera</span>
+                </button>
               </div>
             )}
 

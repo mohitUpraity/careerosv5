@@ -427,6 +427,14 @@ from fastapi import WebSocket, WebSocketDisconnect, Query
 from app.services.gemini_live_service import GeminiLiveSession
 from app.services.profile_service import profile_service
 
+# Binary frame protocol (browser <-> backend). First byte = frame type.
+#   client -> server: 0x01 = PCM16 mono 16 kHz mic audio, 0x02 = JPEG camera frame
+#   server -> client: 0x01 = PCM16 mono 24 kHz interviewer audio
+# JSON text frames carry control/transcript events (and legacy base64 audio/video).
+FRAME_AUDIO = 0x01
+FRAME_VIDEO = 0x02
+
+
 @router.websocket("/live")
 @router.websocket("/live-ws")
 async def live_interview_websocket(
@@ -440,11 +448,15 @@ async def live_interview_websocket(
     difficulty: str = "medium"
 ):
     """
-    Bidirectional WebSocket bridge for Google Meet Live Interview Arena.
+    Bidirectional WebSocket bridge for the Live Interview Arena.
+
+    Latency notes: binary audio frames (no base64/JSON), a send lock so concurrent producers
+    can't interleave frames, media queued toward Gemini by the session's own sender task, and
+    ``ready`` is only sent once the Gemini session really exists (it used to be sent
+    immediately, before connect() had even started).
     """
     await websocket.accept()
-    
-    # Safe query parameter extraction (robust against both direct calls and FastAPI dependency injection)
+
     q = websocket.query_params
     u_id = str(q.get("user_id", user_id if not hasattr(user_id, "default") else "candidate_1"))
     comp = str(q.get("company", company if not hasattr(company, "default") else "Apponward Technologies"))
@@ -453,98 +465,155 @@ async def live_interview_websocket(
     jd = str(q.get("job_description", job_description if not hasattr(job_description, "default") else ""))
     rnd = str(q.get("round_type", round_type if not hasattr(round_type, "default") else "mixed"))
     diff = str(q.get("difficulty", difficulty if not hasattr(difficulty, "default") else "medium"))
-    
-    logger.info(f"Accepted Live Interview WebSocket connection for user: {u_id}, company: {comp}, role: {rl}")
 
-    # Callback to send packets back to candidate browser
+    logger.info(f"Live Interview WebSocket accepted: user={u_id}, company={comp}, role={rl}")
+
+    send_lock = asyncio.Lock()
+    closed = False
+
     async def send_to_frontend(payload: Dict[str, Any]):
+        if closed:
+            return
         try:
-            await websocket.send_text(json.dumps(payload, default=str))
+            async with send_lock:
+                await websocket.send_text(json.dumps(payload, default=str))
         except Exception as err:
             logger.debug(f"Failed to forward message to frontend: {err}")
 
-    # 1. Send IMMEDIATE ready acknowledgment so frontend never gets stuck on Connecting...
-    await send_to_frontend({
-        "type": "ready",
-        "message": "Gemini Live session established",
-        "company": comp,
-        "role": rl,
-        "voice": vc
-    })
+    async def send_audio_to_frontend(pcm: bytes):
+        if closed:
+            return
+        try:
+            async with send_lock:
+                await websocket.send_bytes(bytes([FRAME_AUDIO]) + pcm)
+        except Exception as err:
+            logger.debug(f"Failed to forward audio to frontend: {err}")
 
-    # Non-blocking resume context fetch with timeout
-    resume_context = "Candidate has experience with Python, FastAPI, React, Distributed Systems, and Modern Databases."
+    await send_to_frontend({"type": "status", "message": "Connecting to interviewer..."})
+
+    # Kick off the (slow) profile lookup immediately; it overlaps with waiting for `setup`.
+    default_resume = "No resume details were provided; ask the candidate to describe their background and projects."
+    async def _load_resume() -> str:
+        try:
+            profile_data = await asyncio.wait_for(
+                profile_service.get_comprehensive_profile_analysis(u_id), timeout=1.5
+            )
+            if profile_data:
+                skills = [s.get("name") for s in profile_data.get("skills", []) if s.get("name")]
+                projects = [f"{p.get('name')}: {p.get('description')}" for p in profile_data.get("projects", [])]
+                return f"Candidate Skills: {', '.join(skills[:15])}\nProjects:\n" + "\n".join(projects[:3])
+        except Exception as e:
+            logger.debug(f"Using default resume context: {e}")
+        return default_resume
+
+    resume_task = asyncio.create_task(_load_resume())
+
+    # The client sends `setup` first. Wait briefly for it so the system prompt is built with the
+    # real role/voice/resume (previously `setup` raced connect() and was silently ignored).
+    setup: Dict[str, Any] = {}
+    first_frame = None
     try:
-        profile_data = await asyncio.wait_for(
-            profile_service.get_comprehensive_profile_analysis(u_id),
-            timeout=1.5
-        )
-        if profile_data:
-            skills = [s.get("name") for s in profile_data.get("skills", []) if s.get("name")]
-            projects = [f"{p.get('name')}: {p.get('description')}" for p in profile_data.get("projects", [])]
-            skills_str = ", ".join(skills[:15])
-            resume_context = f"Candidate Skills: {skills_str}\nProjects:\n" + "\n".join(projects[:3])
-    except Exception as e:
-        logger.debug(f"Using default resume context: {e}")
+        first_frame = await asyncio.wait_for(websocket.receive(), timeout=2.0)
+        if first_frame.get("type") == "websocket.disconnect":
+            resume_task.cancel()
+            return
+        if first_frame.get("text"):
+            try:
+                m = json.loads(first_frame["text"])
+                if m.get("type") == "setup":
+                    setup, first_frame = m, None
+            except Exception:
+                pass
+    except asyncio.TimeoutError:
+        pass
+
+    resume_context = await resume_task
+    if setup.get("customContext"):
+        resume_context = str(setup["customContext"])
 
     session = GeminiLiveSession(
         user_id=u_id,
         company=comp,
-        role=rl,
+        role=str(setup.get("role") or rl),
         job_description=jd,
         resume_context=resume_context,
-        voice_name=vc,
+        voice_name=str(setup.get("voice") or vc),
         round_type=rnd,
         difficulty=diff,
-        send_to_client_callback=send_to_frontend
+        send_to_client_callback=send_to_frontend,
+        send_audio_to_client_callback=send_audio_to_frontend,
+        candidate_name=str(setup.get("candidateName") or ""),
     )
 
+    async def _connect_and_announce():
+        await session.connect()
+        await send_to_frontend({
+            "type": "ready",
+            "message": "Interviewer connected",
+            "engine": session.engine_mode,
+            "model": session.model_in_use,
+            "company": session.company,
+            "role": session.role,
+            "voice": session.voice_name,
+            "inputSampleRate": 16000,
+            "outputSampleRate": 24000,
+        })
+
+    connect_task = asyncio.create_task(_connect_and_announce())
+
+    def _connect_done(t: asyncio.Task):
+        if not t.cancelled() and t.exception():
+            logger.error(f"Live session connect failed: {t.exception()}", exc_info=t.exception())
+    connect_task.add_done_callback(_connect_done)
+
+    async def handle_frame(frame: Dict[str, Any]) -> bool:
+        """Returns False when the loop should end."""
+        if frame.get("type") == "websocket.disconnect":
+            return False
+        data = frame.get("bytes")
+        if data:
+            kind, payload = data[0], data[1:]
+            if kind == FRAME_AUDIO:
+                session.push_audio(payload)
+            elif kind == FRAME_VIDEO:
+                session.push_video(payload)
+            return True
+
+        raw = frame.get("text")
+        if not raw:
+            return True
+        msg = json.loads(raw)
+        msg_type = msg.get("type")
+
+        if msg_type == "setup":
+            logger.debug("Late setup message ignored (session already built).")
+        elif msg_type in ("audio", "audio_chunk"):
+            if msg.get("data"):
+                await session.send_audio_chunk(msg["data"], msg.get("mimeType", "audio/pcm;rate=16000"))
+        elif msg_type in ("video", "video_frame"):
+            if msg.get("data"):
+                await session.send_video_frame(msg["data"])
+        elif msg_type in ("text", "text_prompt"):
+            text = msg.get("data") or msg.get("text", "")
+            if text:
+                await session.send_text_message(text)
+        elif msg_type == "audio_stream_end":
+            await session.end_audio_stream()
+        elif msg_type == "ping":
+            await send_to_frontend({"type": "pong", "t": msg.get("t")})
+        elif msg_type == "interrupt":
+            await session.handle_client_interrupt()
+        elif msg_type == "conclude_session":
+            await session.request_conclusion()
+            return False
+        return True
+
     try:
-        # Connect asynchronously so WebSocket message loop remains responsive
-        asyncio.create_task(session.connect())
-
-        # Main message loop from candidate browser
+        if first_frame is not None and not await handle_frame(first_frame):
+            return
         while True:
-            raw_msg = await websocket.receive_text()
-            msg = json.loads(raw_msg)
-            msg_type = msg.get("type")
-
-            if msg_type == "setup":
-                # Handle dynamic setup message from MeetingRoom
-                if msg.get("role"): session.role = msg["role"]
-                if msg.get("voice"): session.voice_name = msg["voice"]
-                if msg.get("customContext"): session.resume_context = msg["customContext"]
-                await send_to_frontend({
-                    "type": "ready",
-                    "message": "Gemini Live session established",
-                    "company": session.company,
-                    "role": session.role
-                })
-            elif msg_type in ("audio", "audio_chunk"):
-                pcm_data = msg.get("data")
-                mime = msg.get("mimeType", "audio/pcm;rate=16000")
-                if pcm_data:
-                    await session.send_audio_chunk(pcm_data, mime)
-            elif msg_type in ("video", "video_frame"):
-                jpeg_data = msg.get("data")
-                if jpeg_data:
-                    await session.send_video_frame(jpeg_data)
-            elif msg_type in ("text", "text_prompt"):
-                text = msg.get("data") or msg.get("text", "")
-                if text:
-                    await session.send_text_message(text)
-            elif msg_type == "interrupt":
-                await session.handle_client_interrupt()
-                await send_to_frontend({"type": "interrupted"})
-            elif msg_type == "conclude_session":
-                await session._handle_tool_call("conclude_interview", {
-                    "technical_score": 82,
-                    "speech_voice_score": 85,
-                    "body_language_score": 80,
-                    "integrity_score": max(50, 100 - (session.warnings_count * 15)),
-                    "hireability_verdict": "Hire",
-                    "executive_summary": f"Completed interactive live interview session with the hiring team at {comp}."
-                })
+            frame = await websocket.receive()
+            if not await handle_frame(frame):
                 break
     except WebSocketDisconnect:
         logger.info(f"Candidate disconnected from Live Interview session {session.session_id}")
@@ -552,4 +621,7 @@ async def live_interview_websocket(
         logger.error(f"Error in Live Interview WebSocket: {e}", exc_info=True)
         await send_to_frontend({"type": "error", "message": str(e)})
     finally:
+        closed = True
+        connect_task.cancel()
         await session.close()
+

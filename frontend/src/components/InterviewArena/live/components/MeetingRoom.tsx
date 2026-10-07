@@ -109,6 +109,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const speechRecognitionRef = useRef<any>(null);
   // When true, discard incoming audio chunks (user interrupted the AI)
   const discardAudioRef = useRef(false);
+  const discardAudioTimerRef = useRef<any>(null);
   const isAutonomousModeRef = useRef(false);
   const autonomousTurnRef = useRef(0);
   const hasReceivedAiMessageRef = useRef(false);
@@ -123,6 +124,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
   // Human TTS Vocalizer for fallback when PCM is blocked by browser autoplay
   const speakAiText = useCallback((text: string) => {
+    // Strictly disable browser TTS if Gemini Live WebSocket is active to prevent dual-interviewer voices
+    if (!isAutonomousModeRef.current && socketRef.current?.readyState === WebSocket.OPEN) return;
     if (!("speechSynthesis" in window)) return;
     try {
       window.speechSynthesis.cancel();
@@ -178,35 +181,10 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     const audioManager = new AudioStreamingManager();
     audioManagerRef.current = audioManager;
 
-    let userSpeakingFrames = 0;
     audioManager.setOnVolumeChange((inVol, outVol) => {
       setUserVolume(inVol);
       setAiVolume(outVol);
       setIsAiSpeaking(outVol > 0.04);
-
-      // Bidirectional barge-in interruption via voice volume
-      if (inVol > 0.12 && (outVol > 0.04 || ("speechSynthesis" in window && window.speechSynthesis.speaking))) {
-        userSpeakingFrames++;
-        if (userSpeakingFrames >= 2) {
-          userSpeakingFrames = 0;
-          console.log("[Live] ⚡ Candidate voice barge-in detected — interrupting interviewer");
-          discardAudioRef.current = true;
-          audioManager.stopPlayback();
-          if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-          setIsAiSpeaking(false);
-          setIsInterrupted(true);
-          setAnalytics((prev) => ({
-            ...prev,
-            interruptionCount: prev.interruptionCount + 1,
-          }));
-          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({ type: "interrupt" }));
-          }
-          setTimeout(() => setIsInterrupted(false), 2000);
-        }
-      } else {
-        userSpeakingFrames = 0;
-      }
     });
 
     // Determine WS URL: Supports explicit VITE_WS_URL, VITE_API_BASE_URL, or defaults to current host / Render in production
@@ -228,9 +206,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       wsUrl = `${protocol}//${window.location.host}/api/live`;
     }
 
-    // In-Browser Autonomous Recruiter Engine (Guarantees zero-deadlock on serverless Vercel)
+    const params = new URLSearchParams({
+      role: config.role || "Senior Backend Engineer",
+      company: config.interviewerProfile?.company || "Google",
+      candidate_name: config.candidateName || "Candidate",
+      voice: config.interviewerProfile?.voice || "Zephyr",
+    });
+    wsUrl = `${wsUrl}?${params.toString()}`;
+
+    // In-Browser Autonomous Recruiter Engine (Fallback ONLY when no live WebSocket backend exists)
     const startAutonomousInterview = () => {
-      if (hasReceivedAiMessageRef.current || isAutonomousModeRef.current) return;
+      // Never run if live WebSocket is already connected or active
+      if (ws?.readyState === WebSocket.OPEN || hasReceivedAiMessageRef.current || isAutonomousModeRef.current) return;
       isAutonomousModeRef.current = true;
       hasReceivedAiMessageRef.current = true;
       setIsConnecting(false);
@@ -271,6 +258,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     };
 
     const handleAutonomousUserTurn = (userAnswer: string) => {
+      // Strictly prevent autonomous script turns if live WebSocket is active
+      if (ws?.readyState === WebSocket.OPEN || !isAutonomousModeRef.current) return;
       autonomousTurnRef.current += 1;
       const turn = autonomousTurnRef.current;
 
@@ -329,6 +318,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       }, 1000);
     };
 
+    // Close any previous lingering socket before creating a new connection
+    if (socketRef.current) {
+      try {
+        socketRef.current.onopen = null;
+        socketRef.current.onmessage = null;
+        socketRef.current.onerror = null;
+        socketRef.current.onclose = null;
+        socketRef.current.close();
+      } catch (e) {}
+      socketRef.current = null;
+    }
+
     let ws: WebSocket | null = null;
     try {
       ws = new WebSocket(wsUrl);
@@ -338,16 +339,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       startAutonomousInterview();
     }
 
-    // Failsafe timer: unblock UI after 1.5s so user is never stuck on 'Connecting...'
+    // Failsafe timer: unblock 'Connecting...' spinner after 5s if still loading
     const connectingTimeout = setTimeout(() => {
       setIsConnecting(false);
-      if (!hasReceivedAiMessageRef.current) {
-        startAutonomousInterview();
-      }
-    }, 2500);
+    }, 5000);
 
     if (ws) {
       ws.onopen = () => {
+        clearTimeout(connectingTimeout);
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+        isAutonomousModeRef.current = false;
         console.log("WebSocket connected to", wsUrl);
         setIsConnecting(false);
         discardAudioRef.current = false;
@@ -383,10 +386,19 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
     if (ws) {
       ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
+        try {
+          if (typeof event.data !== "string") {
+            // Binary Blob received, skip JSON parse
+            return;
+          }
+          const msg = JSON.parse(event.data);
 
         if (msg.type === "ready") {
+          clearTimeout(connectingTimeout);
+          if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+          }
+          isAutonomousModeRef.current = false;
           console.log("[Live] ✓ Session ready — AI interviewer connected");
           discardAudioRef.current = false;
           setIsConnecting(false);
@@ -399,6 +411,12 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           setIsInterrupted(false);
         } else if (msg.type === "output_transcript") {
           hasReceivedAiMessageRef.current = true;
+          // Fresh speech arrived: ensure audio playback is unblocked
+          discardAudioRef.current = false;
+          if (discardAudioTimerRef.current) {
+            clearTimeout(discardAudioTimerRef.current);
+            discardAudioTimerRef.current = null;
+          }
           // Closed captions for AI
           currentAiTurnTextRef.current += (currentAiTurnTextRef.current ? " " : "") + msg.text;
           setCurrentCaption({
@@ -446,8 +464,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             },
           ]);
         } else if (msg.type === "interrupted") {
-          // Candidate interrupted the AI — discard remaining audio from this turn
-          console.log("[Live] ⚡ Interrupted — discarding remaining audio");
+          // Candidate interrupted the AI — discard in-flight stale audio from previous turn
+          console.log("[Live] ⚡ Interrupted — discarding in-flight audio");
           discardAudioRef.current = true;
           audioManager.stopPlayback();
           if ("speechSynthesis" in window) window.speechSynthesis.cancel();
@@ -457,10 +475,29 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             ...prev,
             interruptionCount: prev.interruptionCount + 1,
           }));
-          setTimeout(() => setIsInterrupted(false), 2500);
+          setTimeout(() => setIsInterrupted(false), 2000);
+
+          // Flush in-flight stale chunks for at most 400ms, then automatically re-arm for next turn
+          if (discardAudioTimerRef.current) clearTimeout(discardAudioTimerRef.current);
+          discardAudioTimerRef.current = setTimeout(() => {
+            discardAudioRef.current = false;
+            discardAudioTimerRef.current = null;
+          }, 400);
         } else if (msg.type === "turn_complete") {
-          // Re-enable audio for the next AI turn (after interruption discard)
+          // Re-enable audio for the next AI turn
           discardAudioRef.current = false;
+          if (discardAudioTimerRef.current) {
+            clearTimeout(discardAudioTimerRef.current);
+            discardAudioTimerRef.current = null;
+          }
+          // Mark last AI transcript item as final
+          setTranscripts((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.speaker === "ai") {
+              return [...prev.slice(0, -1), { ...last, isFinal: true }];
+            }
+            return prev;
+          });
           // Fallback: If no PCM audio arrived but captions did, vocalize via speech synthesis
           if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
             speakAiText(currentAiTurnTextRef.current.trim());
@@ -519,8 +556,11 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           setCurrentCaption({
             speaker: "ai",
             speakerName: "System",
-            text: `⚠️ ${msg.message || "Connection error"} — retrying...`,
+            text: `⚠️ ${msg.message || "Connection error"} — switching to backup engine...`,
           });
+          if (msg.message && (msg.message.includes("1006") || msg.message.includes("closed") || msg.message.includes("abnormal"))) {
+            startAutonomousInterview();
+          }
         } else if (msg.type === "session_closed") {
           console.warn("[Live] Session closed by server");
           setIsConnecting(true);
@@ -578,24 +618,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
           const currentText = final || interim;
           if (currentText.trim()) {
-            // Bidirectional barge-in interruption via recognized speech
-            if (audioManager.hasActivePlayback() || ("speechSynthesis" in window && window.speechSynthesis.speaking)) {
-              console.log("[Live] ⚡ Candidate speech barge-in detected — interrupting interviewer");
-              discardAudioRef.current = true;
-              audioManager.stopPlayback();
-              if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-              setIsAiSpeaking(false);
-              setIsInterrupted(true);
-              setAnalytics((prev) => ({
-                ...prev,
-                interruptionCount: prev.interruptionCount + 1,
-              }));
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "interrupt" }));
-              }
-              setTimeout(() => setIsInterrupted(false), 2000);
-            }
-
             setCurrentCaption({
               speaker: "user",
               speakerName: config.candidateName || "You",
@@ -603,9 +625,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             });
 
             if (final.trim()) {
-              if (ws && ws.readyState === WebSocket.OPEN && !isAutonomousModeRef.current) {
-                ws.send(JSON.stringify({ type: "text", text: final.trim() }));
-              } else {
+              // Only simulate client-side turns in autonomous fallback mode.
+              // When connected to Gemini Live, raw 16kHz PCM audio is streamed directly.
+              if (isAutonomousModeRef.current) {
                 handleAutonomousUserTurn(final.trim());
               }
               setTranscripts((prev) => [
@@ -675,6 +697,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     return () => {
       clearTimeout(connectingTimeout);
       clearInterval(analyticsTimer);
+      if (discardAudioTimerRef.current) clearTimeout(discardAudioTimerRef.current);
       if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
       if (speechRecognitionRef.current) {
         try {
@@ -685,8 +708,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         window.speechSynthesis.cancel();
       }
       audioManager.cleanup();
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
         ws.close();
+      }
+      if (socketRef.current === ws) {
+        socketRef.current = null;
       }
     };
   }, [config, speakAiText]);
@@ -808,7 +838,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     }
 
     try {
-      const res = await fetch("/api/evaluate-interview", {
+      const res = await fetch("/api/v1/interview/evaluate-interview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

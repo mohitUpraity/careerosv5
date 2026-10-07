@@ -72,7 +72,7 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
       const reqHeaders = { ...headers };
       delete reqHeaders['Content-Type'];
 
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+      const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '';
       const res = await fetch(`${API_BASE}/api/v1/ingest/linkedin`, {
         method: 'POST',
         headers: reqHeaders,

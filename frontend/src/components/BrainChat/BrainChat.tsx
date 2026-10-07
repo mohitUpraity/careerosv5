@@ -66,13 +66,14 @@ export const BrainChat: React.FC<BrainChatProps> = ({
 }) => {
   const { user, getAuthHeaders, activeProfile } = useAuth();
   
-  const storageKey = `careeros_brain_chat_history_${user?.id || 'default'}`;
-  const contextModeKey = `careeros_brain_context_mode_${user?.id || 'default'}`;
+  const userId = (user as any)?.uid || (user as any)?.id || 'default';
+  const storageKey = `careeros_brain_chat_history_${userId}`;
+  const contextModeKey = `careeros_brain_context_mode_${userId}`;
 
   const getDefaultWelcomeMessage = (): ChatMessage => ({
     id: 'welcome-1',
     role: 'assistant',
-    content: `👋 **Hi ${activeProfile?.full_name?.split(' ')[0] || 'there'}! I'm CareerOS Brain.**\n\nI am your GraphRAG career copilot powered by your personal **Neo4j Knowledge Graph**, code-verified GitHub repositories, resume experience, and real-time opportunity index.\n\nAsk me anything about your skill topology, benchmark rankings, targeted job matches, or ask me to draft tailored messages citing your authentic projects.`,
+    content: `👋 **Hi ${activeProfile?.name?.split(' ')[0] || (activeProfile as any)?.full_name?.split(' ')[0] || 'there'}! I'm CareerOS Brain.**\n\nI am your GraphRAG career copilot powered by your personal **Neo4j Knowledge Graph**, code-verified GitHub repositories, resume experience, and real-time opportunity index.\n\nAsk me anything about your skill topology, benchmark rankings, targeted job matches, or ask me to draft tailored messages citing your authentic projects.`,
     suggestedFollowups: [
       'What are my strongest code-verified skills and projects?',
       'How do I compare against Senior / DRDO engineer benchmarks?',
@@ -84,7 +85,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(`careeros_brain_chat_history_${user?.id || 'default'}`);
+      const saved = localStorage.getItem(`careeros_brain_chat_history_${userId}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -101,7 +102,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
   const [loading, setLoading] = useState(false);
   const [contextMode, setContextMode] = useState<'general' | 'code' | 'benchmark' | 'opportunities'>(() => {
     try {
-      const saved = localStorage.getItem(`careeros_brain_context_mode_${user?.id || 'default'}`);
+      const saved = localStorage.getItem(`careeros_brain_context_mode_${userId}`);
       if (saved && ['general', 'code', 'benchmark', 'opportunities'].includes(saved)) {
         return saved as any;
       }
@@ -135,7 +136,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
   // Reload chat when user ID changes (e.g. login/logout)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`careeros_brain_chat_history_${user?.id || 'default'}`);
+      const saved = localStorage.getItem(`careeros_brain_chat_history_${userId}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -145,7 +146,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
       }
     } catch (e) {}
     setMessages([getDefaultWelcomeMessage()]);
-  }, [user?.id]);
+  }, [userId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

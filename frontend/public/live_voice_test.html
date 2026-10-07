@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gemini Real-Time Voice Live Test (Step 1B)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090a0f;
+      --card-bg: rgba(18, 20, 29, 0.85);
+      --border: rgba(255, 255, 255, 0.08);
+      --primary: #3b82f6;
+      --primary-glow: rgba(59, 130, 246, 0.35);
+      --success: #10b981;
+      --danger: #ef4444;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 10% 20%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+        radial-gradient(at 90% 80%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 680px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      backdrop-filter: blur(20px);
+      padding: 36px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .header {
+      text-align: center;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #60a5fa;
+      margin-bottom: 12px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #3b82f6;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .model-info-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 0.85rem;
+    }
+
+    .model-info-bar .model-name {
+      font-family: 'JetBrains Mono', monospace;
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: all 0.3s ease;
+    }
+
+    .status-indicator.connected {
+      background: var(--success);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.8);
+    }
+
+    .status-indicator.connecting {
+      background: #f59e0b;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.6; }
+    }
+
+    .visualizer-card {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      min-height: 140px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas#visualizer {
+      width: 100%;
+      height: 80px;
+    }
+
+    .visualizer-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .btn-container {
+      display: flex;
+      justify-content: center;
+    }
+
+    .talk-btn {
+      background: linear-gradient(135deg, #2563eb, #3b82f6);
+      color: white;
+      border: none;
+      padding: 16px 36px;
+      border-radius: 9999px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 8px 24px var(--primary-glow);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .talk-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(59, 130, 246, 0.5);
+    }
+
+    .talk-btn:active {
+      transform: translateY(0);
+    }
+
+    .talk-btn.active {
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      box-shadow: 0 8px 24px rgba(239, 68, 68, 0.4);
+    }
+
+    .transcript-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      max-height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+
+    .transcript-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .transcript-speaker {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .speaker-ai { color: #60a5fa; }
+    .speaker-user { color: #34d399; }
+
+    .transcript-text {
+      color: #e5e7eb;
+      line-height: 1.4;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">
+        <div class="badge-dot"></div>
+        Step 1B Live Voice Test
+      </div>
+      <h1>Gemini Live Audio Bridge</h1>
+      <p class="subtitle">Full-duplex real-time audio test with native barge-in interruption over WebSockets.</p>
+    </div>
+
+    <div class="model-info-bar">
+      <div>Engine: <span class="model-name">gemini-3.8-live</span></div>
+      <div class="connection-status">
+        <div id="statusDot" class="status-indicator"></div>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+
+    <div class="visualizer-card">
+      <canvas id="visualizer"></canvas>
+      <div class="visualizer-label" id="visLabel">Audio Stream Inactive</div>
+    </div>
+
+    <div class="btn-container">
+      <button id="toggleBtn" class="talk-btn">
+        <svg id="micIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" x2="12" y1="19" y2="22"></line>
+        </svg>
+        <span id="btnText">Connect & Start Voice Test</span>
+      </button>
+    </div>
+
+    <div class="transcript-box" id="transcriptBox">
+      <div class="transcript-item">
+        <span class="transcript-speaker speaker-ai">System</span>
+        <span class="transcript-text">Click the button above and speak into your microphone to start the live duplex session.</span>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Microphone captured at 16kHz PCM • Speaker output decoded at 24kHz PCM • Native server-side barge-in
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+    let isConnected = false;
+    let audioContext = null;
+    let micStream = null;
+    let micProcessor = null;
+    let playbackContext = null;
+    let nextPlaybackTime = 0;
+    let activeSources = [];
+    let analyser = null;
+    let animationFrameId = null;
+
+    const toggleBtn = document.getElementById('toggleBtn');
+    const btnText = document.getElementById('btnText');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const transcriptBox = document.getElementById('transcriptBox');
+    const visLabel = document.getElementById('visLabel');
+    const canvas = document.getElementById('visualizer');
+    const canvasCtx = canvas.getContext('2d');
+
+    function appendTranscript(speaker, text, isAi = true) {
+      const item = document.createElement('div');
+      item.className = 'transcript-item';
+      
+      const speakerEl = document.createElement('span');
+      speakerEl.className = `transcript-speaker ${isAi ? 'speaker-ai' : 'speaker-user'}`;
+      speakerEl.textContent = speaker;
+
+      const textEl = document.createElement('span');
+      textEl.className = 'transcript-text';
+      textEl.textContent = text;
+
+      item.appendChild(speakerEl);
+      item.appendChild(textEl);
+      transcriptBox.appendChild(item);
+      transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    }
+
+    function setStatus(state, msg) {
+      statusDot.className = 'status-indicator ' + state;
+      statusText.textContent = msg;
+    }
+
+    function flushAudioBuffer() {
+      activeSources.forEach(src => {
+        try { src.stop(); } catch (e) {}
+      });
+      activeSources = [];
+      if (playbackContext) {
+        nextPlaybackTime = playbackContext.currentTime;
+      }
+    }
+
+    function initVisualizer() {
+      canvas.width = canvas.clientWidth * window.devicePixelRatio;
+      canvas.height = canvas.clientHeight * window.devicePixelRatio;
+
+      function draw() {
+        animationFrameId = requestAnimationFrame(draw);
+        if (!analyser) return;
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        analyser.getByteFrequencyData(dataArray);
+
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const barWidth = (canvas.width / bufferLength) * 2.5;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const barHeight = (dataArray[i] / 255) * canvas.height;
+          const gradient = canvasCtx.createLinearGradient(0, canvas.height, 0, 0);
+          gradient.addColorStop(0, '#2563eb');
+          gradient.addColorStop(1, '#60a5fa');
+
+          canvasCtx.fillStyle = gradient;
+          canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
+          x += barWidth;
+        }
+      }
+      draw();
+    }
+
+    async function startLiveSession() {
+      setStatus('connecting', 'Connecting...');
+      btnText.textContent = 'Connecting...';
+      toggleBtn.disabled = true;
+
+      try {
+        // Initialize Web Audio Contexts
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        playbackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        if (playbackContext.state === 'suspended') {
+          await playbackContext.resume();
+        }
+
+        // Setup Analyser for visualizer
+        analyser = playbackContext.createAnalyser();
+        analyser.fftSize = 64;
+        initVisualizer();
+
+        // Get microphone stream
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          }
+        });
+
+        // Determine WebSocket URL
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.port === '5173' ? 'localhost:8000' : window.location.host;
+        const wsUrl = `${proto}//${host}/api/v1/live/ws?role=Senior%20Software%20Engineer&company=Google&voice=Zephyr`;
+
+        ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
+
+        ws.onopen = () => {
+          setStatus('connected', 'Live Duplex Active');
+          btnText.textContent = 'End Voice Test';
+          toggleBtn.className = 'talk-btn active';
+          toggleBtn.disabled = false;
+          isConnected = true;
+          visLabel.textContent = '🎙️ Listening & Speaking...';
+
+          // Send setup message
+          ws.send(JSON.stringify({
+            type: 'setup',
+            role: 'Senior Software Engineer',
+            company: 'Google',
+            voice: 'Zephyr',
+            candidateName: 'Candidate'
+          }));
+
+          // Start capturing and streaming microphone PCM at 16kHz
+          startMicStreaming();
+        };
+
+        ws.onmessage = async (event) => {
+          if (typeof event.data === 'string') {
+            try {
+              const msg = JSON.parse(event.data);
+              if (msg.type === 'output_transcript') {
+                appendTranscript('Interviewer (AI)', msg.text, true);
+              } else if (msg.type === 'input_transcript') {
+                appendTranscript('You', msg.text, false);
+              } else if (msg.type === 'interrupted') {
+                flushAudioBuffer();
+                visLabel.textContent = '⚠️ User Interrupted AI';
+              } else if (msg.type === 'status') {
+                setStatus('connected', msg.message || 'Connected');
+              }
+            } catch (e) {
+              console.error('Error parsing JSON message:', e);
+            }
+          } else if (event.data instanceof ArrayBuffer) {
+            // Binary audio frame from server (24kHz Int16 PCM)
+            const bytes = new Uint8Array(event.data);
+            if (bytes.length > 1 && bytes[0] === 0x01) {
+              const pcmData = new Int16Array(event.data.slice(1));
+              playPcmChunk(pcmData);
+            }
+          }
+        };
+
+        ws.onerror = (err) => {
+          console.error('WebSocket Error:', err);
+          setStatus('error', 'Connection Error');
+          stopLiveSession();
+        };
+
+        ws.onclose = () => {
+          setStatus('', 'Disconnected');
+          stopLiveSession();
+        };
+
+      } catch (err) {
+        console.error('Failed to start session:', err);
+        alert('Microphone access or connection error: ' + err.message);
+        stopLiveSession();
+      }
+    }
+
+    function startMicStreaming() {
+      const source = audioContext.createMediaStreamSource(micStream);
+      micProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+      const originalSampleRate = audioContext.sampleRate;
+
+      micProcessor.onaudioprocess = (e) => {
+        if (!isConnected || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const input = e.inputBuffer.getChannelData(0);
+        // Downsample to 16,000 Hz
+        const targetSampleRate = 16000;
+        const ratio = originalSampleRate / targetSampleRate;
+        const newLength = Math.round(input.length / ratio);
+        const pcm16 = new Int16Array(newLength);
+
+        for (let i = 0; i < newLength; i++) {
+          const s = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        // Send binary frame (Byte 0 = 0x01 for Audio)
+        const frame = new Uint8Array(1 + pcm16.byteLength);
+        frame[0] = 0x01;
+        frame.set(new Uint8Array(pcm16.buffer), 1);
+        ws.send(frame.buffer);
+      };
+
+      source.connect(micProcessor);
+      micProcessor.connect(audioContext.destination);
+    }
+
+    function playPcmChunk(pcm16) {
+      if (!playbackContext) return;
+
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / (pcm16[i] < 0 ? 32768 : 32767);
+      }
+
+      const audioBuffer = playbackContext.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+
+      const source = playbackContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(analyser);
+      analyser.connect(playbackContext.destination);
+
+      const currentTime = playbackContext.currentTime;
+      const startTime = Math.max(nextPlaybackTime, currentTime);
+      source.start(startTime);
+      nextPlaybackTime = startTime + audioBuffer.duration;
+
+      activeSources.push(source);
+      source.onended = () => {
+        activeSources = activeSources.filter(s => s !== source);
+      };
+    }
+
+    function stopLiveSession() {
+      isConnected = false;
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
+      }
+      if (micProcessor) {
+        micProcessor.disconnect();
+        micProcessor = null;
+      }
+      flushAudioBuffer();
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+
+      btnText.textContent = 'Connect & Start Voice Test';
+      toggleBtn.className = 'talk-btn';
+      toggleBtn.disabled = false;
+      setStatus('', 'Disconnected');
+      visLabel.textContent = 'Audio Stream Inactive';
+      canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      if (isConnected) {
+        stopLiveSession();
+      } else {
+        startLiveSession();
+      }
+    });
+  </script>
+</body>
+</html>
