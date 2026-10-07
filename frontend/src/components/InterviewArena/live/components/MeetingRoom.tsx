@@ -668,11 +668,22 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
     // Video Streaming Frame Loop (~1 FPS)
     frameIntervalRef.current = setInterval(() => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || isVideoOff) return;
       const canvas = hiddenCanvasRef.current;
-      const activeVideo = videoFeedRef.current;
+      if (!canvas) return;
 
-      if (canvas && activeVideo && activeVideo.readyState >= 2 && !isVideoOff) {
+      // In Safari, off-screen video elements can be suspended by WebKit.
+      // Search for any active playing video element rendering the stream:
+      let activeVideo = videoFeedRef.current;
+      if (!activeVideo || activeVideo.readyState < 2 || activeVideo.videoWidth === 0) {
+        const allVideos = Array.from(document.querySelectorAll("video")) as HTMLVideoElement[];
+        const playing = allVideos.find((v) => v.readyState >= 2 && v.videoWidth > 0 && !v.paused);
+        if (playing) {
+          activeVideo = playing;
+        }
+      }
+
+      if (activeVideo && activeVideo.readyState >= 2) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           canvas.width = 320;
@@ -728,10 +739,11 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     }
   }, [isMuted]);
 
-  // Update video element feed source
+  // Update video element feed source and start playback
   useEffect(() => {
     if (videoFeedRef.current) {
       videoFeedRef.current.srcObject = screenStream || userStream;
+      videoFeedRef.current.play().catch(() => {});
     }
   }, [userStream, screenStream, isVideoOff]);
 
@@ -882,13 +894,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         </div>
       )}
 
-      {/* Off-screen video & canvas for frame grabbing */}
+      {/* Active video & canvas for Safari-compliant frame grabbing */}
       <video
         ref={videoFeedRef}
         autoPlay
         playsInline
         muted
-        style={{ position: "fixed", top: "-9999px", left: "-9999px", width: "320px", height: "180px", pointerEvents: "none", opacity: 0 }}
+        style={{ position: "fixed", bottom: 0, right: 0, width: "320px", height: "180px", opacity: 0.001, pointerEvents: "none", zIndex: -10 }}
       />
       <canvas ref={hiddenCanvasRef} className="hidden" />
 

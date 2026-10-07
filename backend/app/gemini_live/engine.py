@@ -170,6 +170,7 @@ class GeminiLiveEngine:
 
     async def _upstream_video_worker(self):
         """Streams latest webcam frame (1-2 FPS)."""
+        sent_count = 0
         while not self.is_closing:
             try:
                 if self.video_in_slot is not None and self.session and self.is_connected:
@@ -177,6 +178,9 @@ class GeminiLiveEngine:
                     await self.session.send_realtime_input(
                         media=types.Blob(data=frame, mime_type="image/jpeg")
                     )
+                    sent_count += 1
+                    if sent_count % 10 == 1:
+                        logger.info(f"📹 Streamed webcam frame #{sent_count} ({len(frame)} bytes) to Gemini Live Vision")
                 await asyncio.sleep(0.8)  # ~1.2 FPS
             except asyncio.CancelledError:
                 break

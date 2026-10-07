@@ -100,18 +100,21 @@ export class AudioStreamingManager {
       }
       const rms = Math.sqrt(sumSquares / channelData.length);
 
-      // Prevent acoustic echo when AI speaks (ignore low-to-mid speaker feedback)
+      // Prevent acoustic echo when AI speaks (ignore low speaker feedback)
       const isAiSpeaking = this.scheduledSources.length > 0;
-      if (isAiSpeaking && rms < 0.025) {
+      if (isAiSpeaking && rms < 0.015) {
         return;
       }
 
       // Ignore pure background silence when candidate is speaking
-      if (!isAiSpeaking && rms < 0.002) {
+      if (!isAiSpeaking && rms < 0.001) {
         return;
       }
 
-      const base64Pcm = this.floatTo16BitPCMBase64(channelData);
+      // Guarantee strict 16kHz PCM regardless of Safari's native hardware AudioContext rate (44.1k/48k)
+      const nativeRate = this.inputAudioCtx ? this.inputAudioCtx.sampleRate : 16000;
+      const resampled = this.downsampleTo16k(channelData, nativeRate);
+      const base64Pcm = this.floatTo16BitPCMBase64(resampled);
       if (this.onAudioChunkCallback) {
         this.onAudioChunkCallback(base64Pcm);
       }
@@ -143,6 +146,31 @@ export class AudioStreamingManager {
    */
   public hasActivePlayback(): boolean {
     return this.scheduledSources.length > 0;
+  }
+
+  /**
+   * Resamples Float32 audio buffer from native hardware sample rate to 16kHz
+   */
+  private downsampleTo16k(input: Float32Array, fromRate: number): Float32Array {
+    if (!fromRate || Math.abs(fromRate - 16000) < 100) return input;
+    const ratio = fromRate / 16000;
+    const newLength = Math.round(input.length / ratio);
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetInput = 0;
+    while (offsetResult < result.length) {
+      const nextOffsetInput = Math.round((offsetResult + 1) * ratio);
+      let accum = 0;
+      let count = 0;
+      for (let i = offsetInput; i < nextOffsetInput && i < input.length; i++) {
+        accum += input[i];
+        count++;
+      }
+      result[offsetResult] = count > 0 ? accum / count : (input[offsetInput] || 0);
+      offsetResult++;
+      offsetInput = nextOffsetInput;
+    }
+    return result;
   }
 
   /**

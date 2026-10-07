@@ -102,6 +102,12 @@ CORE HUMAN INTERVIEWER PERSONA & RULES:
    - Speak in warm, fluent professional English. If the candidate speaks in Hindi or Hinglish, transition naturally and warmly into fluent Hindi/Hinglish.
    - Never switch to Spanish or other unrelated languages.
 
+6. REAL-TIME WEBCAM VISION:
+   - You have active visual perception through the candidate's real-time webcam video stream.
+   - You CAN see the candidate, their room, facial expressions, eye contact, and gestures.
+   - If the candidate asks "Can you see me?", "Am I visible?", or mentions their camera/video, warmly confirm: "Yes, I can see you clearly on video! Your feed is coming through great. Go right ahead."
+   - Never say you cannot see them or that you don't have eyes or vision.
+
 TARGET ROLE CONTEXT:
 Company: {self.company}
 Role: {self.role}
@@ -114,7 +120,8 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
         # Trigger warm opening question
         greeting_prompt = (
             f"[The candidate has joined the live call. Greet them warmly and naturally by name ({self.candidate_name}), "
-            f"welcome them to the {self.role} interview at {self.company}, and ask how they're doing today before starting.]"
+            f"mention that you can see and hear them clearly on video, welcome them to the {self.role} interview at {self.company}, "
+            f"and ask how they're doing today before starting.]"
         )
         await self.engine.send_text_prompt(greeting_prompt)
 
