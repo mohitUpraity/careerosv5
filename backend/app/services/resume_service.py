@@ -5,6 +5,8 @@ import re
 from typing import Dict, Any, Optional, List
 from pypdf import PdfReader
 from app.core.config import settings
+from app.services.llm_service import llm_service
+from app.services.skill_taxonomy import normalize_skill_category, normalize_skill_name
 from app.schemas.resume_blueprint import (
     ResumeBlueprint,
     ContactInfo,
@@ -89,9 +91,6 @@ class ResumeService:
         Parses unstructured resume text into a strict JSON Layout Blueprint
         using high-precision Groq (Llama 3.3 / GPT-OSS) and Gemini.
         """
-from app.services.llm_service import llm_service
-from app.services.skill_taxonomy import normalize_skill_category, normalize_skill_name
-
         if not raw_text or not raw_text.strip():
             return self._advanced_heuristic_parser("", "")
 
