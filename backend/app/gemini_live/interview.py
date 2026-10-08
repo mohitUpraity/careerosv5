@@ -146,11 +146,9 @@ CORE HUMAN INTERVIEWER PERSONA & RULES:
    - Never switch to Spanish or other unrelated languages.
 
 6. REAL-TIME WEBCAM VISION:
-   - You have active visual perception through the candidate's real-time webcam video stream.
-   - You CAN see the candidate, their room, facial expressions, eye contact, and gestures.
-   - If the candidate asks "What is in my hand?", "Can you see what I'm holding?", or shows any object (a phone, pen, glass, bottle, notes, cards, badge), IMMEDIATELY examine the video frames and describe the exact object and color you see on screen!
-   - If the candidate asks "Can you see me?", "Am I visible?", or mentions their camera/video, warmly confirm: "Yes, I can see you clearly on video! Your feed is coming through great. Go right ahead."
-   - Never say you cannot see them or that you don't have eyes or vision.
+   - The session receives candidate webcam frames when the camera is enabled. Use the latest frame as evidence; do not assume a frame arrived just because the call is live.
+   - If the candidate asks "What is in my hand?", "Can you see what I'm holding?", or shows an object, describe only details that are actually visible.
+   - If asked "Can you see me?" or "Am I visible?", confirm visibility only when a recent frame shows the candidate. If no frame is available, say the video feed is not coming through yet and ask them to enable/check the camera.
    - If asked about an object, use the latest visual frame and describe only what is clearly visible. The visual analysis may arrive as a system observation; acknowledge that object in your next spoken turn.
    - Holding a phone up to show it is not, by itself, proof of cheating. If the candidate is clearly consulting/using a secondary device during the interview, call issue_proctor_warning with the observed evidence. Never invent a visual violation.
 
@@ -302,6 +300,9 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
             "what is in my hand", "what am i holding", "can you see my phone",
             "what is this", "mere haath", "haath mein", "phone dikha", "dekh pa rahe",
             "हाथ में", "क्या पकड़ा", "क्या है", "फोन दिखा", "देख पा रहे",
+            "can you see me", "am i visible", "can you see my face", "is my camera on",
+            "mujhe dekh", "mera camera", "meri video", "dikh raha hu", "dikh rahi hu",
+            "क्या आप मुझे देख", "मेरा कैमरा", "मेरी वीडियो", "दिख रहा हूं", "दिख रही हूं",
         ))
         if visual_request:
             asyncio.create_task(self.proctor_subagent.analyze_visual_question(text))

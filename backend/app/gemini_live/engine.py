@@ -209,7 +209,7 @@ class GeminiLiveEngine:
                 if self.video_in_slot is not None and self.session and self.is_connected:
                     frame, self.video_in_slot = self.video_in_slot, None
                     await self._safe_send_realtime_input(
-                        media=types.Blob(data=frame, mime_type="image/jpeg")
+                        video=types.Blob(data=frame, mime_type="image/jpeg")
                     )
                     sent_count += 1
                     if sent_count % 10 == 1:

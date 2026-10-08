@@ -164,6 +164,9 @@ class ProctorGuardianSubAgent:
                 "description": "I don't have a fresh camera frame yet. Please hold it in view for a moment.",
                 "confidence": 0,
             }})
+            await self.send_interviewer_prompt(
+                "[CAMERA STATUS: No webcam frame has reached the vision checker yet. Tell the candidate the video feed is not coming through, ask them to check/enable the camera, and continue the interview over audio.]"
+            )
             return
 
         prompt = (
