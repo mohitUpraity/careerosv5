@@ -33,6 +33,7 @@ import {
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { NoteGPTSkillStudio } from './NoteGPTSkillStudio';
+import { SalaryOutlook } from './SalaryOutlook';
 
 interface CareerGrowthHubProps {
   onSuccessToast: (msg: string) => void;
@@ -51,7 +52,7 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [learningActionLoading, setLearningActionLoading] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'unlocks' | 'sprints' | 'demands' | 'boom' | 'notegpt'>('unlocks');
+  const [activeSubTab, setActiveSubTab] = useState<'unlocks' | 'sprints' | 'demands' | 'boom' | 'notegpt' | 'salary'>('unlocks');
   const [noteGPTSkill, setNoteGPTSkill] = useState<string>('Apache Kafka & Event Streaming');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
@@ -151,7 +152,11 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
       <WorkspacePageHeader page="growth" eyebrow="GROW WITH INTENTION" title="Build the skills for your next chapter." description="Turn market demand into practical projects and manageable learning sprints, shaped around your career goals." actions={<button className="dashboard-button dashboard-button-primary" onClick={handleRefresh} disabled={refreshing}><RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />{refreshing ? 'Rescanning…' : 'Rescan market'}</button>} />
       <WorkspaceMetrics items={[{label:"Market readiness",value:marketIntel?.user_readiness_score != null ? marketIntel.user_readiness_score + "%" : "—",detail:marketIntel ? "Based on your latest market analysis" : "Run an analysis to see your readiness",icon:BarChart3},{label:"Skill opportunities",value:unlocksList.length,detail:"Capabilities with a project to build",icon:Zap,tone:"amber"},{label:"Active sprints",value:activeSprintsList.length,detail:"Skills you are currently developing",icon:Clock,tone:"violet"},{label:"Roles analysed",value:marketIntel?.analyzed_jobs_count ?? "—",detail:"Job requirements behind your insights",icon:Building2,tone:"teal"}]} />
       <div className="ws-context-strip"><span>Target role <strong>{targetRole}</strong></span><span>Domain <strong>{targetDomain}</strong></span>{profile?.preferences.career_goals?.target_milestone && <span>Goal <strong>{profile.preferences.career_goals.target_milestone}</strong></span>}</div>
-      <div className="ws-tabbar">
+        <div className="ws-tabbar">
+          <button aria-pressed={activeSubTab === 'salary'} onClick={() => setActiveSubTab('salary')} className="">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-300" />
+            <span>CTC outlook</span>
+          </button>
           <button
             aria-pressed={activeSubTab === 'unlocks'} onClick={() => setActiveSubTab('unlocks')}
             className=""
@@ -197,6 +202,8 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
             <span className="px-1.5 py-0.2 text-[9px] bg-purple-400 text-slate-950 rounded font-black">NEW</span>
           </button>
         </div>
+
+      {activeSubTab === 'salary' && <SalaryOutlook profile={profile} marketIntel={marketIntel} />}
 
       {!marketIntel && <section className="dashboard-data-empty" role="status"><span className="dashboard-soft-icon is-blue"><TrendingUp size={21} /></span><div><h2>Your growth plan starts with market insight</h2><p>Rescan the market to find skill gaps and learning sprints for your career goals.</p></div><button className="dashboard-button" onClick={handleRefresh} disabled={refreshing}><RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />{refreshing ? 'Rescanning…' : 'Rescan market'}</button></section>}
 
@@ -723,4 +730,3 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
     </div>
   );
 };
-
