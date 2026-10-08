@@ -1,8 +1,10 @@
 import json
 import logging
+import re
 from typing import List, Dict, Any
 from app.core.config import settings
 from app.services.llm_service import llm_service
+from app.services.skill_taxonomy import normalize_skill_category, normalize_skill_name
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class GeminiExtractor:
         topics = list(repo_data.get('topics', []))
         readme_snippet = repo_data.get('readme_snippet', '')
 
-        system_prompt = "You are a senior technical knowledge graph parser. Analyze the GitHub repository metadata and extract all core technical skills, programming languages, libraries, frameworks, tools, databases, and architectural domains."
+        system_prompt = "You extract only technologies directly evidenced by the repository metadata, languages, topics, or README. Do not infer a skill from a vague project description. Return concise canonical technology names and a category for each."
         user_prompt = f"""
 Project Name: {repo_name}
 Description: {desc}
@@ -45,10 +47,10 @@ Return strictly valid JSON with structure:
         seen_names = set()
 
         def add_skill(name: str, cat: str = "Technical"):
-            clean_name = name.strip()
+            clean_name = normalize_skill_name(name)
             if clean_name and clean_name.lower() not in seen_names and len(clean_name) > 1:
                 seen_names.add(clean_name.lower())
-                extracted_skills.append({"name": clean_name, "category": cat})
+                extracted_skills.append({"name": clean_name, "category": normalize_skill_category(clean_name, cat)})
 
         try:
             parsed = await llm_service.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
@@ -69,10 +71,11 @@ Return strictly valid JSON with structure:
             if lang and lang not in ['Unknown', 'General']:
                 add_skill(lang, "Language")
 
-        # 2. GitHub Topics
+        # Topics are repository labels, so keep them as claimed evidence and
+        # normalize their formatting before they enter the graph.
         for top in topics:
             if top:
-                add_skill(top.capitalize(), "Domain")
+                add_skill(top.replace("-", " ").replace("_", " ").title(), "Domain")
 
         # 3. Keyword / Signature Discovery across repo name, desc, and README
         text_blob = f"{repo_name} {desc} {readme_snippet}".lower()
@@ -83,7 +86,7 @@ Return strictly valid JSON with structure:
             "react": ("React", "Framework"),
             "vue": ("Vue.js", "Framework"),
             "angular": ("Angular", "Framework"),
-            "next": ("Next.js", "Framework"),
+            "next.js": ("Next.js", "Framework"),
             "vite": ("Vite", "Tool"),
             "neo4j": ("Neo4j", "Database"),
             "mongodb": ("MongoDB", "Database"),
@@ -111,7 +114,6 @@ Return strictly valid JSON with structure:
             "openai": ("OpenAI API", "AI/ML"),
             "groq": ("Groq LLM", "AI/ML"),
             "weasyprint": ("WeasyPrint", "Tool"),
-            "pdf": ("PDF Generation", "Tool"),
             "latex": ("LaTeX", "Tool"),
             "animation": ("Web Animation / CSS", "Web"),
             "three.js": ("Three.js", "Web"),
@@ -122,23 +124,18 @@ Return strictly valid JSON with structure:
             "javascript": ("JavaScript", "Language"),
             "typescript": ("TypeScript", "Language"),
             "python": ("Python", "Language"),
-            "bot": ("Bot Automation", "Tool"),
-            "invoice": ("Invoice OCR / Parser", "Domain"),
-            "analyzer": ("Code Analysis", "Tool"),
-            "crawler": ("Web Scraping", "Tool"),
-            "scraper": ("Web Scraping", "Tool"),
             "selenium": ("Selenium", "DevOps"),
             "beautifulsoup": ("BeautifulSoup", "Tool"),
             "bs4": ("BeautifulSoup", "Tool"),
-            "search": ("Search Engine", "Domain"),
             "ast": ("AST Code Analysis", "Tool")
         }
 
         for keyword, (std_name, category) in known_tech.items():
-            if keyword in text_blob:
+            if re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", text_blob):
                 add_skill(std_name, category)
 
-        # Ensure at least 1 verified skill exists if any language was detected
+        # Language metadata can establish a claimed repository skill, never a
+        # verified candidate skill.
         if not extracted_skills and primary_lang:
             add_skill(primary_lang, "Language")
 

@@ -41,6 +41,21 @@ class Neo4jService:
         })
         nodes_merged_count += 1
 
+        # Older GitHub ingestion created VERIFIED_SKILL edges for every
+        # detected technology. Retain an edge only when an actual assessment
+        # record backs that same skill.
+        await neo4j_client.execute_query(
+            """
+            MATCH (u:User {id: $user_id})-[legacy:VERIFIED_SKILL]->(s:Skill)
+            OPTIONAL MATCH (u)-[assessment:HAS_SKILL]->(s)
+            WHERE assessment.is_verified = true
+            WITH legacy, count(assessment) AS assessment_count
+            WHERE assessment_count = 0
+            DELETE legacy
+            """,
+            {"user_id": user_id}
+        )
+
         # 2. Upsert Projects and link Skills
         for proj in projects:
             proj_query = """
@@ -60,10 +75,9 @@ class Neo4jService:
             UNWIND CASE WHEN size($skills) = 0 THEN [null] ELSE $skills END AS skill_data
             WITH p, u, skill_data WHERE skill_data IS NOT NULL
             MERGE (s:Skill {name: skill_data.name})
-            ON CREATE SET s.category = coalesce(skill_data.category, 'Technical')
+            SET s.category = coalesce(skill_data.category, s.category, 'Other')
             MERGE (p)-[:USES_TECH]->(s)
             MERGE (u)-[:HAS_SKILL {source: 'github'}]->(s)
-            MERGE (u)-[:VERIFIED_SKILL]->(s)
             RETURN count(s) AS linked_skills;
             """
             params = {
@@ -396,7 +410,7 @@ class Neo4jService:
             MATCH (u:User {id: $user_id})
             UNWIND $skills AS skill_data
             MERGE (s:Skill {name: skill_data.name})
-            ON CREATE SET s.category = skill_data.category
+            SET s.category = coalesce(skill_data.category, s.category, 'Other')
             MERGE (u)-[:HAS_SKILL {source: 'resume'}]->(s)
             RETURN count(s) AS skill_count;
             """

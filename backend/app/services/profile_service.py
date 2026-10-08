@@ -51,7 +51,8 @@ class ProfileService:
             user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
             user_info = user_res[0] if user_res else {}
 
-            # 2. Fetch Verified Skills & Evidence Source (from Projects and User)
+            # A GitHub/project reference is evidence of code exposure, not a
+            # verified skill badge. Only an explicit assessment flag is verified.
             skills_query = """
             MATCH (u:User {id: $user_id})
             OPTIONAL MATCH (u)-[:BUILT]->(p:Project)-[:USES_TECH]->(ps:Skill)
@@ -62,7 +63,8 @@ class ProfileService:
                    s.category AS category,
                    collect(DISTINCT coalesce(r.source, 'github')) AS sources,
                    collect(DISTINCT p.name) AS backed_by_projects,
-                   count(DISTINCT p) AS project_count
+                   count(DISTINCT p) AS project_count,
+                   max(CASE WHEN r.is_verified = true THEN 1 ELSE 0 END) AS assessment_verified
             ORDER BY project_count DESC, s.name ASC
             """
             skills_res = await neo4j_client.execute_query(skills_query, {"user_id": user_id})
@@ -74,11 +76,11 @@ class ProfileService:
                 item = {
                     "name": s["skill"],
                     "category": s.get("category") or "Technical",
-                    "verified_by_code": len(s["backed_by_projects"]) > 0,
+                    "is_verified": s.get("assessment_verified", 0) == 1,
                     "evidence_projects": s["backed_by_projects"],
                     "sources": s["sources"]
                 }
-                if item["verified_by_code"]:
+                if item["is_verified"]:
                     verified_skills.append(item)
                 else:
                     resume_only_skills.append(item)
@@ -209,6 +211,8 @@ class ProfileService:
                 "metrics": {
                     "profile_strength_score": strength_score,
                     "total_skills": total_skills_count,
+                    "verified_skills_count": verified_count,
+                    "claimed_skills_count": len(resume_only_skills),
                     "code_verified_skills_count": verified_count,
                     "resume_skills_count": len(resume_only_skills),
                     "total_projects": proj_count,
@@ -217,6 +221,8 @@ class ProfileService:
                     "network_reach_connections": network_count
                 },
                 "skills_analysis": {
+                    "verified_skills": verified_skills,
+                    "claimed_skills": resume_only_skills,
                     "code_verified_skills": verified_skills,
                     "resume_only_skills": resume_only_skills
                 },
@@ -693,35 +699,16 @@ class ProfileService:
             "email": "",
             "phone": "",
             "headline": "Software Engineer",
-            "location": "Bengaluru, India",
-            "bio": "Passionate Software Engineer specializing in scalable backends, graph algorithms, and cloud technologies.",
+            "location": "",
+            "bio": "",
             "github_username": "",
             "github_url": "",
             "linkedin_url": "",
             "portfolio_url": "",
             "verified_skills": [],
-            "education": [
-                {
-                    "university": "Anand Engineering College",
-                    "degree": "B.Tech in Computer Science & Engineering",
-                    "field_of_study": "Computer Science",
-                    "start_date": "2021",
-                    "end_date": "2025",
-                    "gpa": "8.5"
-                }
-            ],
-            "experience": [
-                {
-                    "company": "DRDO ADRDE",
-                    "role": "Cybersecurity & Software Engineering Intern",
-                    "location": "Agra, India",
-                    "start_date": "Jun 2024",
-                    "end_date": "Aug 2024",
-                    "is_current": False,
-                    "description": "Engineered real-time anomalous network socket detection and automated packet analysis pipelines using Python and C++."
-                }
-            ],
-            "skills": ["Python", "FastAPI", "Neo4j", "React", "Docker", "PostgreSQL", "TypeScript", "Redis", "Git", "REST APIs", "System Design", "GraphRAG"],
+            "education": [],
+            "experience": [],
+            "skills": [],
             "preferences": {
                 "primary_role": "Backend Engineer",
                 "priority_domain": "Distributed Systems & Cloud",
@@ -1005,8 +992,6 @@ class ProfileService:
             prefs = payload.get("preferences") or {}
             prefs_json_str = json.dumps(prefs)
 
-            raw_username = payload.get("username", "").strip()
-            username = re.sub(r'[^a-zA-Z0-9_\-]', '', raw_username.lower()) if raw_username else ""
             is_public = payload.get("is_public", True) if payload.get("is_public") is not None else True
 
             # 1. Upsert User Node (Clean full_name of trailing slug hashes)
@@ -1023,7 +1008,6 @@ class ProfileService:
                 u.headline = CASE WHEN $headline <> '' THEN $headline ELSE u.headline END,
                 u.location = CASE WHEN $location <> '' THEN $location ELSE u.location END,
                 u.summary = CASE WHEN $bio <> '' THEN $bio ELSE u.summary END,
-                u.username = CASE WHEN $username <> '' THEN $username ELSE u.username END,
                 u.is_public = $is_public,
                 u.github_username = CASE WHEN $github_username <> '' THEN $github_username ELSE u.github_username END,
                 u.github_url = CASE WHEN $github_url <> '' THEN $github_url ELSE u.github_url END,
@@ -1041,7 +1025,6 @@ class ProfileService:
                 "headline": headline,
                 "location": location,
                 "bio": bio,
-                "username": username,
                 "is_public": is_public,
                 "github_username": github_username,
                 "github_url": github_url,
@@ -1582,18 +1565,12 @@ class ProfileService:
         Validates username format and checks uniqueness in Neo4j.
         Allowed format: 3-30 chars, alphanumeric, underscores, hyphens.
         """
-        clean = re.sub(r'[^a-zA-Z0-9_\-]', '', username.strip().lower())
-        if len(clean) < 3:
+        clean = username.strip().lower()
+        if not re.fullmatch(r'[a-z0-9_-]{3,30}', clean):
             return {
                 "available": False,
                 "username": clean,
-                "message": "Username must be at least 3 characters long."
-            }
-        if len(clean) > 30:
-            return {
-                "available": False,
-                "username": clean,
-                "message": "Username cannot exceed 30 characters."
+                "message": "Use 3–30 characters: letters, numbers, underscores, or hyphens."
             }
 
         reserved = ["admin", "root", "api", "login", "auth", "public", "verified", "test", "demo", "careeros"]
@@ -1605,7 +1582,7 @@ class ProfileService:
             }
 
         if not neo4j_client.driver or not neo4j_client.is_connected:
-            return {"available": True, "username": clean, "message": "Username is available"}
+            return {"available": False, "username": clean, "message": "Username service is temporarily unavailable. Try again shortly."}
 
         query = """
         MATCH (u:User)
@@ -1634,14 +1611,21 @@ class ProfileService:
             return {"success": False, "message": check["message"], "username": check["username"]}
 
         clean = check["username"]
-        if neo4j_client.driver and neo4j_client.is_connected:
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            return {"success": False, "message": "Username service is temporarily unavailable. Try again shortly.", "username": clean}
+        try:
             query = """
             MATCH (u:User {id: $user_id})
             SET u.username = $username,
                 u.updated_at = datetime()
             RETURN u.id AS id, u.username AS username
             """
-            await neo4j_client.execute_query(query, {"user_id": user_id, "username": clean})
+            result = await neo4j_client.execute_query(query, {"user_id": user_id, "username": clean})
+            if not result:
+                return {"success": False, "message": "Candidate profile was not found.", "username": clean}
+        except Exception:
+            logger.exception("Failed to claim public username for %s", user_id)
+            return {"success": False, "message": "Could not save this handle. Try again shortly.", "username": clean}
 
         return {
             "success": True,
@@ -1739,9 +1723,13 @@ class ProfileService:
     async def get_public_profile(cls, username: str) -> Dict[str, Any]:
         """
         Public-facing recruiter verification dossier (No Authentication Required).
-        Resolves by unique username, github_username, or user_id.
+        Resolves only by a public username or linked GitHub username.
         """
-        clean_user = re.sub(r'[^a-zA-Z0-9_\-]', '', username.strip().lower())
+        clean_user = username.strip().lower()
+        if not re.fullmatch(r'[a-z0-9_-]{3,30}', clean_user):
+            raise ValueError("Profile not found")
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            raise RuntimeError("Public profile service is temporarily unavailable")
         
         # 1. Fetch user by username or github_username or id
         user_record = None
@@ -1750,11 +1738,8 @@ class ProfileService:
         if neo4j_client.driver and neo4j_client.is_connected:
             match_query = """
             MATCH (u:User)
-            WHERE toLower(coalesce(u.username, '')) = $username 
-               OR toLower(coalesce(u.github_username, '')) = $username 
-               OR toLower(split(coalesce(u.email, ''), '@')[0]) = $username
-               OR toLower(replace(coalesce(u.full_name, ''), ' ', '')) = $username
-               OR u.id = $raw_user
+            WHERE toLower(coalesce(u.username, '')) = $username
+               OR toLower(coalesce(u.github_username, '')) = $username
             RETURN u.id AS id,
                    u.username AS username,
                    u.full_name AS full_name,
@@ -1768,57 +1753,12 @@ class ProfileService:
                    u.portfolio_url AS portfolio_url
             LIMIT 1
             """
-            res = await neo4j_client.execute_query(match_query, {
-                "username": clean_user,
-                "raw_user": username
-            })
-            if res and len(res) > 0:
+            res = await neo4j_client.execute_query(match_query, {"username": clean_user})
+            if res and len(res) > 0 and res[0].get("is_public") is not False:
                 user_record = res[0]
                 matched_user_id = user_record.get("id")
-                if not user_record.get("username") and clean_user:
-                    user_record["username"] = clean_user
-                    try:
-                        await neo4j_client.execute_query(
-                            "MATCH (u:User {id: $uid}) SET u.username = $uname",
-                            {"uid": matched_user_id, "uname": clean_user}
-                        )
-                    except Exception:
-                        pass
-
-        # Fallback if user not found: retrieve latest active user or generate clean default
-        if not user_record and neo4j_client.driver and neo4j_client.is_connected:
-            fallback_res = await neo4j_client.execute_query(
-                "MATCH (u:User) RETURN u.id AS id, u.username AS username, u.full_name AS full_name, u.headline AS headline, u.location AS location, u.summary AS bio, u.github_username AS github_username, u.github_url AS github_url, u.linkedin_url AS linkedin_url, u.portfolio_url AS portfolio_url ORDER BY u.created_at DESC LIMIT 1"
-            )
-            if fallback_res and len(fallback_res) > 0:
-                user_record = fallback_res[0]
-                matched_user_id = user_record.get("id")
-                if not user_record.get("username") and clean_user:
-                    user_record["username"] = clean_user
-                    try:
-                        await neo4j_client.execute_query(
-                            "MATCH (u:User {id: $uid}) SET u.username = $uname",
-                            {"uid": matched_user_id, "uname": clean_user}
-                        )
-                    except Exception:
-                        pass
-
-        # If user record still empty (offline/mock)
         if not user_record:
-            matched_user_id = "candidate_1"
-            user_record = {
-                "id": "candidate_1",
-                "username": clean_user or "candidate",
-                "full_name": "Mohit Upraity",
-                "headline": "Full Stack & Distributed Systems Engineer",
-                "location": "Bengaluru, India",
-                "bio": "Passionate Software Engineer specializing in scalable backends, graph algorithms, and cloud technologies.",
-                "github_username": "mohitupraity",
-                "github_url": "https://github.com/mohitupraity",
-                "linkedin_url": "https://linkedin.com/in/mohitupraity",
-                "portfolio_url": "https://careeros.me",
-                "is_public": True
-            }
+            raise ValueError("Public profile not found")
 
         # 2. Fetch full profile details for this matched user
         details = await cls.get_user_profile_details(matched_user_id)
@@ -1826,45 +1766,6 @@ class ProfileService:
         # 3. Separate verified skills vs claimed skills
         verified_skills = details.get("verified_skills") or []
         
-        # If user has no verified skills yet, inject high-confidence verified anchor for demonstration
-        if not verified_skills:
-            verified_skills = [
-                {
-                    "name": "Python",
-                    "category": "Core Engineering",
-                    "difficulty_tier": "L2 Senior Engineer",
-                    "verification_score": 94,
-                    "proctoring_score": 100,
-                    "audio_proof_url": "/api/v1/interview/sample-audio/python",
-                    "radar_scores": {
-                        "system_architecture": 95,
-                        "code_efficiency": 93,
-                        "debugging_speed": 91,
-                        "communication": 96
-                    },
-                    "feedback_summary": "Exceptional depth in asyncio event loops, concurrency primitives, and microservice dead-letter architectures under proctored live testing.",
-                    "verified_at": "2026-05-15T10:30:00Z",
-                    "backed_by_projects": [p["name"] for p in (details.get("projects") or [])[:2]]
-                },
-                {
-                    "name": "FastAPI",
-                    "category": "Backend Frameworks",
-                    "difficulty_tier": "L2 Senior Engineer",
-                    "verification_score": 91,
-                    "proctoring_score": 100,
-                    "audio_proof_url": "/api/v1/interview/sample-audio/fastapi",
-                    "radar_scores": {
-                        "system_architecture": 92,
-                        "code_efficiency": 90,
-                        "debugging_speed": 88,
-                        "communication": 94
-                    },
-                    "feedback_summary": "Clean dependency injection implementation, Pydantic v2 serialization performance, and async websocket session handling.",
-                    "verified_at": "2026-05-20T14:15:00Z",
-                    "backed_by_projects": [p["name"] for p in (details.get("projects") or [])[:2]]
-                }
-            ]
-
         verified_names = {v["name"].lower() for v in verified_skills}
         all_skills = details.get("skills") or []
         claimed_skills = [s for s in all_skills if s.lower() not in verified_names]
@@ -1963,6 +1864,3 @@ class ProfileService:
         }
 
 profile_service = ProfileService()
-
-
-

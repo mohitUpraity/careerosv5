@@ -295,11 +295,11 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
                 </h2>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                Each badge represents an AI-proctored live audio interrogation & real code defense. Zero multiple-choice cheating.
+                Claimed skills are self-reported or imported. Verified skills have a saved assessment record and show available evidence.
               </p>
             </div>
             <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400 bg-slate-900/60 border border-slate-800 px-3 py-1.5 rounded-xl">
-              <span>Standards: Gemini Live Audio 300ms • AST Verified</span>
+              <span>Skill status: Claimed or Verified</span>
             </div>
           </div>
 
@@ -333,6 +333,9 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-sm text-white">{skill.name}</h3>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                              Verified
+                            </span>
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
                               {skill.difficulty_tier}
                             </span>
@@ -373,14 +376,14 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-400 mb-2.5">
                     <span className="flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                      Claimed Skills (Resume/GitHub Parsed)
+                      Claimed Skills
                     </span>
                     <span className="text-[10px] font-mono text-slate-500">{data.claimed_skills.length} skills</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {data.claimed_skills.slice(0, 12).map((sk, idx) => (
-                      <span key={idx} className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800/60 text-slate-400 border border-slate-800">
-                        {sk}
+                      <span key={idx} className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-slate-800/60 text-slate-400 border border-slate-800">
+                        {sk}<span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold bg-slate-700 text-slate-300">Claimed</span>
                       </span>
                     ))}
                   </div>
@@ -398,9 +401,9 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/15 border border-blue-500/30 text-blue-400 font-mono">
-                          AUDIT CERTIFICATE
+                          VERIFICATION RECORD
                         </span>
-                        <span className="text-xs text-slate-400">Verified via Gemini Live Proctored Round</span>
+                        <span className="text-xs text-slate-400">Assessment record</span>
                       </div>
                       <h3 className="text-2xl font-black text-white mt-1">
                         {selectedSkill.name} • {selectedSkill.difficulty_tier}

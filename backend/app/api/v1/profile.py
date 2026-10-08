@@ -276,6 +276,10 @@ async def get_public_profile(username: str) -> Dict[str, Any]:
     try:
         data = await profile_service.get_public_profile(username=username)
         return data
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to fetch public profile for '{username}': {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -290,6 +294,8 @@ async def check_username_availability(
     """
     user_id = current_user.get("id")
     res = await profile_service.check_username_availability(username=username, current_user_id=user_id)
+    if "temporarily unavailable" in res.get("message", "").lower():
+        raise HTTPException(status_code=503, detail=res["message"])
     return res
 
 @router.post("/username", response_model=Dict[str, Any])
@@ -303,7 +309,8 @@ async def claim_username_handle(
     user_id = current_user["id"]
     res = await profile_service.claim_or_update_username(user_id=user_id, username=payload.username)
     if not res.get("success"):
-        raise HTTPException(status_code=400, detail=res.get("message", "Username unavailable"))
+        status_code = 503 if "temporarily unavailable" in res.get("message", "").lower() else 400
+        raise HTTPException(status_code=status_code, detail=res.get("message", "Username unavailable"))
     return res
 
 @router.post("/verify-skill", response_model=Dict[str, Any])
@@ -327,4 +334,3 @@ async def verify_skill_record(
         feedback_summary=payload.feedback_summary
     )
     return res
-

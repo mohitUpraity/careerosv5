@@ -353,6 +353,12 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
   const handleSaveAll = async () => {
     setSaving(true);
     try {
+      // Claim the public handle through its dedicated endpoint so uniqueness is
+      // checked before the rest of the profile is saved.
+      if (profile.username?.trim()) {
+        const claimed = await apiService.claimUsername(profile.username.trim(), getAuthHeaders());
+        setProfile(prev => ({ ...prev, username: claimed.username }));
+      }
       const res = await apiService.updateProfileDetails(profile, getAuthHeaders());
       if (res.profile) {
         setProfile(res.profile);
@@ -1843,10 +1849,10 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-                Verified Skills & Technical Competencies
+                Skills & Tools
               </h3>
               <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                Add, remove, or customize technical skills. All skills are indexed into your personal Neo4j knowledge graph and used in ATS matching.
+                New and imported skills start as Claimed. A skill gets the Verified badge only after an assessment confirms it.
               </p>
             </div>
             <span className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono text-xs font-bold border border-blue-200 dark:border-blue-800">
@@ -1893,6 +1899,15 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 >
                   <Code2 className="w-3 h-3 text-blue-600" />
                   <span>{skill}</span>
+                  {(profile.verified_skills || []).some(verified => verified.name.trim().toLowerCase() === skill.trim().toLowerCase()) ? (
+                    <span title="Verified skill" className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                      <BadgeCheck className="h-3 w-3" /> Verified
+                    </span>
+                  ) : (
+                    <span title="Claimed skill; not yet verified" className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                      Claimed
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => removeSkill(skill)}
