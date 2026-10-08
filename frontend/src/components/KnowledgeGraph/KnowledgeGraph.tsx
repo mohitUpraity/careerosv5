@@ -99,15 +99,15 @@ export const CATEGORY_THEMES: Record<string, CategoryTheme> = {
   },
   Skill: {
     id: 'Skill',
-    label: 'Verified Skills',
+    label: 'Skills & Evidence',
     bg: '#F59E0B',
     border: '#D97706',
     glow: 'rgba(245, 158, 11, 0.4)',
     pillBg: '#FFFBEB',
     pillText: '#B45309',
-    icon: CheckCircle2,
+    icon: Code,
     radius: 15,
-    description: 'Code-proven languages, frameworks, databases, and architectural tools'
+    description: 'Amber nodes are claimed or project-associated; green nodes have a saved skill assessment.'
   },
   Company: {
     id: 'Company',
@@ -200,6 +200,16 @@ export const normalizeCategory = (type?: string, id?: string, category?: string)
 
 export const getThemeForNode = (node: GraphNode): CategoryTheme => {
   const cat = normalizeCategory(node.type, node.id, node.category);
+  if (cat === 'Skill' && (node.verified || node.properties?.verified)) {
+    return {
+      ...CATEGORY_THEMES.Skill,
+      bg: '#10B981',
+      border: '#059669',
+      glow: 'rgba(16, 185, 129, 0.4)',
+      pillBg: '#ECFDF5',
+      pillText: '#047857'
+    };
+  }
   return CATEGORY_THEMES[cat] || CATEGORY_THEMES.Default;
 };
 
@@ -869,7 +879,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
       .attr('font-family', 'Inter, system-ui, sans-serif')
       .attr('pointer-events', 'none');
 
-    // AST Verified Check Badge (top-right of node)
+    // Assessment-verified marker (top-right of skill node)
     node.filter(d => !!(d.verified || d.properties?.verified))
       .append('circle')
       .attr('cx', d => getThemeForNode(d).radius * 0.7)
@@ -1063,7 +1073,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
       } ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}
-    ><WorkspacePageHeader page="graph" eyebrow="THE BIG PICTURE" title="Your career, connected." description="Explore the links between your skills, projects, experience, and network. Select a connection to discover the evidence behind it." /><WorkspaceMetrics items={[{label:"Connections",value:graphSummary.totalLinks,detail:"Relationships across your career",icon:GitBranch},{label:"Career evidence",value:graphSummary.totalNodes,detail:"Skills, projects, people and more",icon:Network,tone:"violet"},{label:"Verified skills",value:graphSummary.verifiedSkills,detail:"Capabilities evidenced in your code",icon:CheckCircle2,tone:"teal"},{label:"Network bridges",value:graphSummary.alumniCount,detail:"People connected to your journey",icon:Users,tone:"amber"}]} />
+    ><WorkspacePageHeader page="graph" eyebrow="THE BIG PICTURE" title="Your career, connected." description="Explore the links between your skills, projects, experience, and network. Select a connection to discover the evidence behind it." /><WorkspaceMetrics items={[{label:"Assessment-verified skills",value:graphSummary.verifiedSkills,detail:"Skills with a saved assessment record",icon:CheckCircle2,tone:"teal"},{label:"Career evidence",value:graphSummary.totalNodes,detail:"Skills, projects, people and more",icon:Network,tone:"violet"},{label:"Connections",value:graphSummary.totalLinks,detail:"Relationships across your career",icon:GitBranch},{label:"Network bridges",value:graphSummary.alumniCount,detail:"People connected to your journey",icon:Users,tone:"amber"}]} />
       {/* 1. Header & Live Graph Analytics Strip */}
       <div
         className={`dashboard-page-header px-5 py-3 border-b flex flex-col gap-2.5 transition-colors duration-200 ${
@@ -1715,7 +1725,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                 </h3>
                 {selectedNode.verified && (
                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-500" /> AST Verified
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Assessment Verified
                   </span>
                 )}
               </div>
@@ -1893,4 +1903,3 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
     </div>
   );
 };
-

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Play, RotateCcw, Share2, Code2, CheckCircle2, AlertCircle, Copy, Check } from "lucide-react";
 import { DEFAULT_CODING_CHALLENGES } from "../data/interviewProfiles";
+import { API_BASE } from "../../../../services/api";
 
 interface CodeEditorProps {
   onSyncCodeWithAi: (code: string, language: string) => void;
@@ -51,7 +52,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     setIsRunning(true);
     setOutput("Running tests...");
     try {
-      const res = await fetch("/api/v1/interview/run-code", {
+      const res = await fetch(`${API_BASE}/api/v1/interview/run-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, language }),

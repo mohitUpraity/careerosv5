@@ -492,8 +492,36 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   navPostsBtn?.addEventListener("click", async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) chrome.tabs.update(tab.id, { url: "https://www.linkedin.com/in/me/recent-activity/all/" });
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
+        showToast("Open LinkedIn to scan posts.", "error");
+        return;
+      }
+      const profileUrl = (tab.url.includes("/in/") ? tab.url : activeTargetProfileData?.profile_url || tab.url)
+        .split("?")[0].replace(/\/recent-activity(?:\/.*)?$/, "").replace(/\/+$/, "");
+      const activityUrl = profileUrl.includes("/in/")
+        ? `${profileUrl}/recent-activity/all/`
+        : "https://www.linkedin.com/in/me/recent-activity/all/";
+      showToast("Opening the profile activity feed and scanning posts...", "loading");
+      await navigateAndWait(tab.id, activityUrl);
+      await new Promise((r) => setTimeout(r, 1200));
+      const posts = await performLivePostsScan(tab.id);
+      if (!posts.length) {
+        showToast("Activity feed opened, but no posts were found to ingest.", "error");
+        return;
+      }
+      const response = await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-user-id": getActiveUserId() },
+        body: JSON.stringify({ posts_text: posts.join("\n\n---\n\n") })
+      });
+      if (!response.ok) throw new Error(`Posts ingestion failed (${response.status})`);
+      const result = await response.json();
+      showToast(`Scanned ${posts.length} posts · ${result.hackathons_count || 0} signals merged.`, "success");
+    } catch (err) {
+      showToast(`Posts scan failed: ${err.message}`, "error");
+    }
   });
 
   navConnectionsBtn?.addEventListener("click", async () => {
@@ -582,6 +610,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         // Multi-pattern extraction of total connection count
         const headerText = document.body ? document.body.innerText : "";
+        const cappedLinkedInCount = /500\+\s+connections/i.test(headerText);
         const patterns = [
           /(\d[\d,]*)\s+connections/i,
           /connections\s*\([^\d]*(\d[\d,]*)\)/i,
@@ -589,7 +618,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           /(\d[\d,]*)\s+total\s+connections/i,
           /(\d[\d,]*)\s+contacts/i
         ];
-        for (const pat of patterns) {
+        for (const pat of (cappedLinkedInCount ? [] : patterns)) {
           const match = headerText.match(pat);
           if (match && match[1]) {
             const parsed = parseInt(match[1].replace(/,/g, ""), 10);
@@ -627,10 +656,24 @@ document.addEventListener("DOMContentLoaded", async () => {
           if (!str) return "";
           return str.replace(/\s+/g, " ").replace(/…see more|see less|\.\.\.more/gi, "").trim();
         };
+        const nonPersonNameTerms = /\b(student|engineer|developer|intern|manager|director|founder|architect|analyst|scientist|designer|recruiter|consultant|specialist|professor|researcher|entrepreneur|aspiring|software|computer|machine learning|artificial intelligence|full stack|backend|frontend|web developer|btech|bca|mca|mba)\b/i;
+        const isPersonName = (value) => {
+          const name = cleanText(value);
+          return name.length >= 2 && name.length <= 60 && /^[\p{L}][\p{L}\p{M} .'-]*$/u.test(name) && !nonPersonNameTerms.test(name);
+        };
+        const nameFromProfileUrl = (url) => {
+          const match = (url || "").match(/\/in\/([^/?#]+)/i);
+          if (!match) return "";
+          const slug = match[1].replace(/[-_][a-f0-9]{6,12}$/i, "").replace(/[-_]+/g, " ");
+          const name = slug.replace(/\b\w/g, (letter) => letter.toUpperCase());
+          return isPersonName(name) ? name : "";
+        };
 
         const extractFromDom = () => {
-          // Multi-strategy link-based detection
-          const linkCandidates = Array.from(document.querySelectorAll("a[href*='/in/']")).filter((a) => {
+          // Scan the actual connections list only. A global profile-link scan includes recommendations and UI links.
+          const listRoot = document.querySelector("main .scaffold-finite-scroll__content, main ul.mn-connections, main [data-view-name*='connections']") || document.querySelector("main");
+          if (!listRoot || !location.pathname.includes("/mynetwork/invite-connect/connections")) return;
+          const linkCandidates = Array.from(listRoot.querySelectorAll("a[href*='/in/']")).filter((a) => {
             if (a.closest("header, nav, #global-nav, .global-nav, footer")) return false;
             const rawHref = a.getAttribute("href") || a.href || "";
             if (rawHref.includes("/in/me") || rawHref.includes("/in/edit") || rawHref.includes("search") || rawHref.includes("feed")) {
@@ -645,24 +688,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             const cleanUrl = (link.href || rawHref).split("?")[0].replace(/\/+$/, "") + "/";
             if (!cleanUrl || cleanUrl.endsWith("/in/") || cleanUrl.includes("/in/me")) return;
 
-            let card = link.closest("li, [role='listitem'], div[data-view-name*='connection'], div.scaffold-finite-scroll__content > div");
-            if (!card) {
-              let curr = link;
-              for (let s = 0; s < 7 && curr && curr !== document.body; s++) {
-                curr = curr.parentElement;
-                if (curr && (curr.innerText.includes("Connected on") || curr.innerText.includes("Connected ") || curr.innerText.includes("Message"))) {
-                  card = curr;
-                  break;
-                }
-              }
-            }
-            if (!card) card = link.parentElement?.parentElement || link.parentElement;
+            const card = link.closest("li.mn-connection-card, li, [role='listitem'], div[data-view-name*='connection']");
+            if (!card || !listRoot.contains(card)) return;
 
             const cardText = (card?.innerText || "").trim();
 
             // Extract Name
             let name = "";
-            const nameInLink = link.querySelector("span[aria-hidden='true'], span") || link;
+            const nameInLink = card.querySelector(".mn-connection-card__name, .artdeco-entity-lockup__title, .entity-result__title-text, h3") || link.querySelector("span[aria-hidden='true'], span") || link;
             if (nameInLink && nameInLink.innerText) {
               name = cleanText(nameInLink.innerText).split("\n")[0];
             }
@@ -681,9 +714,13 @@ document.addEventListener("DOMContentLoaded", async () => {
               .replace(/[\u{1F300}-\u{1F9FF}]/gu, "")
               .trim();
 
+            if (!isPersonName(name)) name = nameFromProfileUrl(cleanUrl);
+
             if (
-              !name ||
-              name.length < 2 ||
+              !isPersonName(name) ||
+              name.length > 60 ||
+              /\b(connect|message|follow|pending|view profile|see all|show more|linkedin member|connections?)\b/i.test(name) ||
+              !/^[\p{L}][\p{L}\p{M} .'-]*$/u.test(name) ||
               name.toLowerCase().includes("linkedin member") ||
               name.toLowerCase().includes("sort by") ||
               name.toLowerCase().includes("see all")
@@ -698,6 +735,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             );
             if (occEl) {
               occupation = cleanText(occEl.innerText);
+              if (/^(connected|message|follow|pending|1st|2nd|3rd|view profile)\b/i.test(occupation) || occupation.length > 240) occupation = "";
             } else {
               const lines = cardText.split("\n").map((l) => l.trim()).filter(Boolean);
               const nameIdx = lines.findIndex((l) => l.toLowerCase() === name.toLowerCase());
@@ -721,7 +759,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             // Company & Position
             let company = "";
-            let position = occupation || "Professional";
+            let position = occupation;
             if (occupation.includes(" at ")) {
               const parts = occupation.split(" at ");
               position = parts[0].trim();
@@ -739,13 +777,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             const occLower = occupation.toLowerCase();
             let isAlumni = false;
             let university = "";
-            if (occLower.includes("anand engineering") || occLower.includes("aec") || occLower.includes("anand engg")) {
+            if (occLower.includes("anand engineering") || occLower.includes("anand engg")) {
               isAlumni = true;
               university = "Anand Engineering College";
             } else if (occLower.includes("sharda")) {
               isAlumni = true;
               university = "Sharda University";
-            } else if (occLower.includes("hindustan") || occLower.includes("hcst")) {
+            } else if (occLower.includes("hindustan college") || occLower.includes("hindustan institute")) {
               isAlumni = true;
               university = "Hindustan College of Science and Technology";
             }
@@ -764,8 +802,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 name: name,
                 profile_url: cleanUrl,
                 avatar_url: avatarUrl,
-                company: company || "Industry Network",
-                position: position || "Professional",
+                company,
+                position,
                 headline: occupation,
                 university: university,
                 is_alumni: isAlumni,
@@ -773,6 +811,28 @@ document.addEventListener("DOMContentLoaded", async () => {
               });
             }
           });
+        };
+
+        const nudgeConnectionsScroll = async () => {
+          const root = document.querySelector("main .scaffold-finite-scroll__content, main ul.mn-connections, main [data-view-name*='connections']") || document.querySelector("main");
+          let scroller = root;
+          while (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight <= scroller.clientHeight + 2) {
+            scroller = scroller.parentElement;
+          }
+          const step = Math.max(450, Math.floor((window.innerHeight || 800) * 0.7));
+          if (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight > scroller.clientHeight + 2) {
+            scroller.scrollTop = Math.max(0, scroller.scrollTop - Math.floor(step * 0.55));
+          } else {
+            window.scrollBy({ top: -Math.floor(step * 0.55), behavior: "instant" });
+          }
+          await new Promise((r) => setTimeout(r, 350));
+          if (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight > scroller.clientHeight + 2) {
+            scroller.scrollTop = Math.min(scroller.scrollHeight, scroller.scrollTop + step);
+          } else {
+            window.scrollBy({ top: step, behavior: "instant" });
+          }
+          window.dispatchEvent(new Event("scroll", { bubbles: true }));
+          await new Promise((r) => setTimeout(r, 800));
         };
 
         const maxScrolls = 450;
@@ -801,9 +861,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (currentCount > 0 && noNew >= maxNoNew) break;
 
             // Deep Recovery Pump: scroll up and down, dispatch keyboard and click load more
-            window.scrollBy({ top: -1400, behavior: "smooth" });
-            window.dispatchEvent(new WheelEvent("wheel", { deltaY: -1400, bubbles: true }));
-            await new Promise((r) => setTimeout(r, 450));
+            await nudgeConnectionsScroll();
 
             // Click LinkedIn finite scroll load button if visible
             document.querySelectorAll("button.scaffold-finite-scroll__load-button, button.artdeco-button--secondary, button").forEach((b) => {
@@ -826,7 +884,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const scrollEl = document.scrollingElement || document.body || document.documentElement;
             const scrollH = scrollEl ? scrollEl.scrollHeight : 8000;
             window.scrollTo({ top: scrollH, behavior: "instant" });
-            window.scrollBy({ top: 3000, behavior: "instant" });
+            window.scrollBy({ top: Math.max(800, Math.floor((window.innerHeight || 800) * 0.9)), behavior: "instant" });
             window.dispatchEvent(new Event("scroll", { bubbles: true }));
             window.dispatchEvent(new WheelEvent("wheel", { deltaY: 3000, bubbles: true }));
             window.dispatchEvent(new KeyboardEvent("keydown", { key: "PageDown", code: "PageDown", bubbles: true }));
@@ -919,12 +977,34 @@ document.addEventListener("DOMContentLoaded", async () => {
           });
         };
 
+        const nudgeFeedScroll = async () => {
+          const root = document.querySelector("main .scaffold-finite-scroll__content, main [data-view-name*='feed'], main") || document.body;
+          let scroller = root;
+          while (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight <= scroller.clientHeight + 2) {
+            scroller = scroller.parentElement;
+          }
+          const step = Math.max(500, Math.floor((window.innerHeight || 800) * 0.75));
+          if (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight > scroller.clientHeight + 2) {
+            scroller.scrollTop = Math.max(0, scroller.scrollTop - Math.floor(step * 0.5));
+          } else {
+            window.scrollBy({ top: -Math.floor(step * 0.5), behavior: "instant" });
+          }
+          await new Promise((r) => setTimeout(r, 350));
+          if (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight > scroller.clientHeight + 2) {
+            scroller.scrollTop = Math.min(scroller.scrollHeight, scroller.scrollTop + step);
+          } else {
+            window.scrollBy({ top: step, behavior: "instant" });
+          }
+          window.dispatchEvent(new Event("scroll", { bubbles: true }));
+          await new Promise((r) => setTimeout(r, 800));
+        };
+
         const maxPostsScrolls = 80;
         for (let i = 0; i < maxPostsScrolls; i++) {
           expandMoreButtons();
           const postElems = Array.from(
             document.querySelectorAll(
-              "div.feed-shared-update-v2, div.feed-shared-text, .update-components-update-v2__commentary, .feed-shared-text-view, .update-components-text, div[data-view-name*='update'], article[data-activity-id]"
+              "div.feed-shared-update-v2, div[data-urn^='urn:li:activity:'], li.profile-creator-shared-feed-update__container, div.feed-shared-text, .update-components-update-v2__commentary, .feed-shared-text-view, .update-components-text, div[data-view-name*='update'], article[data-activity-id]"
             )
           );
           postElems.forEach((el) => {
@@ -971,10 +1051,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (postsMap.size === 0 && noNew >= 4) break;
             if (postsMap.size > 0 && noNew >= 6) break;
 
-            window.scrollBy({ top: -800, behavior: "smooth" });
-            await new Promise((r) => setTimeout(r, 450));
-            window.scrollBy({ top: 1600, behavior: "instant" });
-            await new Promise((r) => setTimeout(r, 850));
+            await nudgeFeedScroll();
             continue;
           } else {
             noNew = 0;
@@ -1128,13 +1205,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       updateStep(3, "active", 75, "3. Extracting Milestone Posts & Knowledge Nodes...");
 
       let postsText = "";
-      const currentTabInfo = await chrome.tabs.get(tab.id).catch(() => tab);
-      const nowUrl = currentTabInfo.url || "";
-
-      if (nowUrl.includes("/recent-activity") || nowUrl.includes("/feed")) {
-        const postsList = await performLivePostsScan(tab.id);
-        postsText = postsList.join("\n\n---\n\n");
-      }
+      // Step 2 navigates the tab to Connections, so explicitly open the profile's
+      // activity feed before scanning. Previously this guard skipped scanning
+      // because the tab was still on the connections URL.
+      const postsProfileUrl = (profileData?.profile_url || "https://www.linkedin.com/in/me/").replace(/\/+$/, "");
+      await navigateAndWait(tab.id, `${postsProfileUrl}/recent-activity/all/`);
+      await new Promise((r) => setTimeout(r, 1400));
+      const postsList = await performLivePostsScan(tab.id);
+      postsText = postsList.join("\n\n---\n\n");
 
       // Intelligent Fallback: If no activity feed or on profile, synthesize verified milestones
       if (!postsText && profileData) {
@@ -1179,7 +1257,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Return user to their main profile page cleanly
       try {
         const endTab = await chrome.tabs.get(tab.id).catch(() => null);
-        if (endTab && !endTab.url.includes("/in/")) {
+        if (endTab && (!endTab.url.includes("/in/") || endTab.url.includes("/recent-activity"))) {
           await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/");
         }
       } catch (e) {}
@@ -1639,21 +1717,38 @@ document.addEventListener("DOMContentLoaded", async () => {
   scanTargetPostsBtn?.addEventListener("click", async () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
+        showToast("Open a LinkedIn profile before scanning posts.", "error");
+        return;
+      }
       showToast("Scanning target profile's posts for hiring leads...", "loading");
+      if (!tab.url.includes("/recent-activity") && !tab.url.includes("/feed")) {
+        const profileUrl = (tab.url.includes("/in/") ? tab.url : activeTargetProfileData?.profile_url || tab.url)
+          .split("?")[0].replace(/\/recent-activity(?:\/.*)?$/, "").replace(/\/+$/, "");
+        if (!profileUrl.includes("/in/")) {
+          showToast("Open the target's LinkedIn profile first.", "error");
+          return;
+        }
+        await navigateAndWait(tab.id, `${profileUrl}/recent-activity/all/`);
+        await new Promise((r) => setTimeout(r, 1200));
+      }
       const postsList = await performLivePostsScan(tab.id);
       const postsText = postsList.join("\n\n---\n\n");
 
       if (postsText) {
-        const form = new FormData();
-        form.append("posts_text", postsText);
-        await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts`, {
+        const response = await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts/manual`, {
           method: "POST",
-          headers: { "x-user-id": getActiveUserId() },
-          body: form
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": getActiveUserId()
+          },
+          body: JSON.stringify({ posts_text: postsText })
         });
-        showToast(`Scanned ${postsList.length} posts for hiring/lead signals! ✓`, "success");
+        if (!response.ok) throw new Error(`Posts ingestion failed (${response.status})`);
+        const result = await response.json();
+        showToast(`Scanned ${postsList.length} posts · ${result.hackathons_count || 0} hiring/milestone signals merged.`, "success");
       } else {
-        showToast("No posts detected on active view.", "error");
+        showToast("No posts were found on the target activity page.", "error");
       }
     } catch (e) {
       showToast(`Error: ${e.message}`, "error");

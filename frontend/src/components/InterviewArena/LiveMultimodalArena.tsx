@@ -324,11 +324,6 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
     }
 
     setMeetingConfig(config);
-    try {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
-    } catch (e) {}
   };
 
   const handleLeaveMeeting = async () => {
@@ -380,4 +375,3 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
     </div>
   );
 };
-

@@ -65,26 +65,40 @@ class ProfileService:
                    collect(DISTINCT coalesce(r.source, 'github')) AS sources,
                    collect(DISTINCT p.name) AS backed_by_projects,
                    count(DISTINCT p) AS project_count,
-                   max(CASE WHEN r.is_verified = true THEN 1 ELSE 0 END) AS assessment_verified
+                   max(CASE WHEN r.is_verified = true
+                                  AND r.verification_score IS NOT NULL
+                                  AND r.proctoring_score IS NOT NULL
+                                  AND r.verified_at IS NOT NULL
+                            THEN 1 ELSE 0 END) AS assessment_verified
             ORDER BY project_count DESC, s.name ASC
             """
             skills_res = await neo4j_client.execute_query(skills_query, {"user_id": user_id})
 
             # Categorize skills
-            verified_skills = []
-            resume_only_skills = []
+            normalized_skills = {}
             for s in skills_res:
+                skill_name = normalize_skill_name(s.get("skill") or "")
+                if not skill_name:
+                    continue
+                key = skill_name.lower()
                 item = {
-                    "name": s["skill"],
+                    "name": skill_name,
                     "category": s.get("category") or "Technical",
                     "is_verified": s.get("assessment_verified", 0) == 1,
-                    "evidence_projects": s["backed_by_projects"],
-                    "sources": s["sources"]
+                    "evidence_projects": s.get("backed_by_projects") or [],
+                    "sources": s.get("sources") or []
                 }
-                if item["is_verified"]:
-                    verified_skills.append(item)
+                existing = normalized_skills.get(key)
+                if existing:
+                    existing["is_verified"] = existing["is_verified"] or item["is_verified"]
+                    existing["evidence_projects"] = sorted(set(existing["evidence_projects"] + item["evidence_projects"]))
+                    existing["sources"] = sorted(set(existing["sources"] + item["sources"]))
                 else:
-                    resume_only_skills.append(item)
+                    normalized_skills[key] = item
+
+            skills_res = list(normalized_skills.values())
+            verified_skills = [s for s in skills_res if s["is_verified"]]
+            resume_only_skills = [s for s in skills_res if not s["is_verified"]]
 
             # 3. Fetch Projects Matrix
             projects_query = """
@@ -299,6 +313,7 @@ class ProfileService:
         nodes = []
         links = []
         node_set = set()
+        link_set = set()
 
         def add_node(nid: str, label: str, ntype: str, category: str = "", extra: dict = None):
             if nid not in node_set:
@@ -315,7 +330,9 @@ class ProfileService:
                 nodes.append(n)
 
         def add_link(source: str, target: str, rel_type: str, label: str = ""):
-            if source in node_set and target in node_set:
+            signature = (source, target, rel_type, label or rel_type)
+            if source in node_set and target in node_set and signature not in link_set:
+                link_set.add(signature)
                 links.append({
                     "source": source,
                     "target": target,
@@ -355,11 +372,17 @@ class ProfileService:
                     """
                     MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
                     WHERE r.is_verified = true
+                      AND r.verification_score IS NOT NULL
+                      AND r.proctoring_score IS NOT NULL
+                      AND r.verified_at IS NOT NULL
                     RETURN collect(DISTINCT toLower(s.name)) AS names
                     """,
                     {"user_id": user_id}
                 )
-                verified_skill_names = set((verified_res[0].get("names") or []) if verified_res else [])
+                verified_skill_names = {
+                    normalize_skill_name(name).lower()
+                    for name in ((verified_res[0].get("names") or []) if verified_res else [])
+                }
 
                 # 2. Projects & Skills
                 proj_res = await neo4j_client.execute_query(
@@ -385,7 +408,7 @@ class ProfileService:
                     for skill_detail in p.get("skill_details", []):
                         if not skill_detail or not skill_detail.get("name"):
                             continue
-                        sname = skill_detail["name"]
+                        sname = normalize_skill_name(skill_detail["name"])
                         sid = f"skill_{sname.lower()}"
                         is_verified = sname.lower() in verified_skill_names
                         add_node(sid, sname, "skill", skill_detail.get("category") or "Other", {"verified": is_verified})
@@ -483,14 +506,18 @@ class ProfileService:
                     """
                     MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
                     RETURN s.name as name, s.category as category,
-                           max(CASE WHEN r.is_verified = true THEN 1 ELSE 0 END) = 1 AS verified
+                           max(CASE WHEN r.is_verified = true
+                                          AND r.verification_score IS NOT NULL
+                                          AND r.proctoring_score IS NOT NULL
+                                          AND r.verified_at IS NOT NULL
+                                    THEN 1 ELSE 0 END) = 1 AS verified
                     LIMIT 40
                     """,
                     {"user_id": user_id}
                 )
                 user_name_tokens = set(user_name.lower().split()) if user_name else set()
                 for s in skill_res:
-                    sname = (s.get("name") or "").strip()
+                    sname = normalize_skill_name(s.get("name") or "")
                     if not sname or len(sname) > 30 or len(sname) < 2 or sname.lower() in invalid_comp_set:
                         continue
                     if any(w in sname.lower() for w in achievement_triggers) or len(sname.split()) > 3:
@@ -838,12 +865,19 @@ class ProfileService:
             ORDER BY name ASC
             """
             skills_res = await neo4j_client.execute_query(skills_query, {"user_id": user_id})
-            skills = [s["name"] for s in skills_res if s.get("name")] if skills_res else []
+            skills = list(dict.fromkeys(
+                normalize_skill_name(s["name"])
+                for s in (skills_res or [])
+                if s.get("name") and normalize_skill_name(s["name"])
+            ))
 
             # 4b. Fetch Verified Skills (Proctored assessments with badges, audio evidence, radar scores)
             verified_query = """
             MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
             WHERE r.is_verified = true
+              AND r.verification_score IS NOT NULL
+              AND r.proctoring_score IS NOT NULL
+              AND r.verified_at IS NOT NULL
             OPTIONAL MATCH (u)-[:BUILT]->(p:Project)-[:USES_TECH]->(s)
             RETURN s.name AS name,
                    s.category AS category,
@@ -859,7 +893,12 @@ class ProfileService:
             """
             verified_res = await neo4j_client.execute_query(verified_query, {"user_id": user_id})
             verified_skills = []
+            seen_verified_names = set()
             for vr in (verified_res or []):
+                canonical_name = normalize_skill_name(vr.get("name") or "")
+                if not canonical_name or canonical_name.lower() in seen_verified_names:
+                    continue
+                seen_verified_names.add(canonical_name.lower())
                 radar_scores = {}
                 if vr.get("radar_scores"):
                     try:
@@ -867,14 +906,14 @@ class ProfileService:
                     except Exception:
                         pass
                 verified_skills.append({
-                    "name": vr["name"],
+                    "name": canonical_name,
                     "category": vr.get("category") or "Core Technical",
-                    "verification_score": vr.get("verification_score") or 90,
-                    "difficulty_tier": vr.get("difficulty_tier") or "L2 Senior",
-                    "proctoring_score": vr.get("proctoring_score") or 100,
+                    "verification_score": vr.get("verification_score"),
+                    "difficulty_tier": vr.get("difficulty_tier") or "Assessment",
+                    "proctoring_score": vr.get("proctoring_score"),
                     "audio_proof_url": vr.get("audio_proof_url") or "",
-                    "radar_scores": radar_scores or {"system_architecture": 92, "code_efficiency": 94, "debugging_speed": 90, "communication": 93},
-                    "feedback_summary": vr.get("feedback_summary") or f"Successfully cleared L2 Proctored Verification for {vr['name']}.",
+                    "radar_scores": radar_scores,
+                    "feedback_summary": vr.get("feedback_summary") or "Assessment record saved; no feedback was supplied.",
                     "verified_at": str(vr.get("verified_at") or ""),
                     "backed_by_projects": vr.get("backed_by_projects") or []
                 })
@@ -894,7 +933,15 @@ class ProfileService:
             ORDER BY p.stars_count DESC, p.name ASC
             """
             projects_res = await neo4j_client.execute_query(proj_query, {"user_id": user_id})
-            projects = projects_res if projects_res else []
+            projects = []
+            for project in (projects_res or []):
+                normalized_project = dict(project)
+                normalized_project["tech_stack"] = list(dict.fromkeys(
+                    normalize_skill_name(skill)
+                    for skill in (project.get("tech_stack") or [])
+                    if skill and normalize_skill_name(skill)
+                ))
+                projects.append(normalized_project)
 
             # 6. Fetch Certifications
             cert_query = """
@@ -1545,7 +1592,7 @@ class ProfileService:
         When 'mastered', it dynamically injects the skill into the user's Neo4j profile,
         re-scoring all radar jobs immediately!
         """
-        clean_skill = skill_name.strip()
+        clean_skill = normalize_skill_name(skill_name)
         if not clean_skill:
             return {"status": "error", "message": "Invalid skill name"}
 
@@ -1709,6 +1756,7 @@ class ProfileService:
             query = """
             MATCH (u:User {id: $user_id})
             MERGE (s:Skill {name: $skill_name})
+            SET s.category = $category
             MERGE (u)-[r:HAS_SKILL]->(s)
             SET r.is_verified = true,
                 r.difficulty_tier = $tier_label,
@@ -1725,6 +1773,7 @@ class ProfileService:
             await neo4j_client.execute_query(query, {
                 "user_id": user_id,
                 "skill_name": clean_skill,
+                "category": normalize_skill_category(clean_skill),
                 "tier_label": tier_label,
                 "verification_score": verification_score,
                 "proctoring_score": proctoring_score,
@@ -1795,9 +1844,13 @@ class ProfileService:
         # 3. Separate verified skills vs claimed skills
         verified_skills = details.get("verified_skills") or []
         
-        verified_names = {v["name"].lower() for v in verified_skills}
+        verified_names = {normalize_skill_name(v["name"]).lower() for v in verified_skills}
         all_skills = details.get("skills") or []
-        claimed_skills = [s for s in all_skills if s.lower() not in verified_names]
+        claimed_skills = list(dict.fromkeys(
+            normalize_skill_name(s)
+            for s in all_skills
+            if normalize_skill_name(s) and normalize_skill_name(s).lower() not in verified_names
+        ))
 
         # 4. Extract mini-subgraph for recruiter visualization
         public_nodes = [

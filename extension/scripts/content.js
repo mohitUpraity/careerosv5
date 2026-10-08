@@ -105,6 +105,19 @@
       .trim();
   }
 
+  const nonPersonNameTerms = /\b(student|engineer|developer|intern|manager|director|founder|architect|analyst|scientist|designer|recruiter|consultant|specialist|professor|researcher|entrepreneur|aspiring|software|computer|machine learning|artificial intelligence|full stack|backend|frontend|web developer|btech|bca|mca|mba)\b/i;
+  function isConnectionPersonName(value) {
+    const name = cleanText(value);
+    return name.length >= 2 && name.length <= 60 && /^[\p{L}][\p{L}\p{M} .'-]*$/u.test(name) && !nonPersonNameTerms.test(name);
+  }
+  function nameFromProfileUrl(url) {
+    const match = (url || "").match(/\/in\/([^/?#]+)/i);
+    if (!match) return "";
+    const slug = match[1].replace(/[-_][a-f0-9]{6,12}$/i, "").replace(/[-_]+/g, " ");
+    const name = slug.replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return isConnectionPersonName(name) ? name : "";
+  }
+
   async function hydrateProfileSections() {
     try {
       const scrollSteps = [900, 2000, 3500, 5000, 0];
@@ -149,9 +162,8 @@
       )
     );
     for (const sec of sections) {
-      const heading = sec.querySelector(
-        "h2, h3, .pvs-header__title, span[aria-hidden='true'], [data-view-name*='title']"
-      );
+      // Generic aria-hidden spans often contain unrelated profile text.
+      const heading = sec.querySelector("h2, h3, .pvs-header__title, [data-view-name*='title']");
       if (heading) {
         const text = (heading.innerText || "").toLowerCase();
         if (keywords.some((kw) => text.includes(kw))) {
@@ -230,7 +242,7 @@
         const subRoles = Array.from(item.querySelectorAll("ul.pvs-list > li"));
         if (subRoles.length > 0) {
           const compHeaderEl = item.querySelector("div.display-flex.align-items-center.mr1.t-bold span[aria-hidden='true'], .hoverable-link-text span[aria-hidden='true']");
-          const compName = compHeaderEl ? cleanText(compHeaderEl.innerText) : "Company";
+            const compName = compHeaderEl ? cleanText(compHeaderEl.innerText) : "";
 
           subRoles.forEach((sub) => {
             const roleEl = sub.querySelector(".t-bold span[aria-hidden='true'], .hoverable-link-text span[aria-hidden='true']");
@@ -238,7 +250,7 @@
             const locEl = sub.querySelectorAll("span.t-14.t-normal.t-black--light span[aria-hidden='true']")[1];
             const descEl = sub.querySelector(".inline-show-more-text span[aria-hidden='true']");
 
-            const role = roleEl ? cleanText(roleEl.innerText) : "Engineer";
+            const role = roleEl ? cleanText(roleEl.innerText) : "";
             const dateText = dateEl ? cleanText(dateEl.innerText) : "";
             const isCurrent = dateText.toLowerCase().includes("present");
 
@@ -268,7 +280,7 @@
 
           if (role && !role.toLowerCase().includes("show all")) {
             experience.push({
-              company: comp || "Company",
+              company: comp,
               role: role,
               start_date: dateText.split("-")[0]?.trim() || dateText,
               end_date: isCurrent ? "Present" : (dateText.split("-")[1]?.trim() || ""),
@@ -448,23 +460,29 @@
       currentRole = experience[0].role;
     }
 
-    // --- K. Alumni College Detection ---
-    let sharedCollege = "";
-    const fullText = document.body ? document.body.innerText : "";
-    if (fullText.includes("Anand Engineering College") || headline.includes("Anand") || fullText.includes("AEC Agra")) {
-      sharedCollege = "Anand Engineering College";
-    } else if (fullText.includes("Sharda University") || headline.includes("Sharda")) {
-      sharedCollege = "Sharda University";
-    } else if (fullText.includes("Hindustan College") || fullText.includes("HCST")) {
-      sharedCollege = "Hindustan College of Science and Technology";
+    // LinkedIn's intro card may expose current company and school even when
+    // detailed sections are collapsed or absent from the first render.
+    const topCard = nameElem?.closest("section, .pv-top-card, .artdeco-card") || nameElem?.parentElement?.parentElement;
+    if (topCard) {
+      const companyLink = topCard.querySelector("a[href*='/company/']");
+      const schoolLink = topCard.querySelector("a[href*='/school/']");
+      if (!currentCompany && companyLink) currentCompany = cleanText(companyLink.innerText);
+      const schoolName = schoolLink ? cleanText(schoolLink.innerText) : "";
+      if (schoolName && !education.some((e) => e.university.toLowerCase() === schoolName.toLowerCase())) {
+        education.push({ university: schoolName, degree: "", field_of_study: "", start_date: "", end_date: "", description: "" });
+      }
     }
+
+    // --- K. Alumni College Detection ---
+    const fullText = document.body ? document.body.innerText : "";
+    const sharedCollege = education[0]?.university || "";
 
     return {
       name: cleanName || "LinkedIn Member",
       full_name: cleanName || "LinkedIn Member",
-      headline: headline || "Software Engineer",
-      current_company: currentCompany || "Industry Network",
-      company: currentCompany || "Industry Network",
+      headline: headline,
+      current_company: currentCompany,
+      company: currentCompany,
       current_role: currentRole || headline,
       role: currentRole || headline,
       location: location,
@@ -531,7 +549,7 @@
 
       // Extract Name: Check link first, then span[aria-hidden='true'], then card headings
       let name = "";
-      const nameInLink = linkEl.querySelector("span[aria-hidden='true'], span") || linkEl;
+      const nameInLink = card.querySelector(".mn-connection-card__name, .artdeco-entity-lockup__title, .entity-result__title-text, h3") || linkEl.querySelector("span[aria-hidden='true'], span") || linkEl;
       if (nameInLink && nameInLink.innerText) {
         name = cleanText(nameInLink.innerText).split("\n")[0];
       }
@@ -551,19 +569,10 @@
         .trim();
 
       // If name is still missing or looks like a headline/role string, recover name from URL slug
-      if (!name || name.length < 2 || name.length > 35 || name.includes("|") || name.includes("•") || name.toLowerCase().includes("developer") || name.toLowerCase().includes("student")) {
-        const slugMatch = href.match(/\/in\/([a-zA-Z0-9_-]+)/);
-        if (slugMatch && slugMatch[1] && slugMatch[1] !== "me") {
-          const rawSlug = slugMatch[1].split("-").filter((p) => !/^[0-9a-f]{6,}$/i.test(p) && !/^\d+$/.test(p)).join(" ");
-          if (rawSlug && rawSlug.length > 1) {
-            name = rawSlug.replace(/\b\w/g, (l) => l.toUpperCase());
-          }
-        }
-      }
+      if (!isConnectionPersonName(name)) name = nameFromProfileUrl(href);
 
       if (
-        !name ||
-        name.length < 2 ||
+        !isConnectionPersonName(name) ||
         name.toLowerCase().includes("linkedin member") ||
         name.toLowerCase().includes("sort by") ||
         name.toLowerCase().includes("see all") ||
@@ -643,9 +652,9 @@
         name: name,
         first_name: firstName,
         last_name: lastName,
-        position: position || "Professional",
+        position: position,
         headline: occupation,
-        company: company || "Industry Network",
+        company: company,
         university: university,
         is_alumni: isAlumni,
         profile_url: href,
@@ -680,9 +689,20 @@
         if (currentCount === 0 && noNewCount >= 5) break;
         if (currentCount > 0 && noNewCount >= 8) break;
 
-        // Recovery pump: scroll up and down
-        window.scrollBy({ top: -800, behavior: "smooth" });
-        await new Promise((r) => setTimeout(r, 400));
+        // Recovery pump: nudge the connection list up a little, then down to
+        // trigger LinkedIn's virtualized list loader.
+        const listRoot = document.querySelector("main .scaffold-finite-scroll__content, main ul.mn-connections, main [data-view-name*='connections']") || document.querySelector("main");
+        let scroller = listRoot;
+        while (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight <= scroller.clientHeight + 2) {
+          scroller = scroller.parentElement;
+        }
+        const nudge = Math.max(450, Math.floor((window.innerHeight || 800) * 0.7));
+        if (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight > scroller.clientHeight + 2) {
+          scroller.scrollTop = Math.max(0, scroller.scrollTop - Math.floor(nudge * 0.55));
+        } else {
+          window.scrollBy({ top: -Math.floor(nudge * 0.55), behavior: "instant" });
+        }
+        await new Promise((r) => setTimeout(r, 350));
 
         // Click any load more / show more
         document.querySelectorAll("button.scaffold-finite-scroll__load-button, button.artdeco-button--secondary, button").forEach((b) => {
@@ -692,7 +712,11 @@
           }
         });
 
-        window.scrollBy({ top: 1600, behavior: "instant" });
+        if (scroller && scroller !== document.body && scroller !== document.documentElement && scroller.scrollHeight > scroller.clientHeight + 2) {
+          scroller.scrollTop = Math.min(scroller.scrollHeight, scroller.scrollTop + nudge);
+        } else {
+          window.scrollBy({ top: nudge, behavior: "instant" });
+        }
         await new Promise((r) => setTimeout(r, 800));
         continue;
       } else {

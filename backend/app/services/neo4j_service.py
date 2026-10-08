@@ -645,6 +645,23 @@ class Neo4jService:
 
         # 1. Clean up any previous corrupt blanket ATTENDED edges for this user's connections
         try:
+            malformed_names_query = """
+            MATCH (u:User {id: $user_id})-[connection:CONNECTED_TO]->(p:Person)
+            WHERE any(term IN $invalid_terms WHERE toLower(coalesce(p.name, '')) CONTAINS term)
+            DELETE connection
+            WITH p
+            WHERE NOT (p)<-[:CONNECTED_TO]-(:User)
+            DETACH DELETE p;
+            """
+            await neo4j_client.execute_query(malformed_names_query, {
+                "user_id": user_id,
+                "invalid_terms": [
+                    "student", "engineer", "developer", "intern", "manager", "director",
+                    "founder", "architect", "analyst", "scientist", "designer", "recruiter",
+                    "consultant", "specialist", "professor", "researcher", "software", "full stack",
+                    "machine learning", "artificial intelligence", "btech", "bca", "mca", "mba"
+                ]
+            })
             cleanup_query = """
             MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)-[r:ATTENDED]->(univ:University)
             WHERE p.is_alumni IS NULL OR p.is_alumni = false

@@ -21,6 +21,7 @@ import { SidePanel } from "./SidePanel";
 import { CaptionsOverlay } from "./CaptionsOverlay";
 import { FloatingReactions, FloatingReactionItem } from "./FloatingReactions";
 import { EvaluationModal } from "./EvaluationModal";
+import { API_BASE } from "../../../../services/api";
 import { Sparkles, Radio, Maximize2, Minimize2, ShieldCheck, AlertTriangle, Eye, X } from "lucide-react";
 
 interface MeetingRoomProps {
@@ -199,7 +200,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     });
     wsUrl = `${wsUrl}?${params.toString()}`;
 
-    // In-Browser Autonomous Recruiter Engine (Fallback ONLY when no live WebSocket backend exists)
+    // In-Browser fallback for a WebSocket connection that fails after startup.
     const startAutonomousInterview = () => {
       // Never run if live WebSocket is already connected or active
       if (
@@ -248,6 +249,24 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           confidence_score: 9.0,
         },
       ]);
+    };
+
+    const switchToAutonomousFallback = () => {
+      if (isAutonomousModeRef.current) return;
+      const failedSocket = ws;
+      audioManager.stopPlayback();
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      ws = null;
+      socketRef.current = null;
+      hasReceivedAiMessageRef.current = false;
+      isAutonomousModeRef.current = false;
+      if (failedSocket) {
+        failedSocket.onclose = null;
+        failedSocket.onmessage = null;
+        failedSocket.onerror = null;
+        try { failedSocket.close(1000, "switching to local interview fallback"); } catch (_) {}
+      }
+      startAutonomousInterview();
     };
 
     const handleAutonomousUserTurn = (userAnswer: string) => {
@@ -576,8 +595,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             speakerName: "System",
             text: `⚠️ ${msg.message || "Connection error"} — switching to backup engine...`,
           });
-          if (msg.message && (msg.message.includes("1006") || msg.message.includes("closed") || msg.message.includes("abnormal"))) {
-            startAutonomousInterview();
+          if (msg.message && (msg.message.includes("1011") || msg.message.includes("1006") || msg.message.includes("closed") || msg.message.includes("abnormal"))) {
+            switchToAutonomousFallback();
           }
         } else if (msg.type === "session_closed") {
           console.warn("[Live] Session closed by server");
@@ -871,7 +890,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     }
 
     try {
-      const res = await fetch("/api/v1/interview/evaluate-interview", {
+      const res = await fetch(`${API_BASE}/api/v1/interview/evaluate-interview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

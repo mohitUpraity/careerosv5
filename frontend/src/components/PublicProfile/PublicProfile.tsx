@@ -87,6 +87,9 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
     setTimeout(() => setIsCopied(false), 3000);
   };
 
+  const projectsWithTechEvidence = data?.projects.filter((project) => (project.tech_stack || []).length > 0) || [];
+  const linkedProjectSkillCount = new Set(projectsWithTechEvidence.flatMap((project) => project.tech_stack || [])).size;
+
   const handleTogglePlayAudio = () => {
     if (isPlayingAudio) {
       clearInterval(audioIntervalRef.current);
@@ -260,9 +263,9 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
               <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center min-w-[120px]">
                 <div className="flex items-center justify-center gap-1 text-blue-400 font-extrabold text-2xl tracking-tight">
                   <Lock className="w-4 h-4 text-blue-400" />
-                  {data.metrics.proctoring_trust_score}%
+                  {data.metrics.verified_skills_count ? `${data.metrics.proctoring_trust_score}%` : 'N/A'}
                 </div>
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Anti-Cheat Trust</div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Assessment Integrity Avg.</div>
               </div>
 
               <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center min-w-[120px]">
@@ -270,19 +273,57 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ username, onNaviga
                   <Code2 className="w-4 h-4 text-indigo-400" />
                   {data.metrics.total_projects}
                 </div>
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Production Repos</div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Projects / Repos</div>
               </div>
 
               <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5 text-center min-w-[120px]">
                 <div className="flex items-center justify-center gap-1 text-amber-400 font-extrabold text-2xl tracking-tight">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  {data.metrics.overall_readiness_score}/100
+                  {data.metrics.verified_skills_count ? `${data.metrics.overall_readiness_score}/100` : 'N/A'}
                 </div>
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Readiness Index</div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5">Assessment Average</div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Recruiter-facing evidence summary; every statement maps to visible profile records. */}
+        <section className="rounded-3xl bg-slate-900/70 border border-slate-800 p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-extrabold text-white">Recruiter Snapshot</h2>
+              <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+                Review assessment results, project-associated technologies, and imported skill claims as separate evidence types.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300 bg-slate-950 border border-slate-800 rounded-full px-3 py-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Evidence is source-labeled
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+            <div className="rounded-2xl bg-slate-950/70 border border-emerald-500/20 p-4">
+              <div className="text-2xl font-extrabold text-emerald-400">{data.verified_skills.length}</div>
+              <div className="text-xs font-bold text-slate-200 mt-1">Assessment-verified skills</div>
+              <p className="text-[11px] text-slate-400 mt-1">Each listed skill has a saved assessment record with its score and tier.</p>
+              {data.verified_skills.length > 0 && (
+                <p className="text-[11px] text-emerald-300 mt-2">{data.verified_skills.slice(0, 3).map((skill) => `${skill.name} (${skill.verification_score}/100)`).join(' · ')}</p>
+              )}
+            </div>
+            <div className="rounded-2xl bg-slate-950/70 border border-blue-500/20 p-4">
+              <div className="text-2xl font-extrabold text-blue-400">{projectsWithTechEvidence.length}</div>
+              <div className="text-xs font-bold text-slate-200 mt-1">Projects with linked technologies</div>
+              <p className="text-[11px] text-slate-400 mt-1">{linkedProjectSkillCount} distinct technologies appear across the listed project stacks; inspect each repository for context.</p>
+              {projectsWithTechEvidence[0] && (
+                <p className="text-[11px] text-blue-300 mt-2">Example: {projectsWithTechEvidence[0].name} · {(projectsWithTechEvidence[0].tech_stack || []).slice(0, 3).join(', ')}</p>
+              )}
+            </div>
+            <div className="rounded-2xl bg-slate-950/70 border border-slate-700 p-4">
+              <div className="text-2xl font-extrabold text-slate-200">{data.claimed_skills.length}</div>
+              <div className="text-xs font-bold text-slate-200 mt-1">Claimed / imported skills</div>
+              <p className="text-[11px] text-slate-400 mt-1">These are shown separately and are not presented as assessment-verified.</p>
+            </div>
+          </div>
+        </section>
 
         {/* SECTION 1: VERIFIED SKILL EVIDENCE VAULT (The Core Differentiator) */}
         <section className="space-y-4">

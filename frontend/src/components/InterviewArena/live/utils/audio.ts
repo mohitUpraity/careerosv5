@@ -9,6 +9,7 @@ export class AudioStreamingManager {
   private outputAudioCtx: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private processorNode: ScriptProcessorNode | null = null;
+  private workletNode: AudioWorkletNode | null = null;
   private inputSourceNode: MediaStreamAudioSourceNode | null = null;
   private inputAnalyser: AnalyserNode | null = null;
   private outputAnalyser: AnalyserNode | null = null;
@@ -21,6 +22,36 @@ export class AudioStreamingManager {
   private isMuted: boolean = false;
   private isRunning: boolean = false;
   private animationFrameId: number | null = null;
+
+  private static readonly WORKLET_SOURCE = `
+    class PcmCaptureProcessor extends AudioWorkletProcessor {
+      constructor() { super(); this.frames = []; this.frameCount = 0; }
+      process(inputs, outputs) {
+        const input = inputs[0] && inputs[0][0];
+        const output = outputs[0] && outputs[0][0];
+        if (output) output.fill(0);
+        if (input) {
+          let offset = 0;
+          while (offset < input.length) {
+            const size = Math.min(2048 - this.frameCount, input.length - offset);
+            this.frames.push(input.slice(offset, offset + size));
+            this.frameCount += size;
+            offset += size;
+            if (this.frameCount === 2048) {
+              const chunk = new Float32Array(2048);
+              let position = 0;
+              for (const frame of this.frames) { chunk.set(frame, position); position += frame.length; }
+              this.port.postMessage(chunk, [chunk.buffer]);
+              this.frames = [];
+              this.frameCount = 0;
+            }
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor('pcm-capture-processor', PcmCaptureProcessor);
+  `;
 
   constructor() {
     // Lazy initialize when user starts session
@@ -106,43 +137,49 @@ export class AudioStreamingManager {
     this.inputSourceNode = this.inputAudioCtx.createMediaStreamSource(stream);
     this.inputSourceNode.connect(this.inputAnalyser);
 
-    // 2048 samples at 16kHz = 128ms, keeping speech and VAD updates responsive.
-    this.processorNode = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
-
-    this.processorNode.onaudioprocess = (e) => {
-      if (!this.isRunning || this.isMuted) return;
-
-      const channelData = e.inputBuffer.getChannelData(0);
-
-      // Calculate RMS energy of current microphone frame
-      let sumSquares = 0;
-      for (let i = 0; i < channelData.length; i++) {
-        sumSquares += channelData[i] * channelData[i];
-      }
-      const rms = Math.sqrt(sumSquares / channelData.length);
-
-      // Guarantee strict 16kHz PCM regardless of Safari's native hardware AudioContext rate (44.1k/48k)
-      const nativeRate = this.inputAudioCtx ? this.inputAudioCtx.sampleRate : 16000;
-      const resampled = this.downsampleTo16k(channelData, nativeRate);
-      // Preserve silence packets so server-side VAD can detect the end of a phrase,
-      // while zeroing low-level room noise that could trigger false speech starts.
-      if (rms < 0.001) resampled.fill(0);
-      const base64Pcm = this.floatTo16BitPCMBase64(resampled);
-      if (this.onAudioChunkCallback) {
-        this.onAudioChunkCallback(base64Pcm);
-      }
-    };
-
-    this.inputAnalyser.connect(this.processorNode);
-
-    // Muted gain node to keep ScriptProcessor alive without playing mic into speakers
+    // AudioWorklet keeps microphone capture off the main thread. ScriptProcessor is
+    // retained only for older browsers that do not implement AudioWorklet.
     const silentGain = this.inputAudioCtx.createGain();
     silentGain.gain.value = 0;
-    this.processorNode.connect(silentGain);
+    try {
+      if (!this.inputAudioCtx.audioWorklet || typeof AudioWorkletNode === "undefined") {
+        throw new Error("AudioWorklet unavailable");
+      }
+      const sourceBlob = new Blob([AudioStreamingManager.WORKLET_SOURCE], { type: "application/javascript" });
+      const sourceUrl = URL.createObjectURL(sourceBlob);
+      try {
+        await this.inputAudioCtx.audioWorklet.addModule(sourceUrl);
+      } finally {
+        URL.revokeObjectURL(sourceUrl);
+      }
+      this.workletNode = new AudioWorkletNode(this.inputAudioCtx, "pcm-capture-processor");
+      this.workletNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
+        this.processInputChunk(event.data);
+      };
+      this.inputAnalyser.connect(this.workletNode);
+      this.workletNode.connect(silentGain);
+    } catch (error) {
+      console.warn("AudioWorklet unavailable; using legacy microphone capture:", error);
+      this.processorNode = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
+      this.processorNode.onaudioprocess = (event) => this.processInputChunk(event.inputBuffer.getChannelData(0));
+      this.inputAnalyser.connect(this.processorNode);
+      this.processorNode.connect(silentGain);
+    }
     silentGain.connect(this.inputAudioCtx.destination);
 
     this.isRunning = true;
     this.startVolumeMonitoring();
+  }
+
+  private processInputChunk(channelData: Float32Array) {
+    if (!this.isRunning || this.isMuted) return;
+    let sumSquares = 0;
+    for (let i = 0; i < channelData.length; i++) sumSquares += channelData[i] * channelData[i];
+    const rms = Math.sqrt(sumSquares / channelData.length);
+    const nativeRate = this.inputAudioCtx ? this.inputAudioCtx.sampleRate : 16000;
+    const resampled = this.downsampleTo16k(channelData, nativeRate);
+    if (rms < 0.001) resampled.fill(0);
+    this.onAudioChunkCallback?.(this.floatTo16BitPCMBase64(resampled));
   }
 
   public setMute(muted: boolean) {
@@ -353,6 +390,11 @@ export class AudioStreamingManager {
     if (this.processorNode) {
       this.processorNode.disconnect();
       this.processorNode = null;
+    }
+    if (this.workletNode) {
+      this.workletNode.port.onmessage = null;
+      this.workletNode.disconnect();
+      this.workletNode = null;
     }
     if (this.inputSourceNode) {
       this.inputSourceNode.disconnect();

@@ -298,12 +298,18 @@ async def ingest_linkedin_connections_direct(
             first_name = parts[0]
             last_name = " ".join(parts[1:])
 
-        if not raw_name or raw_name.lower().startswith("linkedin member"):
+        url = (c.get("profile_url") or c.get("url") or "").strip()
+        if not linkedin_service.is_person_name(raw_name):
+            raw_name = linkedin_service.name_from_linkedin_url(url)
+        if not raw_name:
             continue
+
+        name_parts = raw_name.split()
+        first_name = name_parts[0]
+        last_name = " ".join(name_parts[1:])
 
         position = (c.get("position") or c.get("headline") or "Professional").strip()
         raw_company = (c.get("company") or "").strip()
-        url = (c.get("profile_url") or c.get("url") or "").strip()
         connected_on = (c.get("connected_on") or "Recent").strip()
 
         rich = linkedin_service.extract_rich_entities(position, raw_company)
@@ -639,4 +645,3 @@ async def ingest_scanned_target_profile(
     )
 
     return res
-

@@ -13,6 +13,15 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 class LinkedInService:
+    NON_PERSON_NAME_TERMS = {
+        "student", "engineer", "developer", "intern", "manager", "director", "founder",
+        "architect", "analyst", "scientist", "designer", "recruiter", "consultant",
+        "specialist", "professor", "researcher", "entrepreneur", "freelancer", "aspiring",
+        "software", "computer", "data", "machine", "learning", "artificial", "intelligence",
+        "full", "stack", "backend", "frontend", "web", "btech", "bca", "mca", "mba",
+        "python", "java", "react", "internship", "university", "college"
+    }
+
     def __init__(self):
         if settings.GEMINI_API_KEY and genai:
             try:
@@ -34,6 +43,25 @@ class LinkedInService:
         cleaned = re.sub(r'[^\w\s\-\&]', '', cleaned).strip()
         cleaned = re.sub(r'\s{2,}', ' ', cleaned)
         return cleaned or name.strip()
+
+    @classmethod
+    def is_person_name(cls, value: str) -> bool:
+        """Reject headlines and UI text accidentally captured as a connection's name."""
+        name = re.sub(r"\s+", " ", (value or "").strip())
+        if not name or len(name) > 60 or not re.fullmatch(r"[\wÀ-ÖØ-öø-ÿ .'-]+", name):
+            return False
+        words = [word.lower().strip(".'-") for word in name.split()]
+        return bool(words) and len(words) <= 5 and not any(word in cls.NON_PERSON_NAME_TERMS for word in words)
+
+    @classmethod
+    def name_from_linkedin_url(cls, url: str) -> str:
+        """Use the public profile slug when LinkedIn does not expose a usable name."""
+        match = re.search(r"/in/([^/?#]+)", url or "", flags=re.IGNORECASE)
+        if not match:
+            return ""
+        slug = re.sub(r"[-_][a-f0-9]{6,12}$", "", match.group(1), flags=re.IGNORECASE)
+        name = " ".join(part.capitalize() for part in re.sub(r"[-_]+", " ", slug).split())
+        return name if cls.is_person_name(name) else ""
 
     UNIVERSITY_KEYWORDS = [
         "university", "college", "institute", "school", "academy", "campus", "iit", "nit", "iiit",
@@ -150,7 +178,7 @@ class LinkedInService:
                 connected_on = row.get("Connected On", "").strip()
                 url = row.get("URL", "").strip()
 
-                if not first_name:
+                if not cls.is_person_name(f"{first_name} {last_name}".strip()):
                     continue  # Skip rows without name
 
                 full_name = f"{first_name} {last_name}".strip()
