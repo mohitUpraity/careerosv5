@@ -309,6 +309,17 @@ export interface PublicProfileData {
     date?: string;
     description?: string;
   }>;
+  interviews?: Array<{
+    id: string;
+    company?: string;
+    role?: string;
+    technical_score?: number;
+    verdict?: string;
+    summary?: string;
+    completed_at?: string;
+    duration_minutes?: number;
+  }>;
+  interviews_count?: number;
   public_graph?: {
     nodes: Array<{
       id: string;
@@ -665,4 +676,3 @@ export interface InterviewScorecard {
   areas_for_improvement: string[];
   fast_track_study_plan: string[];
 }
-

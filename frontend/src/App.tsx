@@ -318,6 +318,9 @@ const RootRouter: React.FC = () => {
     publicUsername = path.replace('/@', '').split('/')[0].trim();
   } else if (searchParams.get('p')) {
     publicUsername = searchParams.get('p') || '';
+  } else if (/^\/[a-z0-9_-]{3,30}\/?$/i.test(path)) {
+    // GitHub-style vanity profile URL: /username
+    publicUsername = path.replace(/^\//, '').replace(/\/$/, '').trim();
   }
 
   if (publicUsername) {
@@ -353,4 +356,3 @@ export const App: React.FC = () => {
 };
 
 export default App;
-

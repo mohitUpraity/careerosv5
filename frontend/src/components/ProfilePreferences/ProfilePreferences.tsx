@@ -109,6 +109,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 
 const DEFAULT_PROFILE: UserProfileDetails = {
   full_name: 'Candidate',
+  is_public: true,
   email: '',
   phone: '',
   headline: 'Software Engineer | Python, FastAPI, React & Graph Systems',
@@ -1614,22 +1615,22 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
           </div>
 
           {/* Public CareerOS Verified Handle Card */}
-          <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-900/20 via-slate-900/40 to-indigo-900/20 border border-blue-500/30 space-y-3">
+          <div className="p-5 rounded-2xl border space-y-3" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <span className="font-bold text-xs text-slate-100 uppercase tracking-wider">
+                <span className="font-bold text-xs uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
                   Public CareerOS Handle & Recruiter Dossier Link
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300">
                 Auditable Proof-of-Skill
               </span>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <div className="flex items-center bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-1.5 flex-1">
-                <span className="text-xs text-slate-500 font-mono select-none">careeros.me/p/</span>
+              <div className="flex items-center border rounded-xl px-3 py-1.5 flex-1" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
+                <span className="text-xs font-mono select-none" style={{ color: 'var(--text-tertiary)' }}>{window.location.host}/p/</span>
                 <input
                   type="text"
                   value={profile.username || ''}
@@ -1638,7 +1639,8 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                     setHasUnsavedChanges(true);
                   }}
                   placeholder="your-handle"
-                  className="bg-transparent text-xs text-slate-100 font-mono font-semibold focus:outline-none flex-1 pl-1"
+                  className="bg-transparent text-xs font-mono font-semibold focus:outline-none flex-1 pl-1"
+                  style={{ color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1653,7 +1655,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </a>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1" style={{ color: 'var(--text-secondary)' }}>
               <span>Share this link on your Resume header & LinkedIn to bypass Round 1 HR screening.</span>
               <button
                 type="button"
@@ -1667,6 +1669,18 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 <Copy className="w-3 h-3" />
                 Copy URL
               </button>
+            </div>
+
+            <div className="rounded-xl border p-3 space-y-3" style={{ background: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
+              <label className="flex items-center justify-between gap-3 cursor-pointer">
+                <span><strong className="block text-xs" style={{ color: 'var(--text-primary)' }}>Public profile</strong><span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{profile.is_public === false ? 'Only you can access this profile link.' : 'Anyone with your link can view your public profile.'}</span></span>
+                <input type="checkbox" checked={profile.is_public !== false} onChange={(event) => { setProfile(prev => ({ ...prev, is_public: event.target.checked })); setHasUnsavedChanges(true); }} aria-label="Make profile public" className="h-4 w-4 accent-blue-500" />
+              </label>
+              <div className="grid sm:grid-cols-2 gap-3 border-t pt-3 text-[11px]" style={{ borderColor: 'var(--border-primary)' }}>
+                <div><strong className="text-emerald-700 dark:text-emerald-300">Shown publicly</strong><p className="mt-1" style={{ color: 'var(--text-secondary)' }}>Name, headline, bio, location, linked social URLs, skills, verified badges, projects, experience, education, certifications, achievements and completed interviews.</p></div>
+                <div><strong style={{ color: 'var(--text-primary)' }}>Kept private</strong><p className="mt-1" style={{ color: 'var(--text-secondary)' }}>Email, phone number, career preferences and private workspace data. LinkedIn post text is not currently stored as a public feed.</p></div>
+              </div>
+              <p className="text-[10px] text-amber-700 dark:text-amber-300">Save profile to apply visibility changes. This switch controls the whole public profile; per-field visibility controls are not available yet.</p>
             </div>
           </div>
 

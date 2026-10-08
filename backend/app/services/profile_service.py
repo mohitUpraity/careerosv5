@@ -1840,6 +1840,28 @@ class ProfileService:
 
         # 2. Fetch full profile details for this matched user
         details = await cls.get_user_profile_details(matched_user_id)
+
+        # Only expose completed interview sessions, which are already public proof
+        # records linked to this user in the career graph.
+        interview_history = await neo4j_client.execute_query(
+            """
+            MATCH (u:User {id: $user_id})-[:ATTENDED_INTERVIEW]->(s:InterviewSession)
+            RETURN s.id AS id, s.company AS company, s.role AS role,
+                   s.technical_score AS technical_score, s.verdict AS verdict,
+                   s.summary AS summary, toString(s.completed_at) AS completed_at,
+                   s.duration_minutes AS duration_minutes
+            ORDER BY s.completed_at DESC LIMIT 10
+            """,
+            {"user_id": matched_user_id},
+        ) or []
+        interview_count_result = await neo4j_client.execute_query(
+            """
+            MATCH (u:User {id: $user_id})-[:ATTENDED_INTERVIEW]->(s:InterviewSession)
+            RETURN count(s) AS count
+            """,
+            {"user_id": matched_user_id},
+        ) or []
+        interview_count = (interview_count_result[0].get("count", 0) if interview_count_result else 0)
         
         # 3. Separate verified skills vs claimed skills
         verified_skills = details.get("verified_skills") or []
@@ -1938,6 +1960,8 @@ class ProfileService:
                 "education": details.get("education") or [],
                 "certifications": details.get("certifications") or [],
                 "achievements": details.get("achievements") or [],
+                "interviews": interview_history,
+                "interviews_count": interview_count,
                 "public_graph": {
                     "nodes": public_nodes,
                     "links": public_links
