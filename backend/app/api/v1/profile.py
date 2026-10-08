@@ -1,6 +1,7 @@
 import logging
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Dict, Any
 from app.core.security import get_current_user
 from app.services.profile_service import profile_service
 
@@ -194,7 +195,136 @@ async def toggle_learning_action(
         logger.error(f"Failed to execute learning action for {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/notegpt-bridge/{skill_name}", response_model=Dict[str, Any])
+async def get_notegpt_skill_bridge(
+    skill_name: str,
+    target_role: str = "Backend Engineer",
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Returns NoteGPT-style features for any identified skill gap:
+    - Interactive hierarchical Mind Map
+    - 4-phase step-by-step Learning Roadmap with milestones
+    - Free and Paid Verified Course & Certification Proofs with URLs
+    - AI Study Notes & CLI Cheat Sheets
+    - Mastery Flashcards / Interview Quiz
+    """
+    from app.services.notegpt_service import notegpt_bridge_service
+    user_id = current_user.get("id")
+    try:
+        data = await notegpt_bridge_service.get_or_generate_skill_bridge(
+            skill_name=skill_name,
+            target_role=target_role,
+            user_id=user_id
+        )
+        return data
+    except Exception as e:
+        logger.error(f"Failed to generate NoteGPT skill bridge for '{skill_name}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/verify-certificate", response_model=Dict[str, Any])
+async def verify_certificate_proof(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Submits a certificate verification proof URL or ID,
+    attaches it to user's profile certifications, and marks the skill as mastered in the Graph.
+    """
+    from app.services.notegpt_service import notegpt_bridge_service
+    user_id = current_user["id"]
+    skill_name = payload.get("skill_name", "")
+    certificate_title = payload.get("certificate_title", "")
+    issuer = payload.get("issuer", "Independent Course Provider")
+    credential_url = payload.get("credential_url", "")
 
+    if not skill_name or not certificate_title:
+        raise HTTPException(status_code=400, detail="skill_name and certificate_title are required")
 
+    try:
+        res = await notegpt_bridge_service.record_verified_certificate(
+            user_id=user_id,
+            skill_name=skill_name,
+            certificate_title=certificate_title,
+            issuer=issuer,
+            credential_url=credential_url
+        )
+        return res
+    except Exception as e:
+        logger.error(f"Failed to record verified certificate for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ClaimUsernameRequest(BaseModel):
+    username: str = Field(..., description="Unique alphanumeric username handle")
+
+class VerifySkillRequest(BaseModel):
+    skill_name: str = Field(..., description="Name of the skill to verify")
+    difficulty_tier: Optional[str] = Field("L2", description="L1, L2, or L3")
+    verification_score: Optional[int] = Field(90, description="Verification test score 0-100")
+    proctoring_score: Optional[int] = Field(100, description="Proctoring integrity score 0-100")
+    audio_proof_url: Optional[str] = Field(None, description="URL or key to audio highlight snippet")
+    radar_scores: Optional[Dict[str, int]] = Field(None, description="Radar chart rubrics")
+    feedback_summary: Optional[str] = Field(None, description="AI feedback summary of round")
+
+@router.get("/public/{username}", response_model=Dict[str, Any])
+async def get_public_profile(username: str) -> Dict[str, Any]:
+    """
+    Public-facing recruiter verification dossier (No Authentication Required).
+    Returns verified skills with proof audio snippets, integrity scores,
+    backed GitHub projects, and career footprint.
+    """
+    try:
+        data = await profile_service.get_public_profile(username=username)
+        return data
+    except Exception as e:
+        logger.error(f"Failed to fetch public profile for '{username}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/check-username/{username}", response_model=Dict[str, Any])
+async def check_username_availability(
+    username: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Checks if a username handle is available or taken.
+    """
+    user_id = current_user.get("id")
+    res = await profile_service.check_username_availability(username=username, current_user_id=user_id)
+    return res
+
+@router.post("/username", response_model=Dict[str, Any])
+async def claim_username_handle(
+    payload: ClaimUsernameRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Claims or updates the unique CareerOS public username for the authenticated candidate.
+    """
+    user_id = current_user["id"]
+    res = await profile_service.claim_or_update_username(user_id=user_id, username=payload.username)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("message", "Username unavailable"))
+    return res
+
+@router.post("/verify-skill", response_model=Dict[str, Any])
+async def verify_skill_record(
+    payload: VerifySkillRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Mints a Verified Skill Badge on candidate's graph following an AI Proctored round.
+    Stores audio proof, proctoring score, difficulty tier, and radar rubric breakdown.
+    """
+    user_id = current_user["id"]
+    res = await profile_service.record_skill_verification(
+        user_id=user_id,
+        skill_name=payload.skill_name,
+        difficulty_tier=payload.difficulty_tier or "L2",
+        verification_score=payload.verification_score or 90,
+        proctoring_score=payload.proctoring_score or 100,
+        audio_proof_url=payload.audio_proof_url,
+        radar_scores=payload.radar_scores,
+        feedback_summary=payload.feedback_summary
+    )
+    return res
 

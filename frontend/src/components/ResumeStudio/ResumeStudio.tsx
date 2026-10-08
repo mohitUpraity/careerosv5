@@ -1839,203 +1839,198 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Main Tab Navigation (Cleanly separates Master Template vs Job Tailor) */}
+      {/* Top Header & Mode Navigation Bar */}
       <div 
-        className="no-print p-2 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+        className="no-print p-4 rounded-2xl border space-y-3 shadow-sm"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('master')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-              activeTab === 'master'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-            }`}
-            style={{ color: activeTab === 'master' ? '#ffffff' : 'var(--text-secondary)' }}
-          >
-            <Layers className="w-4 h-4" />
-            <span>1. Master Template & Blueprint</span>
-            {hasMasterResume && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('tailor')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-              activeTab === 'tailor'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-            }`}
-            style={{ color: activeTab === 'tailor' ? '#ffffff' : 'var(--text-secondary)' }}
-          >
-            <Target className="w-4 h-4" />
-            <span>2. Job Application Tailor (JD Optimizer)</span>
-            {pendingSuggestionsCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-gray-900 text-[10px] font-bold">
-                {pendingSuggestionsCount}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Action Controls for Current Active Tab */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Multi-Template Selector Dropdown */}
-          <div className="relative flex items-center">
-            <select
-              value={activeTemplateId}
-              onChange={(e) => handleSwitchTemplate(e.target.value)}
-              className="input-base text-xs font-semibold pr-8"
-              style={{ height: '34px' }}
-            >
-              <option value="master-default">Default Master Template</option>
-              {savedTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={() => setIsSaveTemplateModalOpen(true)}
-              className="ml-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 hover:bg-gray-100 dark:hover:bg-gray-800"
-              title="Save current layout as a new reusable template"
-              style={{ borderColor: 'var(--border-primary)' }}
-            >
-              <BookmarkPlus className="w-3.5 h-3.5 text-amber-500" />
-              <span>Save Template</span>
-            </button>
-          </div>
-
-          {/* View Mode Toggle */}
+        {/* Tier 1: Core Navigation & Global Template Actions */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Main Mode Segmented Control */}
           <div 
-            className="flex items-center p-1 rounded-xl border"
+            className="inline-flex p-1 rounded-xl border self-start"
             style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
           >
             <button
-              onClick={() => setIsEditMode(true)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                isEditMode
+              onClick={() => setActiveTab('master')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+                activeTab === 'master'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:text-blue-600'
               }`}
-              style={{ color: isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
+              style={{ color: activeTab === 'master' ? '#ffffff' : 'var(--text-secondary)' }}
             >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>Interactive Editor</span>
+              <Layers className="w-4 h-4" />
+              <span>Master Blueprint</span>
+              {hasMasterResume && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              )}
             </button>
+
             <button
-              onClick={() => setIsEditMode(false)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                !isEditMode
+              onClick={() => setActiveTab('tailor')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+                activeTab === 'tailor'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'hover:text-blue-600'
               }`}
-              style={{ color: !isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
+              style={{ color: activeTab === 'tailor' ? '#ffffff' : 'var(--text-secondary)' }}
             >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Clean ATS Preview</span>
+              <Target className="w-4 h-4" />
+              <span>Job Tailor & JD Optimizer</span>
+              {pendingSuggestionsCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-gray-900 text-[10px] font-bold">
+                  {pendingSuggestionsCount}
+                </span>
+              )}
             </button>
           </div>
 
-          {/* Section Manager Toggle */}
-          <button
-            onClick={() => {
-              setIsSectionManagerOpen(!isSectionManagerOpen);
-              setIsStyleOpen(false);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-              isSectionManagerOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
-            }`}
-            style={{
-              backgroundColor: isSectionManagerOpen ? undefined : 'var(--bg-tertiary)',
-              color: isSectionManagerOpen ? undefined : 'var(--text-primary)',
-              borderColor: 'var(--border-primary)'
-            }}
-            title="Reorder & Toggle Sections"
-          >
-            <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
-            <span>Reorder Sections</span>
-          </button>
-
-          {/* Template Style Toggle */}
-          <button
-            onClick={() => {
-              setIsStyleOpen(!isStyleOpen);
-              setIsSectionManagerOpen(false);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-              isStyleOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
-            }`}
-            style={{
-              backgroundColor: isStyleOpen ? undefined : 'var(--bg-tertiary)',
-              color: isStyleOpen ? undefined : 'var(--text-primary)',
-              borderColor: 'var(--border-primary)'
-            }}
-          >
-            <Palette className="w-3.5 h-3.5 text-purple-600" />
-            <span>Styling</span>
-          </button>
-
-          {/* If on Master tab: Show Save Master Button */}
-          {activeTab === 'master' ? (
-            <>
-              <button
-                onClick={handleSaveMaster}
-                disabled={isSaving}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-50"
+          {/* Template Preset Selector & Global Print */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                Preset:
+              </span>
+              <select
+                value={activeTemplateId}
+                onChange={(e) => handleSwitchTemplate(e.target.value)}
+                className="input-base text-xs font-semibold py-1.5 px-3 rounded-lg"
+                style={{ height: '34px' }}
               >
-                <Save className="w-4 h-4" />
-                <span>{isSaving ? 'Saving...' : 'Save Master'}</span>
-              </button>
+                <option value="master-default">Default Master Template</option>
+                {savedTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
+            <button
+              onClick={() => setIsSaveTemplateModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="Save current layout as a new reusable template"
+              style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 text-amber-500" />
+              <span>Save As Preset</span>
+            </button>
+
+            <button
+              onClick={handlePrint}
+              className="btn-secondary text-xs flex items-center gap-1.5"
+              style={{ height: '34px' }}
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print / PDF</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Tier 2: Document Controls & Action Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+          {/* Left: View Mode & Customizers */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div 
+              className="flex items-center p-0.5 rounded-lg border"
+              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+            >
               <button
-                onClick={() => setIsResumeModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-                style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  borderColor: 'var(--border-primary)'
-                }}
+                onClick={() => setIsEditMode(true)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  isEditMode
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'hover:text-blue-600'
+                }`}
+                style={{ color: isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
               >
-                <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
-                <span>Upload PDF</span>
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Editor</span>
               </button>
-            </>
-          ) : (
-            /* If on Tailor tab: Show Export & Copy Options */
-            <>
+              <button
+                onClick={() => setIsEditMode(false)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  !isEditMode
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'hover:text-blue-600'
+                }`}
+                style={{ color: !isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>ATS Preview</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setIsSectionManagerOpen(!isSectionManagerOpen);
+                setIsStyleOpen(false);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                isSectionManagerOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
+              }`}
+              style={{
+                backgroundColor: isSectionManagerOpen ? undefined : 'var(--bg-secondary)',
+                color: isSectionManagerOpen ? undefined : 'var(--text-secondary)',
+                borderColor: 'var(--border-primary)'
+              }}
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
+              <span>Reorder Sections</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsStyleOpen(!isStyleOpen);
+                setIsSectionManagerOpen(false);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                isStyleOpen ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : ''
+              }`}
+              style={{
+                backgroundColor: isStyleOpen ? undefined : 'var(--bg-secondary)',
+                color: isStyleOpen ? undefined : 'var(--text-secondary)',
+                borderColor: 'var(--border-primary)'
+              }}
+            >
+              <Palette className="w-3.5 h-3.5 text-purple-600" />
+              <span>Typography & Styling</span>
+            </button>
+          </div>
+
+          {/* Right: Primary Save & Import Actions */}
+          <div className="flex items-center gap-2">
+            {activeTab === 'master' ? (
+              <>
+                <button
+                  onClick={() => setIsResumeModalOpen(true)}
+                  className="btn-ghost text-xs flex items-center gap-1.5"
+                >
+                  <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Import PDF</span>
+                </button>
+
+                <button
+                  onClick={handleSaveMaster}
+                  disabled={isSaving}
+                  className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSaving ? 'Saving...' : 'Save Master'}</span>
+                </button>
+              </>
+            ) : (
               <button
                 onClick={handleCopyMarkdown}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-                style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  borderColor: 'var(--border-primary)'
-                }}
+                className="btn-secondary text-xs flex items-center gap-1.5"
                 title="Copy formatted Markdown"
               >
                 <Copy className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Copy Text</span>
               </button>
-            </>
-          )}
-
-          {/* Print / Download PDF */}
-          <button
-            onClick={handlePrint}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              borderColor: 'var(--border-primary)'
-            }}
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print / PDF</span>
-          </button>
+            )}
+          </div>
         </div>
       </div>
 

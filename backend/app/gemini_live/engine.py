@@ -17,18 +17,22 @@ class GeminiLiveEngine:
         self,
         api_key: str,
         config: Optional[LiveEngineConfig] = None,
+        tools: Optional[List[types.Tool]] = None,
         on_audio_chunk: Optional[Callable[[bytes], Awaitable[None]]] = None,
         on_output_transcript: Optional[Callable[[str], Awaitable[None]]] = None,
         on_input_transcript: Optional[Callable[[str], Awaitable[None]]] = None,
+        on_tool_call: Optional[Callable[[str, Dict[str, Any]], Awaitable[Dict[str, Any]]]] = None,
         on_interrupted: Optional[Callable[[], Awaitable[None]]] = None,
         on_turn_complete: Optional[Callable[[], Awaitable[None]]] = None,
         on_error: Optional[Callable[[str], Awaitable[None]]] = None,
     ):
         self.api_key = api_key
         self.config = config or LiveEngineConfig()
+        self.tools = tools
         self.on_audio_chunk = on_audio_chunk
         self.on_output_transcript = on_output_transcript
         self.on_input_transcript = on_input_transcript
+        self.on_tool_call = on_tool_call
         self.on_interrupted = on_interrupted
         self.on_turn_complete = on_turn_complete
         self.on_error = on_error
@@ -41,11 +45,32 @@ class GeminiLiveEngine:
         self.session = None
         self.is_connected = False
         self.is_closing = False
+        self._send_lock = asyncio.Lock()
 
         # Upstream and downstream queues
         self.audio_in_queue = asyncio.Queue(maxsize=100)
         self.video_in_slot: Optional[bytes] = None  # Latest frame wins
         self._loop_task: Optional[asyncio.Task] = None
+
+    async def _safe_send_realtime_input(self, **kwargs):
+        """Serialize realtime input (audio/video) across tasks without concurrency collisions."""
+        if not self.session or not self.is_connected or self.is_closing:
+            return
+        async with self._send_lock:
+            try:
+                await self.session.send_realtime_input(**kwargs)
+            except Exception as e:
+                logger.debug(f"Notice in send_realtime_input: {e}")
+
+    async def _safe_send_client_content(self, **kwargs):
+        """Serialize client turns / text prompt sends."""
+        if not self.session or not self.is_connected or self.is_closing:
+            return
+        async with self._send_lock:
+            try:
+                await self.session.send_client_content(**kwargs)
+            except Exception as e:
+                logger.warning(f"Error in send_client_content: {e}")
 
     def push_audio(self, pcm_bytes: bytes):
         """Enqueue 16kHz PCM16 audio bytes from microphone."""
@@ -70,18 +95,15 @@ class GeminiLiveEngine:
     async def send_text_prompt(self, text: str):
         """Send a client turn or text instruction into the live session."""
         if self.session and self.is_connected:
-            try:
-                await self.session.send_client_content(
-                    turns=[
-                        types.Content(
-                            role="user",
-                            parts=[types.Part.from_text(text=text)]
-                        )
-                    ],
-                    turn_complete=True
-                )
-            except Exception as e:
-                logger.error(f"Failed to send text prompt: {e}")
+            await self._safe_send_client_content(
+                turns=[
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=text)]
+                    )
+                ],
+                turn_complete=True
+            )
 
     def _build_connect_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
@@ -99,8 +121,8 @@ class GeminiLiveEngine:
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     disabled=False,
-                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
-                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_UNSPECIFIED,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
                     prefix_padding_ms=self.config.prefix_padding_ms,
                     silence_duration_ms=self.config.silence_duration_ms,
                 ),
@@ -159,7 +181,7 @@ class GeminiLiveEngine:
             try:
                 chunk = await self.audio_in_queue.get()
                 if self.session and self.is_connected:
-                    await self.session.send_realtime_input(
+                    await self._safe_send_realtime_input(
                         audio=types.Blob(data=chunk, mime_type=f"audio/pcm;rate={self.config.input_sample_rate}")
                     )
                 self.audio_in_queue.task_done()
@@ -169,23 +191,26 @@ class GeminiLiveEngine:
                 logger.debug(f"Audio upstream notice: {e}")
 
     async def _upstream_video_worker(self):
-        """Streams latest webcam frame (1-2 FPS)."""
+        """Streams latest webcam frame responsive to camera capture (~1-2 FPS)."""
         sent_count = 0
         while not self.is_closing:
             try:
                 if self.video_in_slot is not None and self.session and self.is_connected:
                     frame, self.video_in_slot = self.video_in_slot, None
-                    await self.session.send_realtime_input(
+                    await self._safe_send_realtime_input(
                         media=types.Blob(data=frame, mime_type="image/jpeg")
                     )
                     sent_count += 1
                     if sent_count % 10 == 1:
                         logger.info(f"📹 Streamed webcam frame #{sent_count} ({len(frame)} bytes) to Gemini Live Vision")
-                await asyncio.sleep(0.8)  # ~1.2 FPS
+                    await asyncio.sleep(0.7)  # ~1.4 FPS steady pacing
+                else:
+                    await asyncio.sleep(0.1)  # Low-latency polling for next frame
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.debug(f"Video upstream notice: {e}")
+                await asyncio.sleep(0.2)
 
     async def _downstream_receiver_worker(self):
         """Processes server responses across continuous turns."""

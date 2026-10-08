@@ -12,12 +12,14 @@ import {
   ChevronRight,
   TrendingUp,
   Cpu,
-  Swords
+  Swords,
+  Brain
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MatchAnalysisResponse } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { NoteGPTModal } from '../CareerGrowth/NoteGPTModal';
 
 interface JobMatchmakerProps {
   onSelectTailorResume: (role: string, company: string, jd: string) => void;
@@ -97,6 +99,7 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   
   const [loading, setLoading] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<MatchAnalysisResponse | null>(null);
+  const [notegptModalSkill, setNotegptModalSkill] = useState<string | null>(null);
 
   const handleSelectPreset = (presetId: string) => {
     const preset = PRESET_JOBS.find(p => p.id === presetId);
@@ -168,21 +171,23 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
 
         {/* Preset Selector */}
         <div className="flex flex-wrap items-center gap-2">
-          {PRESET_JOBS.map((preset) => (
-            <button
-              key={preset.id}
-              onClick={() => handleSelectPreset(preset.id)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{
-                backgroundColor: selectedPreset === preset.id ? 'var(--brand-50)' : 'transparent',
-                color: selectedPreset === preset.id ? 'var(--brand-600)' : 'var(--text-secondary)',
-                border: `1px solid ${selectedPreset === preset.id ? 'var(--brand-100)' : 'var(--border-primary)'}`,
-                fontWeight: selectedPreset === preset.id ? 600 : 500,
-              }}
-            >
-              {preset.company.split(' ')[0]}
-            </button>
-          ))}
+          {PRESET_JOBS.map((preset) => {
+            const isSelected = selectedPreset === preset.id;
+            return (
+              <button
+                key={preset.id}
+                onClick={() => handleSelectPreset(preset.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSelected 
+                    ? 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 font-semibold shadow-xs' 
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span>{preset.company.split(' ')[0]}</span>
+                <span className="text-[10px] opacity-75 font-normal">({preset.badge})</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -348,9 +353,19 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
 
                   <div className="flex flex-wrap gap-2">
                     {analysisResult.missing_skills.map((gap, idx) => (
-                      <span key={idx} className="badge-warning text-xs font-medium px-2.5 py-1 rounded-lg">
-                        {gap}
-                      </span>
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setNotegptModalSkill(gap)}
+                        className="badge-warning text-xs font-semibold px-2.5 py-1.5 rounded-xl hover:scale-102 hover:shadow-sm active:scale-98 transition-all flex items-center gap-1.5 cursor-pointer border border-amber-300 dark:border-amber-800"
+                        title={`Click to open NoteGPT Mind Map, Roadmap & Verified Certs for ${gap}`}
+                      >
+                        <Brain className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                        <span>{gap}</span>
+                        <span className="text-[9px] bg-purple-500/20 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-bold">
+                          NoteGPT
+                        </span>
+                      </button>
                     ))}
                   </div>
 
@@ -395,33 +410,27 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
                 {onPrepareInterview && (
                   <button
                     onClick={() => onPrepareInterview(role, company, jobDescription)}
-                    className="w-full sm:flex-1 py-3 px-4 rounded-lg text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                    className="btn-secondary w-full sm:flex-1 py-2.5"
                   >
                     <Swords className="w-4 h-4 text-amber-500" />
-                    Prepare & Interview
+                    <span>Prep Interview</span>
                   </button>
                 )}
 
                 <button
                   onClick={() => onSelectTailorResume(role, company, jobDescription)}
-                  className="w-full sm:flex-1 py-3 px-4 rounded-lg text-white text-sm font-semibold flex items-center justify-center gap-2 transition-all"
-                  style={{ backgroundColor: 'var(--brand-600)' }}
+                  className="btn-primary w-full sm:flex-1 py-2.5"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Tailor Resume
+                  <span>Tailor Resume</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
 
                 <button
                   onClick={() => onNavigateToReferrals(company)}
-                  className="w-full sm:w-auto py-3 px-4 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
-                  style={{
-                    backgroundColor: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-primary)',
-                  }}
+                  className="btn-secondary w-full sm:w-auto py-2.5 px-4"
                 >
-                  Find Referrals
+                  <span>Find Referrals</span>
                 </button>
               </div>
             </div>
@@ -444,6 +453,17 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
           )}
         </div>
       </div>
+
+      {/* NoteGPT Skill Gap Modal */}
+      {notegptModalSkill && (
+        <NoteGPTModal
+          isOpen={!!notegptModalSkill}
+          onClose={() => setNotegptModalSkill(null)}
+          skillName={notegptModalSkill}
+          onSuccessToast={onSuccess}
+          onErrorToast={onError}
+        />
+      )}
     </div>
   );
 };

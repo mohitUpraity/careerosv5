@@ -664,7 +664,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
       .force('link', d3.forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(linkDistanceVal))
       .force('charge', d3.forceManyBody().strength(chargeStrength))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collide', d3.forceCollide().radius(d => getThemeForNode(d).radius + collisionRadiusVal));
+      .force('collide', d3.forceCollide<GraphNode>().radius(d => getThemeForNode(d).radius + collisionRadiusVal));
 
     if (isPhysicsPaused) {
       simulation.stop();
@@ -711,7 +711,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
       .attr('opacity', 0.96);
 
     linkLabel.append('text')
-      .text(d => (d.label || d.type || d.relation || 'RELATES').toUpperCase())
+      .text(d => (((d as any).label || d.type || (d as any).relation || 'RELATES') as string).toUpperCase())
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .attr('fill', relTextColor)
@@ -1048,22 +1048,22 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
         }`}
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Title & GraphRAG Badge */}
+          {/* Title & Status */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
-              <Network className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
+              <Network className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className={`text-base font-bold tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                <h2 className={`text-sm sm:text-base font-bold tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
                   Knowledge Graph
                 </h2>
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                   <ShieldCheck className="w-3 h-3 text-blue-500" /> Neo4j Multi-Hop AuraDB
                 </span>
               </div>
               <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                AST verified code topology, technical skills ontology, and warm alumni bridges
+                AST verified code topology, technical skills ontology, and warm referral network
               </p>
             </div>
           </div>
@@ -1087,7 +1087,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
             </div>
 
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-              isDark ? 'bg-emerald-950/50 border-emerald-800/80 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              isDark ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
             }`}>
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
               <span className="font-semibold tabular-nums">{graphSummary.verifiedSkills}</span>
@@ -1095,7 +1095,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
             </div>
 
             <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-              isDark ? 'bg-pink-950/50 border-pink-800/80 text-pink-300' : 'bg-pink-50 border-pink-200 text-pink-700'
+              isDark ? 'bg-pink-950/40 border-pink-800/60 text-pink-300' : 'bg-pink-50 border-pink-200 text-pink-700'
             }`}>
               <Users className="w-3.5 h-3.5 text-pink-500" />
               <span className="font-semibold tabular-nums">{graphSummary.alumniCount}</span>
@@ -1105,10 +1105,10 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
         </div>
 
         {/* NLP Smart Query Input & Preset Chips */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 pt-1">
           <div className="relative flex-1">
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
-              <Sparkles className="w-4 h-4 text-purple-500 animate-pulse" />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none">
+              <Sparkles className="w-3.5 h-3.5 text-purple-500 animate-pulse" />
             </div>
             <input
               type="text"
@@ -1120,53 +1120,53 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                 }
               }}
               placeholder="Ask Knowledge Graph in plain English (e.g. 'Show DRDO firewall stack & python', 'Alumni at Google', 'SIH hackathons')..."
-              className={`w-full pl-10 pr-28 py-2 text-xs sm:text-sm rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 ${
+              className={`w-full pl-9 pr-24 py-1.5 text-xs rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 ${
                 isDark
                   ? 'bg-slate-800/90 border-slate-700 text-slate-100 placeholder:text-slate-500'
                   : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 shadow-2xs'
               }`}
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {nlpQuery && (
                 <button
                   onClick={handleResetLens}
-                  className={`p-1 rounded-md transition-colors ${
+                  className={`p-1 rounded-md transition-colors cursor-pointer ${
                     isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-100 text-slate-500'
                   }`}
                   title="Clear Query"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
               <button
                 onClick={() => executeSmartNlpQuery(nlpQuery)}
                 disabled={isNlpLoading || !nlpQuery.trim()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs transition-all cursor-pointer"
               >
                 {isNlpLoading ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3 h-3" />
                 )}
-                <span>Focus Lens</span>
+                <span>Focus</span>
               </button>
             </div>
           </div>
 
           {/* Quick Preset Lens Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider shrink-0 mr-1 ${
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
+            <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 mr-0.5 ${
               isDark ? 'text-slate-500' : 'text-slate-400'
             }`}>
               Quick Lenses:
             </span>
             {[
-              { label: '🛡️ DRDO & Security Stack', query: 'DRDO Next Gen Firewall packet inspection Python C++' },
-              { label: '🎓 Anand Eng. College Alumni', query: 'Anand Engineering College SGI alumni referral connections' },
-              { label: '🏆 SIH Hackathons & Wins', query: 'Smart India Hackathon SIH 2024 awards achievements' },
+              { label: '🛡️ DRDO Stack', query: 'DRDO Next Gen Firewall packet inspection Python C++' },
+              { label: '🎓 College Alumni', query: 'Anand Engineering College SGI alumni referral connections' },
+              { label: '🏆 SIH Wins', query: 'Smart India Hackathon SIH 2024 awards achievements' },
               { label: '🐍 Python & AI Core', query: 'Python FastAPI Neo4j GraphRAG Gemini AI Engine' },
               { label: '⚛️ React & Frontend', query: 'React TypeScript TailwindCSS full stack repositories' },
-              { label: '🤝 Warm Referral Bridges', query: 'All LinkedIn contacts and connected company employees' },
+              { label: '🤝 Warm Bridges', query: 'All LinkedIn contacts and connected company employees' },
             ].map((preset) => (
               <button
                 key={preset.label}
@@ -1174,7 +1174,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                   setNlpQuery(preset.query);
                   executeSmartNlpQuery(preset.query);
                 }}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all shrink-0 cursor-pointer ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border transition-all shrink-0 cursor-pointer ${
                   activeLens?.query === preset.query
                     ? (isDark ? 'bg-purple-950/80 text-purple-200 border-purple-700 shadow-xs' : 'bg-purple-50 text-purple-700 border-purple-300 shadow-xs')
                     : (isDark ? 'bg-slate-800/60 text-slate-300 border-slate-700/80 hover:bg-slate-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-900')
@@ -1673,10 +1673,9 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span
-                          className="w-2.5 h-2.5 rounded-full ring-2 shrink-0"
+                          className={`w-2.5 h-2.5 rounded-full ring-2 shrink-0 ${isDark ? 'ring-slate-800' : 'ring-white'}`}
                           style={{ 
-                            backgroundColor: val.bg,
-                            ringColor: isDark ? '#1E293B' : '#FFFFFF'
+                            backgroundColor: val.bg
                           }}
                         />
                         <span className={`text-[11px] font-medium truncate ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>

@@ -282,10 +282,28 @@ const MainLayout: React.FC = () => {
 };
 
 import { LandingPage } from './components/LandingPage';
+import { PublicProfile } from './components/PublicProfile/PublicProfile';
 import { Loader2 } from 'lucide-react';
 
 const RootRouter: React.FC = () => {
   const { isLoggedIn, authLoading } = useAuth();
+
+  // 1. Check if public profile URL is being accessed (No login required for recruiters)
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+
+  let publicUsername = '';
+  if (path.startsWith('/p/')) {
+    publicUsername = path.replace('/p/', '').split('/')[0].trim();
+  } else if (path.startsWith('/@')) {
+    publicUsername = path.replace('/@', '').split('/')[0].trim();
+  } else if (searchParams.get('p')) {
+    publicUsername = searchParams.get('p') || '';
+  }
+
+  if (publicUsername) {
+    return <PublicProfile username={publicUsername} onNavigateHome={() => window.location.href = '/'} />;
+  }
 
   if (authLoading) {
     return (

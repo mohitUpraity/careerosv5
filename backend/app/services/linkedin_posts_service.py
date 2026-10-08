@@ -19,7 +19,8 @@ Extract ALL relevant career accomplishments, specifically:
 2. Projects mentioned in posts (name, tech stack, what was built)
 3. Milestones & Achievements (e.g., winning a prize, reaching a ranking, open source contributions, leadership roles)
 4. Workshops, Talks & Certifications attended or completed
-5. Verified Skills mentioned in context with proof
+5. Badges, Honors & Accreditations (e.g., skill badges, top voice, ranking badges, honors)
+6. Verified Skills mentioned in context with proof
 
 Output ONLY valid JSON matching this exact structure:
 {
@@ -52,6 +53,14 @@ Output ONLY valid JSON matching this exact structure:
     {
       "name": "string",
       "issuer": "string",
+      "date": "string"
+    }
+  ],
+  "badges": [
+    {
+      "name": "string",
+      "issuer": "string",
+      "badge_type": "string",
       "date": "string"
     }
   ],
@@ -221,6 +230,30 @@ class LinkedInPostsService:
                 "skills": [s.strip() for s in skills if s.strip()]
             })
             merged_count += len(skills)
+
+        # 5. Ingest Badges
+        for badge in knowledge.get("badges", []):
+            b_name = (badge.get("name") or "").strip()
+            if b_name:
+                badge_query = """
+                MERGE (u:User {id: $user_id})
+                MERGE (bg:Badge {name: $name})
+                ON CREATE SET bg.issuer = $issuer,
+                              bg.badge_type = $badge_type,
+                              bg.date = $date,
+                              bg.created_at = datetime()
+                MERGE (u)-[:EARNED_BADGE]->(bg)
+                MERGE (u)-[:ACHIEVED]->(bg)
+                RETURN bg.name;
+                """
+                await neo4j_client.execute_query(badge_query, {
+                    "user_id": user_id,
+                    "name": b_name,
+                    "issuer": badge.get("issuer", "").strip(),
+                    "badge_type": badge.get("badge_type", "Badge").strip(),
+                    "date": badge.get("date", "").strip()
+                })
+                merged_count += 1
 
         return merged_count
 

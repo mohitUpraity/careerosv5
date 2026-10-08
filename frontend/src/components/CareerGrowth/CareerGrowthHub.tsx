@@ -20,7 +20,8 @@ import {
   Compass,
   Check,
   Building2,
-  FolderGit2
+  FolderGit2,
+  Brain
 } from 'lucide-react';
 import { 
   UserProfileDetails, 
@@ -30,6 +31,7 @@ import {
 } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { NoteGPTSkillStudio } from './NoteGPTSkillStudio';
 
 interface CareerGrowthHubProps {
   onSuccessToast: (msg: string) => void;
@@ -48,8 +50,14 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [learningActionLoading, setLearningActionLoading] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'unlocks' | 'sprints' | 'demands' | 'boom'>('unlocks');
+  const [activeSubTab, setActiveSubTab] = useState<'unlocks' | 'sprints' | 'demands' | 'boom' | 'notegpt'>('unlocks');
+  const [noteGPTSkill, setNoteGPTSkill] = useState<string>('Apache Kafka & Event Streaming');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  const openNoteGPTStudio = (skillName: string) => {
+    setNoteGPTSkill(skillName);
+    setActiveSubTab('notegpt');
+  };
 
   useEffect(() => {
     loadData();
@@ -246,6 +254,19 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
           >
             <Flame className="w-3.5 h-3.5 text-orange-400" />
             <span>2025/2026 Tech Boom Radar</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('notegpt')}
+            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
+              activeSubTab === 'notegpt'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg scale-102 ring-2 ring-purple-400/50'
+                : 'bg-purple-950/60 text-purple-200 hover:bg-purple-900/60 border border-purple-500/40'
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+            <span>NoteGPT Skill Studio (Mindmaps & Proofs)</span>
+            <span className="px-1.5 py-0.2 text-[9px] bg-purple-400 text-slate-950 rounded font-black">NEW</span>
           </button>
         </div>
       </div>
@@ -451,7 +472,18 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
                       </div>
 
                       {/* Action CTAs */}
-                      <div className="pt-4 border-t flex flex-wrap items-center justify-end gap-2" style={{ borderColor: 'var(--border-primary)' }}>
+                      <div className="pt-4 border-t flex flex-wrap items-center justify-between gap-2" style={{ borderColor: 'var(--border-primary)' }}>
+                        <button
+                          type="button"
+                          onClick={() => openNoteGPTStudio(item.skill)}
+                          className="px-3.5 py-2 rounded-xl text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-300 dark:border-purple-800 transition-all flex items-center gap-1.5 shadow-xs"
+                          title="Open NoteGPT Mind Map, Roadmap, and Verified Course Proofs"
+                        >
+                          <Brain className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                          <span>NoteGPT Mindmap & Proofs</span>
+                        </button>
+
+                        <div className="flex items-center gap-2">
                         {isInProgress ? (
                           <>
                             <button
@@ -498,6 +530,7 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
                             </button>
                           </>
                         )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -582,12 +615,22 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
 
                   {/* Actions */}
                   <div className="pt-2 flex items-center justify-between gap-2 border-t" style={{ borderColor: 'var(--border-primary)' }}>
-                    <button
-                      onClick={() => handleToggleLearningAction(item.skill, 'remove')}
-                      className="text-xs font-semibold text-gray-400 hover:text-red-500"
-                    >
-                      Cancel Sprint
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleLearningAction(item.skill, 'remove')}
+                        className="text-xs font-semibold text-gray-400 hover:text-red-500"
+                      >
+                        Cancel Sprint
+                      </button>
+                      <button
+                        onClick={() => openNoteGPTStudio(item.skill)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 border border-purple-300 dark:border-purple-800 flex items-center gap-1.5 transition-all shadow-xs"
+                      >
+                        <Brain className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Roadmap & Certs</span>
+                      </button>
+                    </div>
+
                     <button
                       onClick={() => handleToggleLearningAction(item.skill, 'mark_mastered')}
                       className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
@@ -662,9 +705,19 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
 
                 <div className="flex items-center justify-between text-[10px] pt-1 text-gray-400 border-t" style={{ borderColor: 'var(--border-primary)' }}>
                   <span>Found in {sk.job_count} active postings</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                    {sk.trend === 'explosive' ? '🔥 Explosive' : '📈 Trending'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                      {sk.trend === 'explosive' ? '🔥 Explosive' : '📈 Trending'}
+                    </span>
+                    <button
+                      onClick={() => openNoteGPTStudio(sk.skill)}
+                      className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+                      title="Bridge this skill gap with NoteGPT"
+                    >
+                      <Brain className="w-3 h-3" />
+                      <span>NoteGPT</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -713,10 +766,13 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
                 </p>
 
                 <div className="pt-3 border-t flex items-center justify-between text-xs" style={{ borderColor: 'var(--border-primary)' }}>
-                  <span className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    CareerOS Recommended
-                  </span>
+                  <button
+                    onClick={() => openNoteGPTStudio(boom.name)}
+                    className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1 hover:underline"
+                  >
+                    <Brain className="w-3.5 h-3.5" />
+                    <span>Open NoteGPT Blueprint</span>
+                  </button>
                   <span className="text-gray-400 font-medium">
                     Top 5% Salary Tier
                   </span>
@@ -725,6 +781,15 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {/* VIEW 5: NoteGPT Skill Studio */}
+      {activeSubTab === 'notegpt' && (
+        <NoteGPTSkillStudio
+          initialSkill={noteGPTSkill}
+          onSuccessToast={onSuccessToast}
+          onErrorToast={onErrorToast}
+        />
       )}
     </div>
   );

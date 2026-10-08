@@ -10,24 +10,30 @@
 :root {
   /* Surfaces */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F9FAFB;
-  --bg-tertiary: #F3F4F6;
+  --bg-secondary: #F8FAFC;
+  --bg-tertiary: #F1F5F9;
 
   /* Borders */
-  --border-primary: #E5E7EB;
-  --border-secondary: #D1D5DB;
+  --border-primary: #E2E8F0;
+  --border-secondary: #CBD5E1;
 
   /* Text */
-  --text-primary: #111827;
-  --text-secondary: #6B7280;
-  --text-tertiary: #9CA3AF;
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-tertiary: #94A3B8;
   --text-inverse: #FFFFFF;
 
-  /* Brand */
+  /* Brand / Primary */
   --brand-600: #2563EB;
   --brand-500: #3B82F6;
   --brand-100: #DBEAFE;
   --brand-50: #EFF6FF;
+
+  /* Accent (AI Intelligence & Graph) */
+  --accent-600: #7C3AED;
+  --accent-500: #8B5CF6;
+  --accent-100: #EDE9FE;
+  --accent-50: #F5F3FF;
 
   /* Semantic */
   --success-600: #059669;
@@ -43,7 +49,7 @@
   --info-50: #F0F9FF;
 
   /* Shadows */
-  --shadow-color: rgba(0, 0, 0, 0.06);
+  --shadow-color: rgba(15, 23, 42, 0.05);
 
   /* Score colors */
   --score-high: #059669;
@@ -57,64 +63,69 @@
   --node-company: #0891B2;
   --node-contact: #DB2777;
   --node-education: #7C3AED;
-  --node-default: #6B7280;
+  --node-default: #64748B;
 
   /* Graph edge */
-  --edge-color: #D1D5DB;
-  --graph-bg: #F9FAFB;
-  --graph-label: #374151;
+  --edge-color: #E2E8F0;
+  --graph-bg: #F8FAFC;
+  --graph-label: #1E293B;
 }
 
 /* ──────────────────────────────────────────────
    Design System Tokens — Dark Mode
    ────────────────────────────────────────────── */
 .dark {
-  --bg-primary: #111113;
-  --bg-secondary: #19191B;
-  --bg-tertiary: #222225;
+  --bg-primary: #0F172A;
+  --bg-secondary: #090D16;
+  --bg-tertiary: #1E293B;
 
-  --border-primary: #2E2E32;
-  --border-secondary: #3A3A3F;
+  --border-primary: #1E293B;
+  --border-secondary: #334155;
 
-  --text-primary: #EDEDEF;
-  --text-secondary: #8B8B8F;
-  --text-tertiary: #5C5C63;
-  --text-inverse: #111113;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-tertiary: #64748B;
+  --text-inverse: #090D16;
 
   --brand-600: #3B82F6;
   --brand-500: #60A5FA;
-  --brand-100: #1E3A5F;
-  --brand-50: #0F1D2E;
+  --brand-100: #1E293B;
+  --brand-50: #0F172A;
 
-  --success-600: #34D399;
+  --accent-600: #8B5CF6;
+  --accent-500: #A78BFA;
+  --accent-100: #2E1065;
+  --accent-50: #1E1B4B;
+
+  --success-600: #10B981;
   --success-100: #064E3B;
-  --success-50: #052E1C;
-  --warning-600: #FBBF24;
+  --success-50: #022C22;
+  --warning-600: #F59E0B;
   --warning-100: #451A03;
-  --warning-50: #2E2208;
-  --error-600: #F87171;
+  --warning-50: #2E1D05;
+  --error-600: #EF4444;
   --error-100: #450A0A;
   --error-50: #2E0D0D;
   --info-600: #38BDF8;
   --info-50: #0C1E29;
 
-  --shadow-color: rgba(0, 0, 0, 0.4);
+  --shadow-color: rgba(0, 0, 0, 0.45);
 
-  --score-high: #34D399;
+  --score-high: #10B981;
   --score-mid: #38BDF8;
-  --score-low: #FBBF24;
+  --score-low: #F59E0B;
 
   --node-candidate: #3B82F6;
   --node-project: #8B5CF6;
-  --node-skill: #FBBF24;
+  --node-skill: #F59E0B;
   --node-company: #22D3EE;
   --node-contact: #F472B6;
   --node-education: #A78BFA;
-  --node-default: #6B7280;
+  --node-default: #64748B;
 
-  --edge-color: #3A3A3F;
-  --graph-bg: #19191B;
-  --graph-label: #EDEDEF;
+  --edge-color: #2A374A;
+  --graph-bg: #090D16;
+  --graph-label: #F8FAFC;
 }
 
 /* ──────────────────────────────────────────────
@@ -207,9 +218,47 @@
   color: var(--error-600);
 }
 
+.badge-accent {
+  background: var(--accent-50);
+  color: var(--accent-600);
+}
+
 .badge-neutral {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+/* Button variants with rich tactile micro-interactions */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-white transition-all cursor-pointer shadow-xs active:scale-[0.98];
+  background-color: var(--brand-600);
+}
+
+.btn-primary:hover {
+  background-color: var(--brand-500);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer active:scale-[0.98];
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-secondary);
+}
+
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 /* Input base */

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import base64
 import logging
@@ -29,9 +30,12 @@ async def gemini_live_websocket(
     await websocket.accept()
     logger.info(f"Gemini Live WebSocket client connected: user={user_id}, role={role}")
 
+    send_lock = asyncio.Lock()
+
     async def send_json_to_client(data: Dict[str, Any]):
         try:
-            await websocket.send_text(json.dumps(data))
+            async with send_lock:
+                await websocket.send_text(json.dumps(data))
         except Exception:
             pass
 
@@ -39,7 +43,8 @@ async def gemini_live_websocket(
         try:
             # Base64 JSON audio frame for MeetingRoom.tsx Web Audio player
             b64 = base64.b64encode(pcm_bytes).decode("ascii")
-            await websocket.send_text(json.dumps({"type": "audio", "data": b64}))
+            async with send_lock:
+                await websocket.send_text(json.dumps({"type": "audio", "data": b64}))
         except Exception:
             pass
 
@@ -63,8 +68,19 @@ async def gemini_live_websocket(
         })
 
         while True:
-            frame = await websocket.receive()
-            
+            try:
+                frame = await websocket.receive()
+            except WebSocketDisconnect:
+                logger.info("Client WebSocket disconnected gracefully.")
+                break
+            except Exception as re:
+                logger.info(f"WebSocket receive exited: {re}")
+                break
+
+            if frame.get("type") == "websocket.disconnect":
+                logger.info(f"Client sent disconnect signal (code: {frame.get('code', 1000)})")
+                break
+
             # Handle binary frames (audio / video)
             if frame.get("bytes"):
                 b = frame["bytes"]
@@ -79,20 +95,31 @@ async def gemini_live_websocket(
 
             # Handle JSON text frames
             if frame.get("text"):
-                msg = json.loads(frame["text"])
+                try:
+                    msg = json.loads(frame["text"])
+                except Exception as je:
+                    logger.debug(f"Non-JSON or malformed text frame: {je}")
+                    continue
+
                 msg_type = msg.get("type")
                 
                 if msg_type == "audio" and msg.get("data"):
-                    # Base64 PCM audio from Web Audio API
-                    pcm_bytes = base64.b64decode(msg["data"])
-                    session.push_audio(pcm_bytes)
+                    try:
+                        # Base64 PCM audio from Web Audio API
+                        pcm_bytes = base64.b64decode(msg["data"])
+                        session.push_audio(pcm_bytes)
+                    except Exception as ae:
+                        logger.debug(f"Invalid audio frame data: {ae}")
                 elif msg_type == "video" and msg.get("data"):
-                    # Real-time webcam / screen JPEG frames for Gemini Vision
-                    raw = msg["data"]
-                    if "," in raw:
-                        raw = raw.split(",")[1]
-                    frame_bytes = base64.b64decode(raw)
-                    session.push_video(frame_bytes)
+                    try:
+                        # Real-time webcam / screen JPEG frames for Gemini Vision
+                        raw = msg["data"]
+                        if "," in raw:
+                            raw = raw.split(",")[1]
+                        frame_bytes = base64.b64decode(raw)
+                        session.push_video(frame_bytes)
+                    except Exception as ve:
+                        logger.debug(f"Invalid video frame data: {ve}")
                 elif msg_type == "text":
                     await session.send_text_message(msg.get("data") or msg.get("text", ""))
                 elif msg_type == "code_sync":
@@ -103,7 +130,8 @@ async def gemini_live_websocket(
                 elif msg_type == "setup":
                     logger.info(f"Received setup payload: {msg.get('role', 'N/A')}")
                 elif msg_type == "interrupt":
-                    logger.debug("Client signaled manual speech interrupt")
+                    logger.info("Client signaled manual/local speech barge-in interrupt")
+                    session.handle_client_interrupted()
                 elif msg_type == "conclude":
                     scorecard = await session.generate_scorecard()
                     await send_json_to_client({"type": "scorecard", "data": scorecard})
@@ -115,3 +143,7 @@ async def gemini_live_websocket(
         logger.error(f"WebSocket session error: {e}", exc_info=True)
     finally:
         await session.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass

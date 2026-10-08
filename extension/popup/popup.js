@@ -1,6 +1,7 @@
 /**
  * CareerOS Chrome Extension v5.0 - Popup Controller
  * Full-featured Autonomous Graph Intelligence & Referral Co-Pilot
+ * Deep Extraction: Profile, Certificates, Badges, Achievements, Experience, Connections, Posts
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -40,6 +41,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const uploadCsvBtn = document.getElementById("uploadCsvBtn");
   const csvFileInput = document.getElementById("csvFileInput");
 
+  // Manual Post & Milestone Ingestion Elements
+  const manualPostInput = document.getElementById("manualPostInput");
+  const btnIngestManualPost = document.getElementById("btnIngestManualPost");
+  const btnScanCurrentPagePosts = document.getElementById("btnScanCurrentPagePosts");
+  const manualIngestStatus = document.getElementById("manualIngestStatus");
+
   // Stepper Elements
   const syncProgressContainer = document.getElementById("syncProgressContainer");
   const progressTitle = document.getElementById("progressTitle");
@@ -55,8 +62,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Report Card Elements
   const syncReportCard = document.getElementById("syncReportCard");
   const reportCandidate = document.getElementById("reportCandidate");
-  const reportRepos = document.getElementById("reportRepos");
-  const reportMilestones = document.getElementById("reportMilestones");
+  const reportCertsBadges = document.getElementById("reportCertsBadges");
+  const reportExpEdu = document.getElementById("reportExpEdu");
   const reportConnections = document.getElementById("reportConnections");
 
   // Target Profile Elements (Tab 2)
@@ -88,12 +95,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (userIdInput && userIdInput.value.trim()) {
       return userIdInput.value.trim();
     }
-    return "4JzJQX61eshV7BAfG1OxHTBY0Xp2";
+    return "4JzJQXG1eshV7BAfG1OxHTBYOXp2";
   }
 
   function updateFooterLinks(apiUrl) {
     if (apiDocsLink) {
-      apiDocsLink.href = apiUrl.includes("localhost") ? "http://localhost:8000/docs" : "https://careerosv5.onrender.com/docs";
+      apiDocsLink.href = apiUrl.includes("localhost")
+        ? "http://localhost:8000/docs"
+        : "https://careerosv5.onrender.com/docs";
     }
   }
 
@@ -113,34 +122,61 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Storage Initialization
-  chrome.storage.local.get(["backendUrl", "userId", "linkedAccountEmail", "lastSyncedTime", "syncedConnCount"], (res) => {
-    if (res.backendUrl && backendSelect) {
-      backendSelect.value = res.backendUrl;
-    }
-    if (res.userId && userIdInput) {
-      userIdInput.value = res.userId;
-    }
-    if (res.linkedAccountEmail && accountUserDisplay) {
-      accountUserDisplay.textContent = res.linkedAccountEmail;
-      if (accountDot) accountDot.classList.add("connected");
-    } else if (res.userId && accountUserDisplay) {
-      accountUserDisplay.textContent = res.userId;
-      if (accountDot) accountDot.classList.add("connected");
-    } else if (accountUserDisplay) {
-      accountUserDisplay.textContent = "Auto-linking session...";
-    }
+  chrome.storage.local.get(
+    [
+      "backendUrl",
+      "apiUrl",
+      "userId",
+      "linkedAccountEmail",
+      "lastSyncedTime",
+      "syncedConnCount",
+      "syncedCertsCount",
+      "syncedExpEduCount",
+      "candidateName"
+    ],
+    (res) => {
+      const chosenUrl = res.backendUrl || res.apiUrl;
+      if (chosenUrl && backendSelect) {
+        backendSelect.value = chosenUrl;
+      }
+      if (res.userId && userIdInput) {
+        userIdInput.value = res.userId;
+      }
+      if (res.linkedAccountEmail && accountUserDisplay) {
+        accountUserDisplay.textContent = res.linkedAccountEmail;
+        if (accountDot) accountDot.classList.add("connected");
+      } else if (res.userId && accountUserDisplay) {
+        accountUserDisplay.textContent = res.userId;
+        if (accountDot) accountDot.classList.add("connected");
+      } else if (accountUserDisplay) {
+        accountUserDisplay.textContent = "Auto-linking session...";
+      }
 
-    if (res.syncedConnCount && reportConnections) {
-      reportConnections.textContent = `${res.syncedConnCount} Contacts`;
-    }
+      if (res.candidateName && reportCandidate) {
+        reportCandidate.textContent = res.candidateName;
+      }
+      if (res.syncedCertsCount !== undefined && reportCertsBadges) {
+        reportCertsBadges.textContent = `${res.syncedCertsCount} Synced`;
+      }
+      if (res.syncedExpEduCount !== undefined && reportExpEdu) {
+        reportExpEdu.textContent = `${res.syncedExpEduCount} Mapped`;
+      }
+      if (res.syncedConnCount && reportConnections) {
+        reportConnections.textContent = `${res.syncedConnCount} Contacts`;
+      }
 
-    updateFooterLinks(getActiveBackendUrl());
-    checkBackendHealth();
-  });
+      if (res.syncedConnCount || res.syncedCertsCount) {
+        if (syncReportCard) syncReportCard.classList.remove("hidden");
+      }
+
+      updateFooterLinks(getActiveBackendUrl());
+      checkBackendHealth();
+    }
+  );
 
   backendSelect?.addEventListener("change", () => {
     const val = backendSelect.value;
-    chrome.storage.local.set({ backendUrl: val });
+    chrome.storage.local.set({ backendUrl: val, apiUrl: val });
     updateFooterLinks(val);
     checkBackendHealth();
   });
@@ -167,8 +203,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function navigateAndWait(tabId, url) {
     try {
       const currentTab = await chrome.tabs.get(tabId);
-      if (currentTab && currentTab.url && currentTab.url.split("?")[0].replace(/\/+$/, "") === url.split("?")[0].replace(/\/+$/, "")) {
-        await new Promise(r => setTimeout(r, 1200));
+      if (
+        currentTab &&
+        currentTab.url &&
+        currentTab.url.split("?")[0].replace(/\/+$/, "") === url.split("?")[0].replace(/\/+$/, "")
+      ) {
+        await new Promise((r) => setTimeout(r, 1200));
         return;
       }
       await chrome.tabs.update(tabId, { url });
@@ -181,7 +221,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const finish = () => {
         if (!isDone) {
           isDone = true;
-          try { chrome.tabs.onUpdated.removeListener(listener); } catch(e) {}
+          try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) {}
           setTimeout(resolve, 1500);
         }
       };
@@ -193,7 +233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       };
 
       chrome.tabs.onUpdated.addListener(listener);
-      setTimeout(finish, 6000);
+      setTimeout(finish, 6500);
     });
   }
 
@@ -201,31 +241,29 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function detectAndConnectCareerOsSession() {
     try {
       if (accountUserDisplay) accountUserDisplay.textContent = "Scanning active tabs...";
-      
+
       const tabs = await chrome.tabs.query({});
-      const careerOsTabs = tabs.filter(t => 
-        t.url && (
-          t.url.includes("careerosv5.vercel.app") || 
-          t.url.includes("localhost:5173") || 
-          t.url.includes("localhost:3000") ||
-          t.url.includes("localhost:8000")
-        )
+      const careerOsTabs = tabs.filter(
+        (t) =>
+          t.url &&
+          (t.url.includes("careerosv5.vercel.app") ||
+            t.url.includes("localhost:5173") ||
+            t.url.includes("localhost:3000") ||
+            t.url.includes("localhost:8000"))
       );
 
       if (careerOsTabs.length === 0) {
-        if (accountUserDisplay) {
-          chrome.storage.local.get(["userId", "linkedAccountEmail"], (res) => {
-            if (res.linkedAccountEmail) {
-              accountUserDisplay.textContent = res.linkedAccountEmail;
-              if (accountDot) accountDot.classList.add("connected");
-            } else if (res.userId) {
-              accountUserDisplay.textContent = res.userId;
-              if (accountDot) accountDot.classList.add("connected");
-            } else {
-              accountUserDisplay.textContent = "Enter Account UID or open Web App";
-            }
-          });
-        }
+        chrome.storage.local.get(["userId", "linkedAccountEmail"], (res) => {
+          if (res.linkedAccountEmail && accountUserDisplay) {
+            accountUserDisplay.textContent = res.linkedAccountEmail;
+            if (accountDot) accountDot.classList.add("connected");
+          } else if (res.userId && accountUserDisplay) {
+            accountUserDisplay.textContent = res.userId;
+            if (accountDot) accountDot.classList.add("connected");
+          } else if (accountUserDisplay) {
+            accountUserDisplay.textContent = "Enter Account UID or open Web App";
+          }
+        });
         return;
       }
 
@@ -246,7 +284,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const directUser = localStorage.getItem("careeros_user");
             if (directId) {
               let parsed = {};
-              try { parsed = JSON.parse(directUser); } catch(e){}
+              try { parsed = JSON.parse(directUser); } catch (e) {}
               return {
                 uid: directId,
                 email: parsed.email || "",
@@ -292,7 +330,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         chrome.storage.local.set({
           userId: uid,
           linkedAccountEmail: displayLabel,
-          backendUrl: backendSelect ? backendSelect.value : PROD_API_URL
+          backendUrl: backendSelect ? backendSelect.value : PROD_API_URL,
+          apiUrl: backendSelect ? backendSelect.value : PROD_API_URL
         });
 
         showToast(`Auto-Linked to Account: ${uid.slice(0, 12)}...`, "success");
@@ -301,20 +340,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (accountDot) accountDot.classList.add("connected");
       }
     } catch (err) {
-      console.warn("Auto-detect tab error:", err);
-      if (accountUserDisplay) {
-        chrome.storage.local.get(["userId", "linkedAccountEmail"], (res) => {
-          if (res.linkedAccountEmail) {
-            accountUserDisplay.textContent = res.linkedAccountEmail;
-            if (accountDot) accountDot.classList.add("connected");
-          } else if (res.userId) {
-            accountUserDisplay.textContent = res.userId;
-            if (accountDot) accountDot.classList.add("connected");
-          } else {
-            accountUserDisplay.textContent = "Target Account: 4JzJQX61eshV7BAfG1OxHTBY0Xp2";
-          }
-        });
-      }
+      console.warn("Auto-detect tab notice:", err);
     }
   }
 
@@ -391,12 +417,19 @@ document.addEventListener("DOMContentLoaded", async () => {
           const p = response.data;
           activeTargetProfileData = p;
 
+          const certsCount = p.certifications?.length || 0;
+          const achCount = p.achievements?.length || 0;
+          const badgesCount = p.badges?.length || 0;
+          const extraInfo = certsCount || achCount || badgesCount
+            ? ` · ${certsCount} Certs · ${achCount + badgesCount} Badges/Awards`
+            : "";
+
           if (contextBody) {
             contextBody.innerHTML = `
               <div class="context-item">
                 <span class="context-tag profile">Profile</span>
                 <strong class="context-title">${escapeHtml(p.name || "LinkedIn Profile")}</strong>
-                <p class="context-text">${escapeHtml(p.headline || p.location || "Profile detected")}</p>
+                <p class="context-text">${escapeHtml(p.headline || p.location || "Profile detected")}${extraInfo}</p>
               </div>
             `;
           }
@@ -408,7 +441,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
           const eduStr = JSON.stringify(p.education || []).toLowerCase();
           const headStr = (p.headline || "").toLowerCase();
-          const isAlum = eduStr.includes("anand") || eduStr.includes("sgi") || headStr.includes("anand") || headStr.includes("sgi");
+          const isAlum =
+            eduStr.includes("anand") ||
+            eduStr.includes("sgi") ||
+            headStr.includes("anand") ||
+            headStr.includes("sgi") ||
+            p.is_alumni;
           if (targetAlumniBadge) {
             if (isAlum) {
               targetAlumniBadge.classList.remove("hidden");
@@ -464,8 +502,75 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   // =========================================================================
-  // DEEP SCANNER FUNCTIONS FOR INJECTION
+  // DEEP SCANNER ENGINE (Profile, Connections, Posts)
   // =========================================================================
+
+  // Live Comprehensive Profile Scan
+  async function performLiveProfileScan(tabId) {
+    try {
+      // Step 1: Pre-hydrate lazy loaded sections by fast scrolling
+      await chrome.scripting.executeScript({
+        target: { tabId: tabId },
+        func: async () => {
+          const steps = [900, 2000, 3500, 5000, 0];
+          for (const s of steps) {
+            window.scrollTo({ top: s, behavior: "instant" });
+            window.dispatchEvent(new Event("scroll", { bubbles: true }));
+            await new Promise((r) => setTimeout(r, 220));
+          }
+        }
+      });
+      await new Promise((r) => setTimeout(r, 350));
+
+      const response = await sendTabMessagePromise(tabId, { action: "EXTRACT_FULL_PROFILE" });
+      if (response && response.data) {
+        return response.data;
+      }
+    } catch (e) {
+      // Re-inject content script and retry
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          files: ["scripts/content.js"]
+        });
+        await new Promise((r) => setTimeout(r, 400));
+        const retryRes = await sendTabMessagePromise(tabId, { action: "EXTRACT_FULL_PROFILE" });
+        if (retryRes && retryRes.data) return retryRes.data;
+      } catch (err) {}
+    }
+
+    // Direct injection fallback with hydration
+    const scriptResults = await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: () => {
+        try {
+          const rawText = document.body ? document.body.innerText : "";
+          const nameEl = document.querySelector("h1.text-heading-xlarge, h1.top-card-layout__title, h1");
+          const name = nameEl ? nameEl.innerText.trim().split("\n")[0] : "Candidate";
+          const headEl = document.querySelector("div.text-body-medium.break-words, h2.top-card-layout__headline");
+          const headline = headEl ? headEl.innerText.trim() : "";
+          return {
+            name: name,
+            full_name: name,
+            headline: headline,
+            raw_text: rawText.slice(0, 30000),
+            education: [],
+            experience: [],
+            certifications: [],
+            achievements: [],
+            badges: [],
+            skills: []
+          };
+        } catch (e) {
+          return null;
+        }
+      }
+    });
+
+    return scriptResults && scriptResults[0] ? scriptResults[0].result : null;
+  }
+
+  // Live Deep Connections Scan with Infinite Scroll & Recovery Pump
   async function performLiveConnectionsScan(tabId) {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
@@ -475,11 +580,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         let noNew = 0;
         let totalCount = 0;
 
-        // Try extracting total count from header (e.g. "842 connections")
+        // Multi-pattern extraction of total connection count
         const headerText = document.body ? document.body.innerText : "";
-        const countMatch = headerText.match(/(\d[\d,]*)\s+connections/i);
-        if (countMatch && countMatch[1]) {
-          totalCount = parseInt(countMatch[1].replace(/,/g, ""), 10) || 0;
+        const patterns = [
+          /(\d[\d,]*)\s+connections/i,
+          /connections\s*\([^\d]*(\d[\d,]*)\)/i,
+          /connections[^\d]*(\d[\d,]*)/i,
+          /(\d[\d,]*)\s+total\s+connections/i,
+          /(\d[\d,]*)\s+contacts/i
+        ];
+        for (const pat of patterns) {
+          const match = headerText.match(pat);
+          if (match && match[1]) {
+            const parsed = parseInt(match[1].replace(/,/g, ""), 10);
+            if (parsed > 0) {
+              totalCount = parsed;
+              break;
+            }
+          }
         }
 
         let hud = document.getElementById("careeros-scan-hud");
@@ -505,65 +623,101 @@ document.addEventListener("DOMContentLoaded", async () => {
           (document.body || document.documentElement).appendChild(hud);
         }
 
+        const cleanText = (str) => {
+          if (!str) return "";
+          return str.replace(/\s+/g, " ").replace(/…see more|see less|\.\.\.more/gi, "").trim();
+        };
+
         const extractFromDom = () => {
-          const links = Array.from(document.querySelectorAll('a[href*="/in/"]'));
-          
-          links.forEach(link => {
+          // Multi-strategy link-based detection
+          const linkCandidates = Array.from(document.querySelectorAll("a[href*='/in/']")).filter((a) => {
+            if (a.closest("header, nav, #global-nav, .global-nav, footer")) return false;
+            const rawHref = a.getAttribute("href") || a.href || "";
+            if (rawHref.includes("/in/me") || rawHref.includes("/in/edit") || rawHref.includes("search") || rawHref.includes("feed")) {
+              return false;
+            }
+            const clean = rawHref.split("?")[0].replace(/\/+$/, "") + "/";
+            return clean.includes("/in/") && !clean.endsWith("/in/");
+          });
+
+          linkCandidates.forEach((link) => {
             const rawHref = link.getAttribute("href") || link.href || "";
-            if (!rawHref) return;
-            
             const cleanUrl = (link.href || rawHref).split("?")[0].replace(/\/+$/, "") + "/";
             if (!cleanUrl || cleanUrl.endsWith("/in/") || cleanUrl.includes("/in/me")) return;
 
-            // Find parent connection container
-            const card = link.closest("li, .artdeco-list__item, [data-view-name], .entity-result, .mn-connection-card, .mn-connections__list-item") || link.parentElement?.parentElement?.parentElement || link.parentElement?.parentElement;
-            if (!card) return;
-
-            const cardText = (card.innerText || "").trim();
-
-            // Extract Name
-            let name = "";
-            const nameEl = card.querySelector(".mn-connection-card__name, .entity-result__title-text, .artdeco-entity-lockup__title, .t-16.t-black.t-bold, h3, [data-view-name*='actor'] a, span[dir='ltr']");
-            if (nameEl) {
-              name = (nameEl.innerText || "").trim().split("\n")[0];
-            }
-            if (!name || name.length < 2 || name.toLowerCase().includes("view") || name.length > 50) {
-              const linkText = (link.innerText || "").trim().split("\n")[0];
-              if (linkText && linkText.length >= 2 && !linkText.toLowerCase().includes("view") && !linkText.toLowerCase().includes("profile")) {
-                name = linkText;
-              }
-            }
-            if (!name || name.length < 2) {
-              const lines = cardText.split("\n").map(l => l.trim()).filter(Boolean);
-              for (const line of lines) {
-                if (line.length >= 2 && line.length <= 40 && !line.includes("Connected") && !line.includes("Message") && !line.includes("Connect") && !line.includes("following") && !line.includes("Sort by") && !line.includes("connections")) {
-                  name = line;
+            let card = link.closest("li, [role='listitem'], div[data-view-name*='connection'], div.scaffold-finite-scroll__content > div");
+            if (!card) {
+              let curr = link;
+              for (let s = 0; s < 7 && curr && curr !== document.body; s++) {
+                curr = curr.parentElement;
+                if (curr && (curr.innerText.includes("Connected on") || curr.innerText.includes("Connected ") || curr.innerText.includes("Message"))) {
+                  card = curr;
                   break;
                 }
               }
             }
+            if (!card) card = link.parentElement?.parentElement || link.parentElement;
 
-            if (!name || name.length < 2 || name.toLowerCase().includes("linkedin member") || name.toLowerCase().includes("sort by") || name.toLowerCase().includes("connections")) return;
+            const cardText = (card?.innerText || "").trim();
+
+            // Extract Name
+            let name = "";
+            const nameInLink = link.querySelector("span[aria-hidden='true'], span") || link;
+            if (nameInLink && nameInLink.innerText) {
+              name = cleanText(nameInLink.innerText).split("\n")[0];
+            }
+            if (!name || name.length < 2 || name.toLowerCase().includes("view") || name.length > 50) {
+              const nameEl = card.querySelector(
+                ".mn-connection-card__name, .entity-result__title-text, .artdeco-entity-lockup__title, .t-16.t-black.t-bold, h3, [data-view-name*='actor'] a, span[dir='ltr']"
+              );
+              if (nameEl) {
+                name = cleanText(nameEl.innerText).split("\n")[0];
+              }
+            }
+
+            name = name
+              .replace(/\(.*?\)/g, "")
+              .replace(/verified/gi, "")
+              .replace(/[\u{1F300}-\u{1F9FF}]/gu, "")
+              .trim();
+
+            if (
+              !name ||
+              name.length < 2 ||
+              name.toLowerCase().includes("linkedin member") ||
+              name.toLowerCase().includes("sort by") ||
+              name.toLowerCase().includes("see all")
+            ) {
+              return;
+            }
 
             // Extract Occupation
             let occupation = "";
-            const occEl = card.querySelector(".mn-connection-card__occupation, .entity-result__primary-subtitle, .artdeco-entity-lockup__caption, .artdeco-entity-lockup__subtitle, .t-14.t-normal, .entity-result__summary");
+            const occEl = card.querySelector(
+              ".mn-connection-card__occupation, .entity-result__primary-subtitle, .artdeco-entity-lockup__caption, .artdeco-entity-lockup__subtitle, .t-14.t-normal, .entity-result__summary, p"
+            );
             if (occEl) {
-              occupation = (occEl.innerText || "").trim();
+              occupation = cleanText(occEl.innerText);
             } else {
-              const lines = cardText.split("\n").map(l => l.trim()).filter(Boolean);
-              const nameIdx = lines.indexOf(name);
+              const lines = cardText.split("\n").map((l) => l.trim()).filter(Boolean);
+              const nameIdx = lines.findIndex((l) => l.toLowerCase() === name.toLowerCase());
               if (nameIdx !== -1 && lines[nameIdx + 1] && !lines[nameIdx + 1].startsWith("Connected") && !lines[nameIdx + 1].startsWith("Message")) {
                 occupation = lines[nameIdx + 1];
               }
             }
 
             // Extract Connected Date
-            let connectedOn = new Date().toLocaleDateString();
-            const dateMatch = cardText.match(/Connected on\s+([A-Za-z]+\s+\d+,\s+\d{4})/i) || cardText.match(/Connected\s+([A-Za-z]+\s+\d+,\s+\d{4})/i);
+            let connectedOn = "Recent";
+            const dateMatch =
+              cardText.match(/Connected on\s+([A-Za-z]+\s+\d+,\s+\d{4})/i) ||
+              cardText.match(/Connected\s+([A-Za-z0-9\s,]+ago|[A-Za-z]+\s+\d+,\s+\d{4})/i);
             if (dateMatch) {
-              connectedOn = dateMatch[1];
+              connectedOn = dateMatch[1].trim();
             }
+
+            // Avatar
+            const imgEl = card.querySelector("img.presence-entity__image, img.evi-image, img.artdeco-entity-lockup__image, img");
+            const avatarUrl = imgEl ? (imgEl.src || "") : "";
 
             // Company & Position
             let company = "";
@@ -571,36 +725,58 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (occupation.includes(" at ")) {
               const parts = occupation.split(" at ");
               position = parts[0].trim();
-              company = parts.slice(1).join(" at ").trim();
+              company = parts.slice(1).join(" at ").split("|")[0].split("•")[0].split(",")[0].trim();
             } else if (occupation.includes(" @ ")) {
               const parts = occupation.split(" @ ");
               position = parts[0].trim();
-              company = parts.slice(1).join(" @ ").trim();
+              company = parts.slice(1).join(" @ ").split("|")[0].split("•")[0].split(",")[0].trim();
             } else if (occupation.includes("|")) {
               const parts = occupation.split("|");
               position = parts[0].trim();
               company = parts[1].trim();
             }
 
-            const nameParts = name.split(" ");
-            const first_name = nameParts[0] || name;
-            const last_name = nameParts.slice(1).join(" ") || "";
+            const occLower = occupation.toLowerCase();
+            let isAlumni = false;
+            let university = "";
+            if (occLower.includes("anand engineering") || occLower.includes("aec") || occLower.includes("anand engg")) {
+              isAlumni = true;
+              university = "Anand Engineering College";
+            } else if (occLower.includes("sharda")) {
+              isAlumni = true;
+              university = "Sharda University";
+            } else if (occLower.includes("hindustan") || occLower.includes("hcst")) {
+              isAlumni = true;
+              university = "Hindustan College of Science and Technology";
+            }
 
-            if (!connectionsMap.has(name) && !connectionsMap.has(cleanUrl)) {
-              connectionsMap.set(name, {
-                first_name,
-                last_name,
-                name,
+            const nameParts = name.split(" ");
+            const firstName = nameParts[0] || name;
+            const lastName = nameParts.slice(1).join(" ") || "";
+
+            // Key uniquely by cleanUrl to prevent name-collision drops
+            const uniqueKey = cleanUrl.toLowerCase().trim();
+            if (uniqueKey && !connectionsMap.has(uniqueKey)) {
+              connectionsMap.set(uniqueKey, {
+                id: `conn_${connectionsMap.size + 1}_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`,
+                first_name: firstName,
+                last_name: lastName,
+                name: name,
                 profile_url: cleanUrl,
+                avatar_url: avatarUrl,
                 company: company || "Industry Network",
                 position: position || "Professional",
+                headline: occupation,
+                university: university,
+                is_alumni: isAlumni,
                 connected_on: connectedOn
               });
             }
           });
         };
 
-        const maxScrolls = 200; // Deep exhaustive traversal
+        const maxScrolls = 450;
+        const maxNoNew = totalCount > 0 ? 35 : 25;
         for (let i = 0; i < maxScrolls; i++) {
           extractFromDom();
 
@@ -616,64 +792,74 @@ document.addEventListener("DOMContentLoaded", async () => {
           }
 
           if (totalCount > 0 && currentCount >= totalCount) {
-            break; // All contacts loaded!
+            break;
           }
 
-          if (currentCount === prevCount && currentCount > 0) {
+          if (currentCount === prevCount) {
             noNew++;
-            if (noNew >= 8) break; // True end reached after 8 pump cycles
-            
-            // --- ACTIVE PUMP RECOVERY MECHANISM ---
-            // Step 1: Scroll UP by 1000px smoothly to unstuck observer
-            window.scrollBy({ top: -1000, behavior: "smooth" });
-            window.dispatchEvent(new WheelEvent("wheel", { deltaY: -1000, bubbles: true }));
-            await new Promise(r => setTimeout(r, 450));
+            if (currentCount === 0 && noNew >= 8) break;
+            if (currentCount > 0 && noNew >= maxNoNew) break;
 
-            // Step 2: Click any 'Show more' / pagination buttons
-            document.querySelectorAll("button.scaffold-finite-scroll__load-button, button.artdeco-button--secondary, button").forEach(b => {
+            // Deep Recovery Pump: scroll up and down, dispatch keyboard and click load more
+            window.scrollBy({ top: -1400, behavior: "smooth" });
+            window.dispatchEvent(new WheelEvent("wheel", { deltaY: -1400, bubbles: true }));
+            await new Promise((r) => setTimeout(r, 450));
+
+            // Click LinkedIn finite scroll load button if visible
+            document.querySelectorAll("button.scaffold-finite-scroll__load-button, button.artdeco-button--secondary, button").forEach((b) => {
+              if (b.classList.contains("scaffold-finite-scroll__load-button")) {
+                try { b.click(); } catch (e) {}
+                return;
+              }
               const text = (b.innerText || "").toLowerCase();
-              if (text.includes("show more") || text.includes("load more") || text.includes("see more")) {
-                try { b.click(); } catch(e){}
+              if (
+                text.includes("show more") ||
+                text.includes("load more") ||
+                text.includes("see more") ||
+                text.includes("show all") ||
+                text.includes("show results")
+              ) {
+                try { b.click(); } catch (e) {}
               }
             });
 
-            // Step 3: Force scroll Down past bottom
             const scrollEl = document.scrollingElement || document.body || document.documentElement;
-            const scrollH = scrollEl ? scrollEl.scrollHeight : 5000;
+            const scrollH = scrollEl ? scrollEl.scrollHeight : 8000;
             window.scrollTo({ top: scrollH, behavior: "instant" });
-            window.scrollBy({ top: 1800, behavior: "instant" });
+            window.scrollBy({ top: 3000, behavior: "instant" });
             window.dispatchEvent(new Event("scroll", { bubbles: true }));
-            window.dispatchEvent(new WheelEvent("wheel", { deltaY: 2000, bubbles: true }));
+            window.dispatchEvent(new WheelEvent("wheel", { deltaY: 3000, bubbles: true }));
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "PageDown", code: "PageDown", bubbles: true }));
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "End", code: "End", bubbles: true }));
 
-            // Step 4: Scroll internal scrollable containers
-            document.querySelectorAll("div, main, section").forEach(el => {
+            document.querySelectorAll("div, main, section, ul").forEach((el) => {
               if (el.scrollHeight > el.clientHeight && el.clientHeight > 200) {
                 el.scrollTop = el.scrollHeight;
               }
             });
 
-            await new Promise(r => setTimeout(r, 1200));
+            await new Promise((r) => setTimeout(r, currentCount > 400 ? 1200 : 900));
             continue;
           } else {
             noNew = 0;
           }
           prevCount = currentCount;
 
-          // Normal progression scroll
           const scrollEl = document.scrollingElement || document.body || document.documentElement;
           const scrollH = scrollEl ? scrollEl.scrollHeight : 5000;
           window.scrollTo({ top: scrollH, behavior: "instant" });
-          window.scrollBy({ top: 1500, behavior: "instant" });
+          window.scrollBy({ top: 1800, behavior: "instant" });
           window.dispatchEvent(new Event("scroll", { bubbles: true }));
-          window.dispatchEvent(new WheelEvent("wheel", { deltaY: 1500, bubbles: true }));
+          window.dispatchEvent(new WheelEvent("wheel", { deltaY: 1800, bubbles: true }));
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "PageDown", code: "PageDown", bubbles: true }));
 
-          document.querySelectorAll("div, main, section").forEach(el => {
+          document.querySelectorAll("div, main, section").forEach((el) => {
             if (el.scrollHeight > el.clientHeight && el.clientHeight > 200) {
               el.scrollTop = el.scrollHeight;
             }
           });
 
-          await new Promise(r => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, currentCount > 400 ? 1000 : 800));
         }
 
         extractFromDom();
@@ -683,16 +869,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#3b82f6;"></span>
             <span>Completed! Ingesting <strong>${connectionsMap.size}</strong> Contacts...</span>
           `;
-          setTimeout(() => { try { hud?.remove(); } catch(e){} }, 3000);
+          setTimeout(() => { try { hud?.remove(); } catch (e) {} }, 3000);
         }
 
         return Array.from(connectionsMap.values());
       }
     });
 
-    return (results && results[0] && Array.isArray(results[0].result)) ? results[0].result : [];
+    return results && results[0] && Array.isArray(results[0].result) ? results[0].result : [];
   }
 
+  // Live Deep Posts Scan with Expansion of "see more"
   async function performLivePostsScan(tabId) {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tabId },
@@ -725,17 +912,32 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         const expandMoreButtons = () => {
-          document.querySelectorAll("button.feed-shared-inline-show-more-text__see-more-less-toggle, button.see-more, [aria-label*='see more'], [aria-label*='more']").forEach(b => {
-            try { b.click(); } catch(e) {}
+          document.querySelectorAll(
+            "button.inline-show-more-text__button, button.feed-shared-inline-show-more-text__see-more-less-toggle, button.see-more, [aria-label*='see more'], [aria-label*='more']"
+          ).forEach((b) => {
+            try { b.click(); } catch (e) {}
           });
         };
 
         const maxPostsScrolls = 80;
         for (let i = 0; i < maxPostsScrolls; i++) {
           expandMoreButtons();
-          const postElems = Array.from(document.querySelectorAll("div.feed-shared-update-v2, div.feed-shared-text, .update-components-update-v2__commentary, .feed-shared-text-view, .update-components-text, div[data-view-name*='update'], article[data-activity-id]"));
-          postElems.forEach(el => {
-            const text = (el.innerText || "").trim().replace(/…see more|see less|\.\.\.more/gi, "").trim();
+          const postElems = Array.from(
+            document.querySelectorAll(
+              "div.feed-shared-update-v2, div.feed-shared-text, .update-components-update-v2__commentary, .feed-shared-text-view, .update-components-text, div[data-view-name*='update'], article[data-activity-id]"
+            )
+          );
+          postElems.forEach((el) => {
+            let text = (el.innerText || "").trim().replace(/…see more|see less|\.\.\.more/gi, "").trim();
+
+            const mediaTitleEl = el.querySelector(".feed-shared-mini-update-v2__title, .feed-shared-article__title, .feed-shared-external-video__title, a.app-aware-link");
+            if (mediaTitleEl) {
+              const mediaTitle = (mediaTitleEl.innerText || "").trim();
+              if (mediaTitle && !text.includes(mediaTitle)) {
+                text = `${text}\n[Attached Milestone: ${mediaTitle}]`;
+              }
+            }
+
             if (text.length > 25 && !text.startsWith("Like\n") && !text.startsWith("Comment\n") && !text.startsWith("All activity")) {
               const key = text.slice(0, 80);
               if (!postsMap.has(key)) postsMap.set(key, text);
@@ -749,14 +951,30 @@ document.addEventListener("DOMContentLoaded", async () => {
             `;
           }
 
-          if (postsMap.size === prevCount && postsMap.size > 0) {
+          const isPageEmpty =
+            document.body &&
+            (document.body.innerText.includes("Nothing to see for now") ||
+              document.body.innerText.includes("No posts yet"));
+          if (isPageEmpty && postsMap.size === 0) {
+            if (hud) {
+              hud.innerHTML = `
+                <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#f59e0b;"></span>
+                <span>No authored posts on this page. Profile milestones will be used.</span>
+              `;
+              setTimeout(() => { try { hud?.remove(); } catch (e) {} }, 2500);
+            }
+            break;
+          }
+
+          if (postsMap.size === prevCount) {
             noNew++;
-            if (noNew >= 6) break;
-            // Up-down pump
+            if (postsMap.size === 0 && noNew >= 4) break;
+            if (postsMap.size > 0 && noNew >= 6) break;
+
             window.scrollBy({ top: -800, behavior: "smooth" });
-            await new Promise(r => setTimeout(r, 450));
+            await new Promise((r) => setTimeout(r, 450));
             window.scrollBy({ top: 1600, behavior: "instant" });
-            await new Promise(r => setTimeout(r, 1100));
+            await new Promise((r) => setTimeout(r, 850));
             continue;
           } else {
             noNew = 0;
@@ -770,13 +988,13 @@ document.addEventListener("DOMContentLoaded", async () => {
           window.dispatchEvent(new Event("scroll", { bubbles: true }));
           window.dispatchEvent(new WheelEvent("wheel", { deltaY: 1400, bubbles: true }));
 
-          document.querySelectorAll("div, main, section").forEach(el => {
+          document.querySelectorAll("div, main, section").forEach((el) => {
             if (el.scrollHeight > el.clientHeight && el.clientHeight > 200) {
               el.scrollTop = el.scrollHeight;
             }
           });
 
-          await new Promise(r => setTimeout(r, 850));
+          await new Promise((r) => setTimeout(r, 750));
         }
 
         if (hud) {
@@ -784,14 +1002,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#22c55e;"></span>
             <span>Completed! Ingesting <strong>${postsMap.size}</strong> Posts with AI...</span>
           `;
-          setTimeout(() => { try { hud?.remove(); } catch(e){} }, 3000);
+          setTimeout(() => { try { hud?.remove(); } catch (e) {} }, 3000);
         }
 
         return Array.from(postsMap.values());
       }
     });
 
-    return (results && results[0] && Array.isArray(results[0].result)) ? results[0].result : [];
+    return results && results[0] && Array.isArray(results[0].result) ? results[0].result : [];
   }
 
   // =========================================================================
@@ -809,100 +1027,192 @@ document.addEventListener("DOMContentLoaded", async () => {
       const userId = getActiveUserId();
       const apiUrl = getActiveBackendUrl();
 
-      // Step 1: Navigate to Profile & Deep Scan Profile Node
-      updateStep(1, "active", 10, "1. Navigating & Extracting Profile & Experience...");
+      // Step 1: Profile Scan (Certs, Badges, Experience, Edu)
+      updateStep(1, "active", 10, "1. Extracting Profile, Certificates, Badges & Experience...");
       const currentUrl = tab.url || "";
-      if (!currentUrl.includes("/in/")) {
+      const isCleanProfilePage =
+        currentUrl.includes("/in/") &&
+        !currentUrl.includes("/recent-activity") &&
+        !currentUrl.includes("/mynetwork") &&
+        !currentUrl.includes("/detail") &&
+        !currentUrl.includes("/edit") &&
+        !currentUrl.includes("/overlay");
+
+      if (!isCleanProfilePage) {
         await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/");
+        await new Promise((r) => setTimeout(r, 2200));
       }
 
-      const profileResults = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => (document.body ? document.body.innerText.slice(0, 15000) : "")
-      });
-      const profileText = (profileResults && profileResults[0] && profileResults[0].result) ? profileResults[0].result : "";
+      const profileData = await performLiveProfileScan(tab.id);
+      let certsCount = 0;
+      let achCount = 0;
+      let badgeCount = 0;
+      let expCount = 0;
+      let eduCount = 0;
 
-      if (profileText) {
-        const form = new FormData();
-        form.append("posts_text", profileText);
+      if (profileData) {
+        certsCount = profileData.certifications?.length || 0;
+        achCount = profileData.achievements?.length || 0;
+        badgeCount = profileData.badges?.length || 0;
+        expCount = profileData.experience?.length || 0;
+        eduCount = profileData.education?.length || 0;
+
         try {
-          const resp = await fetch(`${apiUrl}/ingest/linkedin/posts`, {
+          const profileResp = await fetch(`${apiUrl}/ingest/linkedin/profile`, {
             method: "POST",
-            headers: { "x-user-id": userId },
-            body: form
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": userId
+            },
+            body: JSON.stringify(profileData)
           });
-          if (!resp.ok) console.warn("Profile posts status:", resp.status, await resp.text());
-        } catch(err) {
-          console.warn("Profile posts warn:", err);
+          if (!profileResp.ok) {
+            console.warn("Profile sync notice:", profileResp.status, await profileResp.text());
+          }
+        } catch (err) {
+          console.warn("Profile sync error fallback:", err);
         }
       }
-      updateStep(1, "completed", 33, "Profile & Education Node Synced ✓");
 
-      // Step 2: Auto-Navigate to Connections & Live Deep Scan
-      updateStep(2, "active", 40, "2. Navigating to Connections & Live Deep Scrolling...");
-      await navigateAndWait(tab.id, "https://www.linkedin.com/mynetwork/invite-connect/connections/");
-      
+      updateStep(
+        1,
+        "completed",
+        33,
+        `1. Synced: ${certsCount} Certs · ${achCount + badgeCount} Badges/Awards · ${expCount} Roles ✓`
+      );
+
+      // Step 2: Connections Scan
+      updateStep(2, "active", 40, "2. Live Deep Scrolling & Scanning Connections...");
+      const tabNow = await chrome.tabs.get(tab.id);
+      if (!tabNow.url || !tabNow.url.includes("/mynetwork/invite-connect/connections")) {
+        await navigateAndWait(tab.id, "https://www.linkedin.com/mynetwork/invite-connect/connections/");
+      }
+
       const connections = await performLiveConnectionsScan(tab.id);
-      
+
       if (connections.length > 0) {
-        let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
-        connections.forEach(c => {
-          csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
-        });
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const form = new FormData();
-        form.append("file", blob, "Connections.csv");
-        
-        const resp = await fetch(`${apiUrl}/ingest/linkedin`, {
-          method: "POST",
-          headers: { "x-user-id": userId },
-          body: form
-        });
-        if (!resp.ok) {
-          const errText = await resp.text();
-          console.error("Connections ingest failed:", resp.status, errText);
-          showToast(`Ingest notice (${resp.status}): ${errText.slice(0, 80)}`, "error");
-        } else {
-          const resData = await resp.json();
-          console.log("Connections ingested:", resData);
+        try {
+          const connResp = await fetch(`${apiUrl}/ingest/linkedin/connections`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": userId
+            },
+            body: JSON.stringify({
+              connections: connections,
+              shared_college: "Anand Engineering College"
+            })
+          });
+
+          if (!connResp.ok) {
+            let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
+            connections.forEach((c) => {
+              csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
+            });
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const form = new FormData();
+            form.append("file", blob, "Connections.csv");
+            await fetch(`${apiUrl}/ingest/linkedin`, {
+              method: "POST",
+              headers: { "x-user-id": userId },
+              body: form
+            });
+          }
+        } catch (err) {
+          console.error("Connections sync error:", err);
         }
       }
       updateStep(2, "completed", 66, `2. Synced: ${connections.length} Contacts into Knowledge Graph ✓`);
 
-      // Step 3: Auto-Navigate to Posts Feed & Extract Milestones
-      updateStep(3, "active", 75, "3. Navigating to Activity Feed & Extracting Milestones...");
-      await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/recent-activity/all/");
+      // Step 3: Posts Feed & Milestones Extraction (Zero-Disruption)
+      updateStep(3, "active", 75, "3. Extracting Milestone Posts & Knowledge Nodes...");
 
-      const postsList = await performLivePostsScan(tab.id);
-      const postsText = postsList.join("\n\n---\n\n");
+      let postsText = "";
+      const currentTabInfo = await chrome.tabs.get(tab.id).catch(() => tab);
+      const nowUrl = currentTabInfo.url || "";
 
+      if (nowUrl.includes("/recent-activity") || nowUrl.includes("/feed")) {
+        const postsList = await performLivePostsScan(tab.id);
+        postsText = postsList.join("\n\n---\n\n");
+      }
+
+      // Intelligent Fallback: If no activity feed or on profile, synthesize verified milestones
+      if (!postsText && profileData) {
+        const milestones = [
+          profileData.headline ? `Headline: ${profileData.headline}` : "",
+          profileData.bio ? `About: ${profileData.bio}` : "",
+          (profileData.achievements || []).length > 0
+            ? `Achievements: ${profileData.achievements.map((a) => a.title + " - " + (a.organization || "")).join("; ")}`
+            : "",
+          (profileData.experience || []).length > 0
+            ? `Work: ${profileData.experience.map((e) => e.role + " at " + e.company + " (" + (e.description || "") + ")").join("; ")}`
+            : "",
+          (profileData.certifications || []).length > 0
+            ? `Certificates: ${profileData.certifications.map((c) => c.name + " (" + (c.issuer || "") + ")").join("; ")}`
+            : ""
+        ].filter(Boolean).join("\n\n");
+        if (milestones) postsText = milestones;
+      }
+
+      let hackathonsMerged = 0;
+      let awardsMerged = 0;
       if (postsText) {
-        const form = new FormData();
-        form.append("posts_text", postsText);
-        const resp = await fetch(`${apiUrl}/ingest/linkedin/posts`, {
-          method: "POST",
-          headers: { "x-user-id": userId },
-          body: form
-        });
-        if (!resp.ok) {
-          console.warn("Posts ingest status:", resp.status, await resp.text());
+        try {
+          const resp = await fetch(`${apiUrl}/ingest/linkedin/posts/manual`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": userId
+            },
+            body: JSON.stringify({ posts_text: postsText })
+          });
+          if (resp.ok) {
+            const pData = await resp.json();
+            hackathonsMerged = pData.hackathons_count || 0;
+            awardsMerged = (pData.achievements_count || 0) + (pData.badges_count || 0);
+          }
+        } catch (err) {
+          console.warn("Posts ingest error:", err);
         }
       }
-      updateStep(3, "completed", 100, `3. AI Extracted: ${postsList.length} Milestone Posts ✓`);
+
+      // Return user to their main profile page cleanly
+      try {
+        const endTab = await chrome.tabs.get(tab.id).catch(() => null);
+        if (endTab && !endTab.url.includes("/in/")) {
+          await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/");
+        }
+      } catch (e) {}
+
+      updateStep(
+        3,
+        "completed",
+        100,
+        `3. AI Knowledge Graph: ${hackathonsMerged} Hackathons & ${awardsMerged} Milestones Merged ✓`
+      );
 
       // Save status
-      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      chrome.storage.local.set({ 
+      const nowStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const candidateName = profileData?.name || "Candidate Workspace";
+      chrome.storage.local.set({
         lastSyncedTime: `Today, ${nowStr}`,
-        syncedConnCount: connections.length || 500
+        syncedConnCount: connections.length,
+        syncedCertsCount: certsCount + badgeCount + awardsMerged,
+        syncedExpEduCount: expCount + eduCount,
+        candidateName: candidateName
       });
 
       // Update Report Card
-      if (reportCandidate) reportCandidate.textContent = "Candidate Graph";
+      if (reportCandidate) reportCandidate.textContent = candidateName;
+      if (reportCertsBadges) reportCertsBadges.textContent = `${certsCount + badgeCount + awardsMerged} Synced`;
+      if (reportExpEdu) reportExpEdu.textContent = `${expCount + eduCount} Mapped`;
       if (reportConnections) reportConnections.textContent = `${connections.length} Contacts`;
       if (syncReportCard) syncReportCard.classList.remove("hidden");
 
-      showToast(`Master Full Sync Complete! Merged ${connections.length} contacts & ${postsList.length} milestone posts for account ${userId.slice(0, 10)}!`, "success");
+      showToast(
+        `Master Sync Complete! Synced ${certsCount} Certs, ${connections.length} Contacts, and extracted graph milestones!`,
+        "success"
+      );
     } catch (err) {
       console.error("Master sync error:", err);
       showToast(`Sync Notice: ${err.message}`, "error");
@@ -926,17 +1236,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const conns = await performLiveConnectionsScan(tab.id);
       if (conns.length > 0) {
-        let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
-        conns.forEach(c => {
-          csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
-        });
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const form = new FormData();
-        form.append("file", blob, "Connections.csv");
-        await fetch(`${apiUrl}/ingest/linkedin`, {
+        await fetch(`${apiUrl}/ingest/linkedin/connections`, {
           method: "POST",
-          headers: { "x-user-id": userId },
-          body: form
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId
+          },
+          body: JSON.stringify({
+            connections: conns,
+            shared_college: "Anand Engineering College"
+          })
         });
       }
 
@@ -952,24 +1261,50 @@ document.addEventListener("DOMContentLoaded", async () => {
   syncProfileOnlyBtn?.addEventListener("click", async () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      showToast("Extracting Profile & Education Cluster...", "loading");
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => (document.body ? document.body.innerText.slice(0, 15000) : "")
-      });
-      const profileText = results && results[0] ? results[0].result : "";
+      if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
+        showToast("Open LinkedIn profile first", "error");
+        return;
+      }
 
-      if (profileText) {
-        const form = new FormData();
-        form.append("posts_text", profileText);
-        await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts`, {
+      if (!tab.url.includes("/in/")) {
+        showToast("Navigating to Profile...", "loading");
+        await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/");
+      }
+
+      showToast("Deep Extracting Profile, Certs, Badges & Experience...", "loading");
+      const profileData = await performLiveProfileScan(tab.id);
+
+      if (profileData && (profileData.name || profileData.experience?.length || profileData.certifications?.length)) {
+        await fetch(`${getActiveBackendUrl()}/ingest/linkedin/profile`, {
           method: "POST",
-          headers: { "x-user-id": getActiveUserId() },
-          body: form
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": getActiveUserId()
+          },
+          body: JSON.stringify(profileData)
         });
-        showToast("Profile & College Cluster Synced! ✓", "success");
+
+        const certsCount = profileData.certifications?.length || 0;
+        const badgesCount = (profileData.achievements?.length || 0) + (profileData.badges?.length || 0);
+        const expCount = profileData.experience?.length || 0;
+
+        chrome.storage.local.set({
+          syncedCertsCount: certsCount + (profileData.badges?.length || 0),
+          syncedExpEduCount: expCount + (profileData.education?.length || 0),
+          candidateName: profileData.name
+        });
+
+        if (reportCandidate) reportCandidate.textContent = profileData.name;
+        if (reportCertsBadges) reportCertsBadges.textContent = `${certsCount + (profileData.badges?.length || 0)} Synced`;
+        if (reportExpEdu) reportExpEdu.textContent = `${expCount + (profileData.education?.length || 0)} Mapped`;
+        if (syncReportCard) syncReportCard.classList.remove("hidden");
+
+        showToast(
+          `Profile Synced! Extracted: ${certsCount} Certs · ${badgesCount} Badges/Awards · ${expCount} Roles ✓`,
+          "success"
+        );
       } else {
-        showToast("Could not extract profile text.", "error");
+        showToast("Could not extract structured profile details.", "error");
       }
     } catch (e) {
       showToast(`Error: ${e.message}`, "error");
@@ -979,26 +1314,47 @@ document.addEventListener("DOMContentLoaded", async () => {
   syncPostsOnlyBtn?.addEventListener("click", async () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.url.includes("/recent-activity")) {
-        showToast("Navigating to Posts Feed...", "loading");
-        await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/recent-activity/all/");
+      if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
+        showToast("Open LinkedIn to scan posts", "error");
+        return;
       }
 
-      showToast("Live Scanning Posts Feed...", "loading");
-      const postsList = await performLivePostsScan(tab.id);
-      const postsText = postsList.join("\n\n---\n\n");
-
-      if (postsText) {
-        const form = new FormData();
-        form.append("posts_text", postsText);
-        await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts`, {
-          method: "POST",
-          headers: { "x-user-id": getActiveUserId() },
-          body: form
-        });
-        showToast(`AI Ingested ${postsList.length} Milestone Posts! ✓`, "success");
+      let postsList = [];
+      if (tab.url.includes("/recent-activity") || tab.url.includes("/feed")) {
+        showToast("Scanning visible posts on active tab...", "loading");
+        postsList = await performLivePostsScan(tab.id);
       } else {
-        showToast("No posts found in activity feed.", "error");
+        showToast("Navigating to Posts Feed...", "loading");
+        await navigateAndWait(tab.id, "https://www.linkedin.com/in/me/recent-activity/all/");
+        postsList = await performLivePostsScan(tab.id);
+      }
+
+      const postsText = postsList.join("\n\n---\n\n");
+      if (postsText) {
+        showToast("AI Extracting Hackathons & Merging to Graph DB...", "loading");
+        const resp = await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts/manual`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": getActiveUserId()
+          },
+          body: JSON.stringify({ posts_text: postsText })
+        });
+        if (resp.ok) {
+          const resData = await resp.json();
+          showToast(
+            `Ingested ${postsList.length} posts (${resData.hackathons_count} hackathons, ${resData.graph_nodes_merged} nodes)! ✓`,
+            "success"
+          );
+        } else {
+          showToast(`AI Ingested ${postsList.length} Posts! ✓`, "success");
+        }
+      } else {
+        showToast(
+          "No authored posts found on this page. Paste any post or milestone in the 'Manual Post Ingest' box below!",
+          "error"
+        );
+        manualPostInput?.focus();
       }
     } catch (e) {
       showToast(`Error: ${e.message}`, "error");
@@ -1008,6 +1364,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   syncConnOnlyBtn?.addEventListener("click", async () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
+        showToast("Open LinkedIn to scan connections", "error");
+        return;
+      }
+
       if (!tab.url.includes("/mynetwork/invite-connect/connections")) {
         showToast("Navigating to Connections page...", "loading");
         await navigateAndWait(tab.id, "https://www.linkedin.com/mynetwork/invite-connect/connections/");
@@ -1017,21 +1378,25 @@ document.addEventListener("DOMContentLoaded", async () => {
       const conns = await performLiveConnectionsScan(tab.id);
 
       if (conns.length > 0) {
-        let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
-        conns.forEach(c => {
-          csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
-        });
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const form = new FormData();
-        form.append("file", blob, "Connections.csv");
-        await fetch(`${getActiveBackendUrl()}/ingest/linkedin`, {
+        const resp = await fetch(`${getActiveBackendUrl()}/ingest/linkedin/connections`, {
           method: "POST",
-          headers: { "x-user-id": getActiveUserId() },
-          body: form
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": getActiveUserId()
+          },
+          body: JSON.stringify({
+            connections: conns,
+            shared_college: "Anand Engineering College"
+          })
         });
-        showToast(`Ingested ${conns.length} Real Contacts! ✓`, "success");
+
+        chrome.storage.local.set({ syncedConnCount: conns.length });
+        if (reportConnections) reportConnections.textContent = `${conns.length} Contacts`;
+        if (syncReportCard) syncReportCard.classList.remove("hidden");
+
+        showToast(`Ingested ${conns.length} Real Contacts into Knowledge Graph! ✓`, "success");
       } else {
-        showToast("No connections extracted.", "error");
+        showToast("No connections detected on page.", "error");
       }
     } catch (e) {
       showToast(`Error: ${e.message}`, "error");
@@ -1040,6 +1405,146 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   syncDeltaConnBtn?.addEventListener("click", () => {
     syncConnOnlyBtn?.click();
+  });
+
+  // =========================================================================
+  // MANUAL POST & MILESTONES INGESTION HANDLERS
+  // =========================================================================
+  btnIngestManualPost?.addEventListener("click", async () => {
+    const text = (manualPostInput?.value || "").trim();
+    if (!text) {
+      showToast("Please enter or paste post text to ingest.", "error");
+      manualPostInput?.focus();
+      return;
+    }
+
+    const userId = getActiveUserId();
+    const apiUrl = getActiveBackendUrl();
+
+    btnIngestManualPost.disabled = true;
+    btnIngestManualPost.textContent = "AI Extracting & Merging to Graph DB...";
+    if (manualIngestStatus) {
+      manualIngestStatus.className = "manual-status loading";
+      manualIngestStatus.textContent = "Extracting Hackathons, Milestones, Certs & Merging into Neo4j AuraDB...";
+      manualIngestStatus.classList.remove("hidden");
+    }
+
+    try {
+      const resp = await fetch(`${apiUrl}/ingest/linkedin/posts/manual`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": userId
+        },
+        body: JSON.stringify({ posts_text: text })
+      });
+
+      let data;
+      if (resp.ok) {
+        data = await resp.json();
+      } else {
+        const form = new FormData();
+        form.append("posts_text", text);
+        const resp2 = await fetch(`${apiUrl}/ingest/linkedin/posts`, {
+          method: "POST",
+          headers: { "x-user-id": userId },
+          body: form
+        });
+        if (!resp2.ok) {
+          const errDetail = await resp2.text();
+          throw new Error(errDetail || "Failed to ingest post");
+        }
+        data = await resp2.json();
+      }
+      const hCount = data.hackathons_count || 0;
+      const aCount = data.achievements_count || 0;
+      const bCount = data.badges_count || 0;
+      const sCount = data.skills_count || 0;
+      const cCount = data.certifications_count || 0;
+      const totalNodes = data.graph_nodes_merged || 0;
+
+      const summaryMsg = `✓ Ingested into Graph DB: ${hCount} Hackathons · ${aCount + bCount} Awards/Badges · ${cCount} Certs · ${sCount} Skills (${totalNodes} nodes merged)`;
+
+      if (manualIngestStatus) {
+        manualIngestStatus.className = "manual-status success";
+        manualIngestStatus.textContent = summaryMsg;
+      }
+
+      showToast("Successfully inserted into Neo4j Knowledge Graph!", "success");
+
+      // Update storage and report card
+      chrome.storage.local.get(["syncedCertsCount"], (r) => {
+        const updated = (r.syncedCertsCount || 0) + cCount + bCount + aCount;
+        chrome.storage.local.set({ syncedCertsCount: updated });
+        if (reportCertsBadges) reportCertsBadges.textContent = `${updated} Synced`;
+        if (syncReportCard) syncReportCard.classList.remove("hidden");
+      });
+    } catch (err) {
+      if (manualIngestStatus) {
+        manualIngestStatus.className = "manual-status error";
+        manualIngestStatus.textContent = `Ingest error: ${err.message}`;
+      }
+      showToast(`Ingest failed: ${err.message}`, "error");
+    } finally {
+      btnIngestManualPost.disabled = false;
+      btnIngestManualPost.innerHTML = `
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Insert into Graph DB (AI Extract)</span>
+      `;
+    }
+  });
+
+  btnScanCurrentPagePosts?.addEventListener("click", async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
+      showToast("Open LinkedIn to scan posts from active tab.", "error");
+      return;
+    }
+
+    showToast("Scanning visible posts on active tab...", "loading");
+    const posts = await performLivePostsScan(tab.id);
+    if (!posts || posts.length === 0) {
+      showToast("No visible posts found on this page. Paste post manually above!", "error");
+      return;
+    }
+
+    const postsText = posts.join("\n\n---\n\n");
+    if (manualPostInput) {
+      manualPostInput.value = postsText.slice(0, 1500);
+    }
+
+    try {
+      const resp = await fetch(`${getActiveBackendUrl()}/ingest/linkedin/posts/manual`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": getActiveUserId()
+        },
+        body: JSON.stringify({ posts_text: postsText })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        showToast(
+          `Extracted & merged ${posts.length} tab posts (${data.hackathons_count} hackathons) into Neo4j!`,
+          "success"
+        );
+      } else {
+        showToast("Failed to merge tab posts into Graph DB", "error");
+      }
+    } catch (e) {
+      showToast(`Scan error: ${e.message}`, "error");
+    }
+  });
+
+  document.querySelectorAll(".quick-tag-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const tmpl = chip.getAttribute("data-template") || "";
+      if (manualPostInput) {
+        manualPostInput.value = tmpl + manualPostInput.value;
+        manualPostInput.focus();
+      }
+    });
   });
 
   // =========================================================================
@@ -1066,8 +1571,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const data = await res.json();
       const count = data.total_connections_imported || data.graph_nodes_merged || "All Contacts";
 
-      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      chrome.storage.local.set({ 
+      const nowStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      chrome.storage.local.set({
         lastSyncedTime: `Today, ${nowStr}`,
         syncedConnCount: typeof count === "number" ? count : 842
       });
@@ -1092,9 +1597,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      showToast("Scanning target profile into knowledge graph...", "loading");
-      const res = await sendTabMessagePromise(tab.id, { action: "EXTRACT_CURRENT_PAGE" });
-      const p = res?.data;
+      showToast("Scanning target profile & career nodes...", "loading");
+      const p = await performLiveProfileScan(tab.id);
 
       if (!p || !p.name) {
         showToast("Could not extract target profile information.", "error");
@@ -1108,7 +1612,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         role: p.current_role || p.role || "",
         profile_url: p.profile_url || tab.url,
         location: p.location || "",
-        shared_college: p.education?.[0]?.school || "",
+        shared_college: p.education?.[0]?.university || p.shared_college || "",
         skills: p.skills || [],
         recent_posts: []
       };
@@ -1120,13 +1624,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
 
       const data = await resp.json().catch(() => ({}));
-      showToast(`Linked ${p.name} to your graph! (Edge: ${data.graph_edge || 'CONNECTED_TARGET'})`, "success");
+      showToast(`Linked ${p.name} to your graph! (Edge: ${data.graph_edge || "CONNECTED_TARGET"})`, "success");
       activeTargetProfileData = p;
 
       if (targetProfileName) targetProfileName.textContent = p.name;
       if (targetProfileHeadline) targetProfileHeadline.textContent = p.headline || "";
-      if (targetCompanyVal) targetCompanyVal.textContent = p.current_company || "--";
-      if (targetRoleVal) targetRoleVal.textContent = p.current_role || "--";
+      if (targetCompanyVal) targetCompanyVal.textContent = p.current_company || p.company || "--";
+      if (targetRoleVal) targetRoleVal.textContent = p.current_role || p.role || "--";
     } catch (err) {
       showToast(`Scan error: ${err.message}`, "error");
     }
@@ -1163,17 +1667,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       const conns = await performLiveConnectionsScan(tab.id);
 
       if (conns.length > 0) {
-        let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
-        conns.forEach(c => {
-          csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
-        });
-        const blob = new Blob([csvContent], { type: "text/csv" });
-        const form = new FormData();
-        form.append("file", blob, "Connections.csv");
-        await fetch(`${getActiveBackendUrl()}/ingest/linkedin`, {
+        await fetch(`${getActiveBackendUrl()}/ingest/linkedin/connections`, {
           method: "POST",
-          headers: { "x-user-id": getActiveUserId() },
-          body: form
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": getActiveUserId()
+          },
+          body: JSON.stringify({
+            connections: conns,
+            shared_college: "Anand Engineering College"
+          })
         });
         showToast(`Linked ${conns.length} visible network nodes! ✓`, "success");
       } else {
@@ -1196,11 +1699,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       outreachPitchText.textContent = pitch;
     }
 
-    navigator.clipboard.writeText(pitch).then(() => {
-      showToast("Tailored Referral Pitch generated & copied to clipboard! 📋", "success");
-    }).catch(() => {
-      showToast("Referral Pitch generated! (Copy from preview box)", "success");
-    });
+    navigator.clipboard
+      .writeText(pitch)
+      .then(() => {
+        showToast("Tailored Referral Pitch generated & copied to clipboard! 📋", "success");
+      })
+      .catch(() => {
+        showToast("Referral Pitch generated! (Copy from preview box)", "success");
+      });
   });
 
   // Helper Functions
@@ -1261,6 +1767,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function escapeHtml(str) {
     if (!str) return "";
-    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 });

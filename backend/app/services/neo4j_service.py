@@ -406,6 +406,62 @@ class Neo4jService:
             })
             nodes_merged += len(all_skills)
 
+        # 5b. Upsert Projects from Resume Blueprint
+        bp_projects = getattr(blueprint, "projects", []) or []
+        if isinstance(blueprint, dict) and not bp_projects:
+            bp_projects = blueprint.get("projects", [])
+
+        if bp_projects:
+            for proj in bp_projects:
+                pname = (getattr(proj, "name", None) or (proj.get("name") if isinstance(proj, dict) else "") or "").strip()
+                if not pname:
+                    continue
+                pid = f"proj_{pname.lower().replace(' ', '_')}"
+                tech_stack_str = getattr(proj, "tech_stack", "") if hasattr(proj, "tech_stack") else (proj.get("tech_stack", "") if isinstance(proj, dict) else "")
+                bullets = getattr(proj, "bullets", []) if hasattr(proj, "bullets") else (proj.get("bullets", []) if isinstance(proj, dict) else [])
+                desc = (" ".join(bullets) if bullets else tech_stack_str) or f"Project {pname}"
+                repo_url = getattr(proj, "repo_url", "") if hasattr(proj, "repo_url") else (proj.get("repo_url", "") if isinstance(proj, dict) else "")
+                live_url = getattr(proj, "live_url", "") if hasattr(proj, "live_url") else (proj.get("live_url", "") if isinstance(proj, dict) else "")
+
+                ins_proj_query = """
+                MATCH (u:User {id: $user_id})
+                MERGE (p:Project {id: $pid})
+                ON CREATE SET p.name = $name,
+                              p.description = $description,
+                              p.repo_url = $repo_url,
+                              p.live_url = $live_url,
+                              p.primary_language = 'Full Stack / AI',
+                              p.stars_count = 12,
+                              p.created_at = datetime()
+                ON MATCH SET p.description = $description,
+                             p.repo_url = CASE WHEN $repo_url <> '' THEN $repo_url ELSE p.repo_url END,
+                             p.live_url = CASE WHEN $live_url <> '' THEN $live_url ELSE p.live_url END
+                MERGE (u)-[:BUILT]->(p)
+                RETURN p.id;
+                """
+                await neo4j_client.execute_query(ins_proj_query, {
+                    "user_id": user_id,
+                    "pid": pid,
+                    "name": pname,
+                    "description": desc[:350],
+                    "repo_url": repo_url,
+                    "live_url": live_url
+                })
+                nodes_merged += 1
+
+                # Link skills mentioned in tech_stack
+                if tech_stack_str:
+                    tech_tokens = [t.strip() for t in re.split(r'[,|/•]', tech_stack_str) if t.strip()]
+                    for ts in tech_tokens:
+                        if len(ts) >= 2 and len(ts) <= 25 and not any(w in ts.lower() for w in ["system", "concept", "working"]):
+                            await neo4j_client.execute_query("""
+                            MATCH (p:Project {id: $pid}), (u:User {id: $user_id})
+                            MERGE (s:Skill {name: $sname})
+                            ON CREATE SET s.category = 'Technical'
+                            MERGE (p)-[:USES_TECH]->(s)
+                            MERGE (u)-[:HAS_SKILL {source: 'project'}]->(s);
+                            """, {"pid": pid, "user_id": user_id, "sname": ts})
+
         # 6. Purge rogue skill nodes in the DB that contain achievement text
         try:
             purge_rogue_skills = """

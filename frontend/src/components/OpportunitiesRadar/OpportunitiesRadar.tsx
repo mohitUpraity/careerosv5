@@ -102,6 +102,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [locationFilter, setLocationFilter] = useState<string>('India');
+  const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'match_score' | 'deadline' | 'newest'>('match_score');
   
   // User Preferences State
@@ -138,7 +139,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
 
   useEffect(() => {
     fetchOpportunities();
-  }, [activeCategory, remoteOnly, locationFilter, sortBy]);
+  }, [activeCategory, remoteOnly, locationFilter, platformFilter, sortBy]);
 
   const loadUserPreferences = async () => {
     try {
@@ -163,6 +164,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
           search: searchQuery.trim() || undefined,
           remote_only: remoteOnly,
           location_filter: locationFilter,
+          platform_filter: platformFilter !== 'all' ? platformFilter : undefined,
           sort_by: sortBy,
           refresh: forceRefresh,
         },
@@ -173,7 +175,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
         setCategoryCounts(res.category_counts);
       }
       if (forceRefresh) {
-        onSuccess('Successfully executed live re-scan of Devfolio & Unstop APIs!');
+        onSuccess('Successfully executed live multi-platform scan across Unstop, Devfolio, Remotive, Jobicy, Arbeitnow & RemoteOK!');
       }
     } catch (err: any) {
       onError(err.message || 'Failed to fetch live opportunities');
@@ -267,9 +269,14 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
             `Package: ${job.ctc_stipend || 'Competitive'}`
           ],
           missing_skills: [],
+          matched_skills: [],
+          reward: job.ctc_stipend || 'Competitive Industry Package',
+          deadline_date: job.deadline || '',
+          urgency_level: 'normal',
           salary_or_prize: job.ctc_stipend || 'Competitive Industry Package',
           apply_url: job.apply_url || '#',
-          source: 'College Placement Notice'
+          source: 'College Placement Notice',
+          source_platform: 'College Placement Notice'
         };
 
         setOpportunities(prev => [newOpp, ...prev]);
@@ -389,111 +396,67 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Header Banner */}
       <div 
-        className="p-6 rounded-2xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
+        className="p-5 sm:p-6 rounded-2xl border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
         <div className="flex items-center gap-3.5">
-          <div className="p-3 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md">
-            <Compass className="w-6 h-6 animate-pulse" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Compass className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                Live Opportunities & Semantic Match Radar
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+                Live Opportunities & Match Radar
               </h2>
-              <span className="px-2.5 py-0.5 text-[11px] font-bold rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                Live APIs (Devfolio, Unstop, Jobicy) • 6h Auto-Scan & Verified
+              <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                Multi-Platform Live Radar
               </span>
             </div>
-            <p className="text-xs pt-1" style={{ color: 'var(--text-secondary)' }}>
-              100% real-world open hackathons, paid tech internships & remote developer roles scraped live with active deadline verification.
+            <p className="text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
+              100% real tech jobs, paid internships, hackathons & fellowships across Unstop, Devfolio, Remotive, Jobicy, Arbeitnow & RemoteOK with active deadline verification.
             </p>
           </div>
         </div>
 
+        {/* Clean Action Deck */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* + Paste College Notice / Raw JD Button */}
+          {/* + Paste College Notice / Raw JD */}
           <button
             onClick={() => setIsNoticeModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] shadow-xs transition-all cursor-pointer"
           >
             <GraduationCap className="w-3.5 h-3.5" />
-            <span>+ Paste College Notice / Raw JD</span>
+            <span>+ Paste Notice / JD</span>
           </button>
 
-          {/* Preferences Settings Button */}
-          <button
-            onClick={() => setIsPreferencesModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-all shadow-sm"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
-            <span>Profile Preferences</span>
-          </button>
-
-          {/* Smart URL Ingest Button */}
+          {/* Smart URL Ingest */}
           <button
             onClick={() => setIsUrlModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition-all shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
           >
-            <Link2 className="w-3.5 h-3.5 text-purple-600" />
+            <Link2 className="w-3.5 h-3.5 text-purple-500" />
             <span>Paste Job URL</span>
           </button>
 
+          {/* Preferences Settings */}
+          <button
+            onClick={() => setIsPreferencesModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" />
+            <span>Preferences</span>
+          </button>
+
+          {/* Re-scan */}
           <button
             onClick={() => fetchOpportunities(true)}
             disabled={loading}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all hover:bg-gray-100 dark:hover:bg-gray-800"
-            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-            title="Force immediate live re-scan of Devfolio & Unstop APIs"
+            className="p-2 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            style={{ borderColor: 'var(--border-primary)' }}
+            title="Force immediate live re-scan of all job boards & hackathon platforms"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Re-scan Feeds</span>
-          </button>
-        </div>
-      </div>
-
-
-      {/* User Location Preference Active Bar */}
-      <div 
-        className="p-3.5 px-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-sm"
-        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
-      >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1">
-            <MapPin className="w-3.5 h-3.5 text-blue-600" />
-            Active Geographic Radar:
-          </span>
-          <div className="flex items-center gap-1.5">
-            {[
-              { id: 'India', label: '🇮🇳 India & Remote' },
-              { id: 'Remote Worldwide', label: '🌐 100% Global Remote' },
-              { id: 'All', label: '🌍 All Locations' }
-            ].map(loc => (
-              <button
-                key={loc.id}
-                onClick={() => setLocationFilter(loc.id)}
-                className={`px-3 py-1 rounded-lg font-bold transition-all border ${
-                  locationFilter === loc.id
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
-                }`}
-              >
-                {loc.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500 dark:text-gray-400">
-            Target Roles: <strong className="text-blue-600 dark:text-blue-400">{userPreferences.preferred_roles.slice(0, 2).join(', ')}{userPreferences.preferred_roles.length > 2 ? ` +${userPreferences.preferred_roles.length - 2}` : ''}</strong>
-          </span>
-          <button
-            onClick={() => setIsPreferencesModalOpen(true)}
-            className="text-blue-600 hover:underline font-semibold"
-          >
-            Edit
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
         </div>
       </div>
@@ -858,94 +821,139 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
         </div>
       )}
 
-      {/* Category Tabs Bar */}
-      <div className="flex flex-wrap items-center gap-2">
-        {[
-          { id: 'all' as CategoryTab, label: 'All Opportunities', count: categoryCounts.all, icon: Compass },
-          { id: 'jobs' as CategoryTab, label: 'Live Developer Jobs', count: categoryCounts.jobs, icon: Briefcase },
-          { id: 'internships' as CategoryTab, label: 'Paid Internships', count: categoryCounts.internships, icon: GraduationCap },
-          { id: 'hackathons' as CategoryTab, label: 'Hackathons & Challenges', count: categoryCounts.hackathons, icon: Trophy },
-          { id: 'opensource' as CategoryTab, label: 'Open Source & Bounties', count: categoryCounts.opensource, icon: Globe },
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeCategory === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveCategory(tab.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
-                isActive 
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-102' 
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-gray-200 dark:border-gray-800'
-              }`}
-              style={{
-                backgroundColor: isActive ? undefined : 'var(--bg-primary)',
-                color: isActive ? '#ffffff' : 'var(--text-secondary)',
-              }}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
-              {tab.count > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  isActive ? 'bg-blue-800 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-                }`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search & Filter Bar */}
+      {/* Unified Command & Filter Deck */}
       <div 
-        className="p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm"
+        className="p-4 sm:p-5 rounded-2xl border shadow-xs space-y-3.5 transition-colors"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
-        <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by role, company, or tech keywords (e.g. FastAPI, Neo4j, Python, React, Golang)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-base w-full pl-9 text-xs"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-          >
-            Search
-          </button>
-        </form>
+        {/* Top: Category Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {[
+            { id: 'all' as CategoryTab, label: 'All Opportunities', count: categoryCounts.all, icon: Compass },
+            { id: 'jobs' as CategoryTab, label: 'Jobs', count: categoryCounts.jobs, icon: Briefcase },
+            { id: 'internships' as CategoryTab, label: 'Internships', count: categoryCounts.internships, icon: GraduationCap },
+            { id: 'hackathons' as CategoryTab, label: 'Hackathons', count: categoryCounts.hackathons, icon: Trophy },
+            { id: 'opensource' as CategoryTab, label: 'Open Source', count: categoryCounts.opensource, icon: Globe },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeCategory === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveCategory(tab.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                  isActive 
+                    ? 'bg-blue-600 text-white shadow-xs' 
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+                {tab.count > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    isActive 
+                      ? 'bg-blue-800 text-white' 
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Remote Only Toggle */}
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-            <input
-              type="checkbox"
-              checked={remoteOnly}
-              onChange={(e) => setRemoteOnly(e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
-            />
-            <span>100% Remote / Virtual</span>
-          </label>
+        {/* Divider */}
+        <div className="border-t" style={{ borderColor: 'var(--border-primary)' }} />
 
-          {/* Sort By Dropdown */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <span style={{ color: 'var(--text-tertiary)' }}>Sort by:</span>
-            <select
-              value={sortBy}
-              onChange={(e: any) => setSortBy(e.target.value)}
-              className="input-base text-xs font-medium"
-              style={{ height: '34px' }}
+        {/* Bottom: Search Input + Location Chips + Remote Toggle + Sort */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Search Form */}
+          <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search by role, company, or tech keywords (FastAPI, React, Neo4j)..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="input-base w-full pl-8 text-xs"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs cursor-pointer transition-all shrink-0"
             >
-              <option value="match_score">Highest Graph Match %</option>
-              <option value="deadline">Closing Soonest (Deadlines)</option>
-              <option value="newest">Newly Added</option>
-            </select>
+              Search
+            </button>
+          </form>
+
+          {/* Quick Filters */}
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
+            {/* Location selector pills */}
+            <div className="flex items-center p-0.5 rounded-lg border bg-slate-50 dark:bg-slate-800/60" style={{ borderColor: 'var(--border-primary)' }}>
+              {[
+                { id: 'India', label: '🇮🇳 India' },
+                { id: 'Remote Worldwide', label: '🌐 Remote' },
+                { id: 'All', label: '🌍 All' }
+              ].map(loc => (
+                <button
+                  key={loc.id}
+                  onClick={() => setLocationFilter(loc.id)}
+                  className={`px-2.5 py-1 rounded-md font-medium text-[11px] transition-all cursor-pointer ${
+                    locationFilter === loc.id
+                      ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {loc.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Platform Filter Dropdown */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <select
+                value={platformFilter}
+                onChange={(e: any) => setPlatformFilter(e.target.value)}
+                className="input-base text-xs font-medium cursor-pointer"
+                style={{ height: '32px', paddingLeft: '8px', paddingRight: '20px' }}
+                title="Filter by source platform"
+              >
+                <option value="all">🌐 All Platforms</option>
+                <option value="unstop">Unstop Live</option>
+                <option value="devfolio">Devfolio</option>
+                <option value="remotive">Remotive Tech</option>
+                <option value="jobicy">Jobicy Remote</option>
+                <option value="remoteok">RemoteOK</option>
+                <option value="arbeitnow">Arbeitnow</option>
+              </select>
+            </div>
+
+            {/* Remote Only Toggle */}
+            <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+              <input
+                type="checkbox"
+                checked={remoteOnly}
+                onChange={(e) => setRemoteOnly(e.target.checked)}
+                className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+              />
+              <span>Remote Only</span>
+            </label>
+
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <select
+                value={sortBy}
+                onChange={(e: any) => setSortBy(e.target.value)}
+                className="input-base text-xs font-medium cursor-pointer"
+                style={{ height: '32px', paddingLeft: '8px', paddingRight: '20px' }}
+              >
+                <option value="match_score">Highest Match %</option>
+                <option value="deadline">Closing Soonest</option>
+                <option value="newest">Newly Added</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -1073,6 +1081,13 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                       </span>
                     )}
                     
+                    {opp.source_platform && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1 shadow-2xs">
+                        <Globe className="w-3 h-3 text-indigo-500" />
+                        {opp.source_platform}
+                      </span>
+                    )}
+
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
                       {opp.opportunity_type}
                     </span>
@@ -1125,8 +1140,8 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                     </span>
                   </div>
 
-                  {/* Actions: Prepare & Interview, Tailor Resume, Find Referral, Apply */}
-                  <div className="flex items-center gap-2 flex-wrap">
+                  {/* Actions: Prepare, Tailor, Referral, Apply */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {/* Prepare & Interview Button */}
                     {onPrepareInterview && (
                       <button
@@ -1135,11 +1150,11 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                           opp.organization,
                           `${opp.title} at ${opp.organization}\n\nRequired Skills:\n${opp.skills_required.join(', ')}\n\nDescription:\n${opp.description}`
                         )}
-                        className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all shadow-sm"
-                        title="Open AI Mock Interview Arena & 360° Company Intelligence"
+                        className="btn-secondary"
+                        title="AI Mock Interview & Company Intel"
                       >
-                        <Swords className="w-3.5 h-3.5" />
-                        <span>Prepare & Interview</span>
+                        <Swords className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Prep Interview</span>
                       </button>
                     )}
 
@@ -1150,30 +1165,29 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                         opp.organization, 
                         `${opp.title} at ${opp.organization}\n\nRequired Skills:\n${opp.skills_required.join(', ')}\n\nDescription:\n${opp.description}`
                       )}
-                      className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 transition-all shadow-sm"
-                      title="Generate optimized resume tailored for this role in Resume Studio"
+                      className="btn-secondary"
+                      title="Tailor resume for this role in Resume Studio"
                     >
-                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      <FileText className="w-3.5 h-3.5 text-blue-500" />
                       <span>Tailor Resume</span>
                     </button>
 
                     {/* Find Referral Button */}
                     <button
                       onClick={() => onFindReferral(opp.organization)}
-                      className="px-2.5 py-1.5 rounded-xl text-xs font-medium border hover:bg-gray-100 dark:hover:bg-gray-800 transition-all flex items-center gap-1"
-                      style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
+                      className="btn-ghost"
                       title={`Find alumni referral contacts at ${opp.organization}`}
                     >
-                      <Send className="w-3 h-3 text-emerald-600" />
+                      <Send className="w-3 h-3 text-emerald-500" />
                       <span>Referral</span>
                     </button>
 
-                    {/* Direct Apply / Official Portal Link */}
+                    {/* Direct Apply */}
                     <a
                       href={opp.apply_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-1 shadow-sm transition-all"
+                      className="btn-primary"
                     >
                       <span>Apply</span>
                       <ArrowUpRight className="w-3.5 h-3.5" />

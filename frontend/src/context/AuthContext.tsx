@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: firebaseUser.uid,
             name: firebaseUser.displayName || 'Candidate',
             role: 'Software Engineer',
-            type: 'candidate',
+            type: 'candidate' as const,
             avatar: firebaseUser.photoURL || '',
             githubUser: ''
           };

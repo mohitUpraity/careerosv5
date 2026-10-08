@@ -13,7 +13,7 @@ logger = logging.getLogger("gemini_live.interview")
 class LiveInterviewSession:
     """
     High-level Live Interview Manager supporting audio, vision, behavioral tracking,
-    and post-interview scorecard generation.
+    anti-cheating proctoring, native tool calling, and post-interview scorecard generation.
     """
 
     def __init__(
@@ -48,17 +48,18 @@ class LiveInterviewSession:
         self.start_time = time.time()
         self.transcript_log: List[Dict[str, str]] = []
         self.scratchpad_notes: List[Dict[str, Any]] = []
+        self.proctor_warnings: List[Dict[str, Any]] = []
         self.current_ai_turn_text = ""
 
-        # Build system instruction with behavioral and visual posture cues
+        # Build system instruction with behavioral, visual, and anti-cheating proctor cues
         system_instruction = self._build_system_instruction()
         
         config = LiveEngineConfig(
             model="gemini-3.8-live",
             voice_name=self.voice_name,
             system_instruction=system_instruction,
-            silence_duration_ms=850,  # Natural human turn-taking with patience for candidate pauses
-            prefix_padding_ms=100,
+            silence_duration_ms=600,  # Fast, natural turn-taking & barge-in
+            prefix_padding_ms=40,
         )
 
         self.engine = GeminiLiveEngine(
@@ -91,7 +92,7 @@ CORE HUMAN INTERVIEWER PERSONA & RULES:
 3. CRISP, SPOKEN 1-TO-2 SENTENCE TURNS:
    - This is a spoken voice call, not an essay. Speak in natural, spoken conversational English.
    - Limit each response to 1 to 2 crisp spoken sentences:
-     * Sentence 1: Acknowledge and validate what they just said.
+     * Sentence 1: Acknowledge and validate what they just said or what they showed on video (e.g., "I see what you're holding there...", "Understood on using Redis as cache...").
      * Sentence 2: Ask ONE focused, thoughtful technical follow-up question probing scalability, trade-offs, bottlenecks, or failure modes.
    - Never ask multiple questions in a single turn.
 
@@ -105,6 +106,7 @@ CORE HUMAN INTERVIEWER PERSONA & RULES:
 6. REAL-TIME WEBCAM VISION:
    - You have active visual perception through the candidate's real-time webcam video stream.
    - You CAN see the candidate, their room, facial expressions, eye contact, and gestures.
+   - If the candidate asks "What is in my hand?", "Can you see what I'm holding?", or shows any object (a phone, pen, glass, bottle, notes, cards, badge), IMMEDIATELY examine the video frames and describe the exact object and color you see on screen!
    - If the candidate asks "Can you see me?", "Am I visible?", or mentions their camera/video, warmly confirm: "Yes, I can see you clearly on video! Your feed is coming through great. Go right ahead."
    - Never say you cannot see them or that you don't have eyes or vision.
 
@@ -165,7 +167,21 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
         self.transcript_log.append({"speaker": "Candidate", "text": text})
         await self._emit_json({"type": "input_transcript", "text": text})
 
+    def handle_client_interrupted(self):
+        """Called when client signals proactive user speech barge-in."""
+        if self.current_ai_turn_text.strip():
+            self.transcript_log.append({
+                "speaker": "Interviewer (AI, Interrupted)",
+                "text": self.current_ai_turn_text.strip()
+            })
+        self.current_ai_turn_text = ""
+
     async def _handle_engine_interrupted(self):
+        if self.current_ai_turn_text.strip():
+            self.transcript_log.append({
+                "speaker": "Interviewer (AI, Interrupted)",
+                "text": self.current_ai_turn_text.strip()
+            })
         self.current_ai_turn_text = ""
         await self._emit_json({"type": "interrupted"})
 

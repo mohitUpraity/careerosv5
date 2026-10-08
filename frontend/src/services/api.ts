@@ -17,7 +17,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/api/v1/profile/graph`, {
         headers,
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(12000)
       });
       if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
       return await res.json();
@@ -31,7 +31,7 @@ export const apiService = {
     try {
       const res = await fetch(`${API_BASE}/api/v1/profile/analysis`, {
         headers,
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(12000)
       });
       if (!res.ok) throw new Error(`Failed to load profile analysis (${res.status})`);
       const data = await res.json();
@@ -400,8 +400,114 @@ export const apiService = {
     return await res.json();
   },
 
+  async getNoteGPTSkillBridge(
+    skillName: string,
+    targetRole: string = 'Backend Engineer',
+    headers: Record<string, string>
+  ): Promise<import('../types').NoteGPTSkillBridgeResponse> {
+    const res = await fetch(
+      `${API_BASE}/api/v1/profile/notegpt-bridge/${encodeURIComponent(skillName)}?target_role=${encodeURIComponent(targetRole)}`,
+      { headers }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch NoteGPT skill bridge (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async verifyCertificateProof(
+    payload: {
+      skill_name: string;
+      certificate_title: string;
+      issuer: string;
+      credential_url: string;
+    },
+    headers: Record<string, string>
+  ): Promise<{ status: string; message: string; certificate: any; graph_sync: any }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/verify-certificate`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to verify certificate proof (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async getPublicProfile(username: string): Promise<{ status: string; profile: import('../types').PublicProfileData }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/public/${encodeURIComponent(username)}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch public profile (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async checkUsernameAvailability(
+    username: string,
+    headers: Record<string, string>
+  ): Promise<{ available: boolean; username: string; message: string }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/check-username/${encodeURIComponent(username)}`, { headers });
+    if (!res.ok) throw new Error(`Check username failed (${res.status})`);
+    return await res.json();
+  },
+
+  async claimUsername(
+    username: string,
+    headers: Record<string, string>
+  ): Promise<{ success: boolean; message: string; username: string; public_url: string }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/username`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Claim username failed (${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async recordSkillVerification(
+    payload: {
+      skill_name: string;
+      difficulty_tier?: string;
+      verification_score?: number;
+      proctoring_score?: number;
+      audio_proof_url?: string;
+      radar_scores?: Record<string, number>;
+      feedback_summary?: string;
+    },
+    headers: Record<string, string>
+  ): Promise<{ status: string; message: string; verified_skill: import('../types').VerifiedSkill }> {
+    const res = await fetch(`${API_BASE}/api/v1/profile/verify-skill`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to record skill verification (${res.status})`);
+    }
+    return await res.json();
+  },
+
   async getOpportunities(
-    params: { category?: string; search?: string; remote_only?: boolean; location_filter?: string; sort_by?: string; refresh?: boolean } = {},
+    params: { category?: string; search?: string; remote_only?: boolean; location_filter?: string; platform_filter?: string; sort_by?: string; refresh?: boolean } = {},
     headers: Record<string, string> = {}
   ): Promise<{
     status: string;
@@ -413,6 +519,7 @@ export const apiService = {
       hackathons: number;
       opensource: number;
     };
+    platforms?: string[];
     opportunities: any[];
   }> {
     const query = new URLSearchParams();
@@ -420,6 +527,7 @@ export const apiService = {
     if (params.search) query.append('search', params.search);
     if (params.remote_only) query.append('remote_only', 'true');
     if (params.location_filter) query.append('location_filter', params.location_filter);
+    if (params.platform_filter && params.platform_filter !== 'all') query.append('platform_filter', params.platform_filter);
     if (params.sort_by) query.append('sort_by', params.sort_by);
     if (params.refresh) query.append('refresh', 'true');
 

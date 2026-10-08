@@ -59,6 +59,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     starter_code?: string;
     problem_description?: string;
   } | null>(null);
+  const [disqualificationReason, setDisqualificationReason] = useState<string | null>(null);
 
   // Live Speech & Audio states
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -122,59 +123,22 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     setAudioUnlocked(true);
   }, []);
 
-  // Human TTS Vocalizer for fallback when PCM is blocked by browser autoplay
-  const speakAiText = useCallback((text: string) => {
-    // Strictly disable browser TTS if Gemini Live WebSocket is active to prevent dual-interviewer voices
-    if (!isAutonomousModeRef.current && socketRef.current?.readyState === WebSocket.OPEN) return;
-    if (!("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.05;
-      utterance.pitch = 1.0;
+  // Disable browser WebKit TTS in Live Arena to guarantee 100% genuine Gemini Live PCM audio
+  const speakAiText = useCallback((_text: string) => {
+    return;
+  }, []);
 
-      const voices = window.speechSynthesis.getVoices();
-      const isFemale =
-        config.interviewerProfile.voice === "Zephyr" ||
-        config.interviewerProfile.voice === "Aoede" ||
-        config.interviewerProfile.name === "Sarah" ||
-        config.interviewerProfile.name === "Maya";
+  const speakAiTextRef = useRef(speakAiText);
+  useEffect(() => {
+    speakAiTextRef.current = speakAiText;
+  }, [speakAiText]);
 
-      const preferredVoice = voices.find((v) =>
-        isFemale
-          ? v.name.includes("Samantha") ||
-            v.name.includes("Victoria") ||
-            v.name.includes("Karen") ||
-            v.name.includes("Zira") ||
-            v.name.includes("Google UK English Female") ||
-            v.name.includes("Female")
-          : v.name.includes("Daniel") ||
-            v.name.includes("Alex") ||
-            v.name.includes("David") ||
-            v.name.includes("Google UK English Male") ||
-            v.name.includes("Male")
-      );
+  const [reconnectCount, setReconnectCount] = useState(0);
+  const reconnectAttemptsRef = useRef(0);
+  const isCallEndedRef = useRef(false);
 
-      if (preferredVoice) utterance.voice = preferredVoice;
-
-      utterance.onstart = () => {
-        setIsAiSpeaking(true);
-        setAiVolume(0.85);
-      };
-      utterance.onend = () => {
-        setIsAiSpeaking(false);
-        setAiVolume(0);
-      };
-      utterance.onerror = () => {
-        setIsAiSpeaking(false);
-        setAiVolume(0);
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn("Speech synthesis notice:", e);
-    }
-  }, [config]);
+  // Stable key so the WebSocket connection lifecycle is not re-triggered by cosmetic parent re-renders
+  const connectionKey = `${config.role}_${config.interviewerProfile?.company || "Google"}_${config.interviewerProfile?.name || "Interviewer"}_${config.interviewerProfile?.voice || "Zephyr"}_${config.candidateName}`;
 
   // Initialize Audio & WebSocket Connection
   useEffect(() => {
@@ -185,6 +149,23 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       setUserVolume(inVol);
       setAiVolume(outVol);
       setIsAiSpeaking(outVol > 0.04);
+    });
+
+    audioManager.setOnUserInterrupt(() => {
+      console.log("[Live] ⚡ Proactive User Barge-In detected — stopping audio playback");
+      discardAudioRef.current = true;
+      setIsAiSpeaking(false);
+      setIsInterrupted(true);
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(JSON.stringify({ type: "interrupt" }));
+      }
+      setTimeout(() => setIsInterrupted(false), 1500);
+
+      if (discardAudioTimerRef.current) clearTimeout(discardAudioTimerRef.current);
+      discardAudioTimerRef.current = setTimeout(() => {
+        discardAudioRef.current = false;
+        discardAudioTimerRef.current = null;
+      }, 500);
     });
 
     // Determine WS URL: Supports explicit VITE_WS_URL, VITE_API_BASE_URL, or defaults to current host / Render in production
@@ -217,7 +198,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     // In-Browser Autonomous Recruiter Engine (Fallback ONLY when no live WebSocket backend exists)
     const startAutonomousInterview = () => {
       // Never run if live WebSocket is already connected or active
-      if (ws?.readyState === WebSocket.OPEN || hasReceivedAiMessageRef.current || isAutonomousModeRef.current) return;
+      if (
+        ws?.readyState === WebSocket.OPEN ||
+        socketRef.current?.readyState === WebSocket.OPEN ||
+        socketRef.current?.readyState === WebSocket.CONNECTING ||
+        hasReceivedAiMessageRef.current ||
+        isAutonomousModeRef.current
+      ) {
+        return;
+      }
       isAutonomousModeRef.current = true;
       hasReceivedAiMessageRef.current = true;
       setIsConnecting(false);
@@ -351,6 +340,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           window.speechSynthesis.cancel();
         }
         isAutonomousModeRef.current = false;
+        reconnectAttemptsRef.current = 0;
         console.log("WebSocket connected to", wsUrl);
         setIsConnecting(false);
         discardAudioRef.current = false;
@@ -368,19 +358,31 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         );
       };
 
-      ws.onclose = () => {
-        console.log("WebSocket connection closed");
-        if (!hasReceivedAiMessageRef.current) {
-          startAutonomousInterview();
+      ws.onclose = (event: CloseEvent) => {
+        console.log(`[Live] WebSocket connection closed (code: ${event.code}, reason: "${event.reason}", wasClean: ${event.wasClean})`);
+        
+        // If user voluntarily ended the call or normal 1000 closure, do not reconnect
+        if (isCallEndedRef.current || event.code === 1000) {
+          setIsConnecting(false);
+          return;
+        }
+
+        // Auto-reconnect on service restart (1012), network drop (1006), or unexpected closure
+        if (reconnectAttemptsRef.current < 6) {
+          reconnectAttemptsRef.current += 1;
+          console.log(`[Live] Connection closed unexpectedly (code: ${event.code}). Auto-reconnecting (${reconnectAttemptsRef.current}/6) to Gemini Live...`);
+          setIsConnecting(true);
+          setTimeout(() => {
+            setReconnectCount((c) => c + 1);
+          }, 1200);
+        } else {
+          setIsConnecting(false);
+          console.warn("[Live] Maximum reconnect attempts reached.");
         }
       };
 
       ws.onerror = (err) => {
-        console.warn("Live WebSocket error (activating in-browser recruiter):", err);
-        setIsConnecting(false);
-        if (!hasReceivedAiMessageRef.current) {
-          startAutonomousInterview();
-        }
+        console.warn("Live WebSocket error:", err);
       };
     }
 
@@ -399,6 +401,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             window.speechSynthesis.cancel();
           }
           isAutonomousModeRef.current = false;
+          hasReceivedAiMessageRef.current = true;
           console.log("[Live] ✓ Session ready — AI interviewer connected");
           discardAudioRef.current = false;
           setIsConnecting(false);
@@ -498,10 +501,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             }
             return prev;
           });
-          // Fallback: If no PCM audio arrived but captions did, vocalize via speech synthesis
-          if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
-            speakAiText(currentAiTurnTextRef.current.trim());
-          }
           hasPcmAudioRef.current = false;
           currentAiTurnTextRef.current = "";
 
@@ -542,6 +541,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         } else if (msg.type === "update_whiteboard") {
           setActiveLayout("whiteboard_split");
         } else if (msg.type === "conclude_interview" || msg.type === "interview_terminated") {
+          if (msg.type === "interview_terminated") {
+            setDisqualificationReason(msg.reason || "Disqualified for multiple proctoring/integrity violations.");
+          }
           handleEndCall();
         } else if (msg.type === "status") {
           // Model fallback progress updates from server
@@ -618,6 +620,22 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
           const currentText = final || interim;
           if (currentText.trim()) {
+            if (audioManager.isAiAudioPlaying()) {
+              audioManager.stopPlayback();
+              discardAudioRef.current = true;
+              setIsAiSpeaking(false);
+              setIsInterrupted(true);
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "interrupt" }));
+              }
+              setTimeout(() => setIsInterrupted(false), 1500);
+              if (discardAudioTimerRef.current) clearTimeout(discardAudioTimerRef.current);
+              discardAudioTimerRef.current = setTimeout(() => {
+                discardAudioRef.current = false;
+                discardAudioTimerRef.current = null;
+              }, 500);
+            }
+
             setCurrentCaption({
               speaker: "user",
               speakerName: config.candidateName || "You",
@@ -672,10 +690,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
 
-      // In Safari, off-screen video elements can be suspended by WebKit.
-      // Search for any active playing video element rendering the stream:
-      let activeVideo = videoFeedRef.current;
-      if (!activeVideo || activeVideo.readyState < 2 || activeVideo.videoWidth === 0) {
+      // Prioritize on-screen active video feed in UserTile (active in viewport, never suspended by Safari)
+      let activeVideo = (document.getElementById("active-user-webcam-video") as HTMLVideoElement) || videoFeedRef.current;
+      if (!activeVideo || activeVideo.readyState < 2 || activeVideo.videoWidth === 0 || activeVideo.paused) {
         const allVideos = Array.from(document.querySelectorAll("video")) as HTMLVideoElement[];
         const playing = allVideos.find((v) => v.readyState >= 2 && v.videoWidth > 0 && !v.paused);
         if (playing) {
@@ -686,15 +703,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       if (activeVideo && activeVideo.readyState >= 2) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          canvas.width = 320;
-          canvas.height = 180;
+          canvas.width = 480;
+          canvas.height = 360;
           ctx.drawImage(activeVideo, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
           const base64Jpeg = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
           ws.send(JSON.stringify({ type: "video", data: base64Jpeg }));
         }
       }
-    }, 1200);
+    }, 1000);
 
     // Live analytics timer
     const analyticsTimer = setInterval(() => {
@@ -730,7 +747,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         socketRef.current = null;
       }
     };
-  }, [config, speakAiText]);
+  }, [connectionKey, reconnectCount]);
 
   // Update mute state in Audio Manager
   useEffect(() => {
@@ -842,6 +859,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
   // End Call & Trigger Comprehensive Evaluation
   const handleEndCall = async () => {
+    isCallEndedRef.current = true;
     setShowEvaluation(true);
     setIsEvaluating(true);
 
@@ -1162,6 +1180,37 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         onTriggerReaction={handleTriggerReaction}
         onEndCall={handleEndCall}
       />
+
+      {/* Malpractice Disqualification Modal */}
+      {disqualificationReason && (
+        <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-[#1e1014] border-2 border-red-500 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 mx-auto rounded-full bg-red-600/20 border border-red-500/50 flex items-center justify-center">
+              <AlertTriangle className="w-9 h-9 text-red-500 animate-pulse" />
+            </div>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-red-400">Interview Disqualified</h2>
+              <p className="text-xs text-red-300/80 font-mono mt-1 uppercase tracking-wider">Integrity Proctoring Termination</p>
+            </div>
+            <div className="bg-black/40 border border-red-500/30 rounded-xl p-3.5 text-left text-xs text-gray-300 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-red-400 font-semibold">
+                <span>Violation Cause</span>
+                <span className="font-mono">Integrity Violation</span>
+              </div>
+              <p className="leading-relaxed text-gray-200">{disqualificationReason}</p>
+            </div>
+            <button
+              onClick={() => {
+                setDisqualificationReason(null);
+                onLeaveMeeting();
+              }}
+              className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-red-900/30 cursor-pointer"
+            >
+              Exit Meeting Room
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Post-Interview Evaluation Modal */}
       {showEvaluation && (

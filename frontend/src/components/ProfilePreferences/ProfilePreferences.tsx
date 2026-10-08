@@ -23,6 +23,7 @@ import {
   Calendar, 
   Award, 
   Zap, 
+  Copy, 
   RefreshCw, 
   Layers, 
   Trash2, 
@@ -1766,6 +1767,63 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
             <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
               Used in AI Outreach Pitches, Resume Generation, and Knowledge Graph user identity.
             </p>
+          </div>
+
+          {/* Public CareerOS Verified Handle Card */}
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-900/20 via-slate-900/40 to-indigo-900/20 border border-blue-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <span className="font-bold text-xs text-slate-100 uppercase tracking-wider">
+                  Public CareerOS Handle & Recruiter Dossier Link
+                </span>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                Auditable Proof-of-Skill
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <div className="flex items-center bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-1.5 flex-1">
+                <span className="text-xs text-slate-500 font-mono select-none">careeros.me/p/</span>
+                <input
+                  type="text"
+                  value={profile.username || ''}
+                  onChange={(e) => {
+                    setProfile(prev => ({ ...prev, username: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') }));
+                    setHasUnsavedChanges(true);
+                  }}
+                  placeholder="your-handle"
+                  className="bg-transparent text-xs text-slate-100 font-mono font-semibold focus:outline-none flex-1 pl-1"
+                />
+              </div>
+
+              <a
+                href={`/p/${profile.username || 'candidate'}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-600/20"
+              >
+                <span>Preview Public Dossier</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 pt-1">
+              <span>Share this link on your Resume header & LinkedIn to bypass Round 1 HR screening.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/p/${profile.username || 'candidate'}`;
+                  navigator.clipboard.writeText(url);
+                  onSuccessToast('Public Dossier link copied to clipboard!');
+                }}
+                className="text-blue-400 hover:underline flex items-center gap-1"
+              >
+                <Copy className="w-3 h-3" />
+                Copy URL
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">

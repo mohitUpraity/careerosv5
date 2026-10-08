@@ -224,7 +224,7 @@ async def ingest_candidate_resume(
 
 @router.post("/linkedin")
 async def ingest_linkedin_connections(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
@@ -233,6 +233,12 @@ async def ingest_linkedin_connections(
     """
     user_id = current_user["id"]
     logger.info(f"Processing LinkedIn Connections.csv for user {user_id}")
+
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV file upload required for this endpoint. For JSON connections, use /ingest/linkedin/connections."
+        )
 
     csv_bytes = await file.read()
     connections = linkedin_service.parse_connections_csv(csv_bytes)
@@ -259,6 +265,220 @@ async def ingest_linkedin_connections(
         "sample_companies": companies[:10],
         "graph_nodes_merged": nodes_merged
     }
+
+class DirectConnectionsIngestRequest(BaseModel):
+    connections: List[Dict[str, Any]]
+    shared_college: Optional[str] = "Anand Engineering College"
+
+@router.post("/linkedin/connections")
+async def ingest_linkedin_connections_direct(
+    payload: DirectConnectionsIngestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Directly ingests a list of LinkedIn connections scanned via Chrome Extension.
+    Performs semantic enrichment (company, college, skills, alumni) and merges into Neo4j AuraDB.
+    """
+    user_id = current_user["id"]
+    logger.info(f"Processing direct JSON connections ({len(payload.connections)} items) for user {user_id}")
+
+    if not payload.connections:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No connections provided in request body."
+        )
+
+    enriched_connections = []
+    for c in payload.connections:
+        first_name = (c.get("first_name") or "").strip()
+        last_name = (c.get("last_name") or "").strip()
+        raw_name = (c.get("name") or f"{first_name} {last_name}").strip()
+        if not first_name and raw_name:
+            parts = raw_name.split(" ")
+            first_name = parts[0]
+            last_name = " ".join(parts[1:])
+
+        if not raw_name or raw_name.lower().startswith("linkedin member"):
+            continue
+
+        position = (c.get("position") or c.get("headline") or "Professional").strip()
+        raw_company = (c.get("company") or "").strip()
+        url = (c.get("profile_url") or c.get("url") or "").strip()
+        connected_on = (c.get("connected_on") or "Recent").strip()
+
+        rich = linkedin_service.extract_rich_entities(position, raw_company)
+
+        # Unique person ID
+        if url and "/in/" in url:
+            url_slug = url.split("/in/")[1].split("?")[0].strip("/").lower()
+            person_id = f"linkedin:{url_slug}"
+        else:
+            person_id = f"linkedin:{first_name.lower()}_{last_name.lower()}".replace(" ", "_")
+
+        enriched_connections.append({
+            "id": person_id,
+            "name": raw_name,
+            "first_name": first_name,
+            "last_name": last_name,
+            "raw_company": raw_company,
+            "company": rich["company"] or raw_company or "Industry Network",
+            "university": rich["university"] or c.get("university", ""),
+            "position": rich["role"] or position or "Professional",
+            "skills": list(set(rich.get("skills", []) + (c.get("skills") or []))),
+            "is_alumni": rich["is_alumni"] or bool(c.get("is_alumni", False)),
+            "connected_on": connected_on,
+            "profile_url": url
+        })
+
+    nodes_merged = await neo4j_service.upsert_user_linkedin_connections(
+        user_id=user_id,
+        connections=enriched_connections,
+        shared_college=payload.shared_college
+    )
+
+    companies = list(set([c["company"] for c in enriched_connections if c["company"] and c["company"].lower() != "industry network"]))
+    alumni_count = len([c for c in enriched_connections if c.get("is_alumni")])
+
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "total_connections_imported": len(enriched_connections),
+        "companies_mapped": len(companies),
+        "sample_companies": companies[:10],
+        "alumni_mapped": alumni_count,
+        "graph_nodes_merged": nodes_merged
+    }
+
+class FullProfileIngestRequest(BaseModel):
+    full_name: str
+    headline: Optional[str] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    profile_url: Optional[str] = None
+    avatar_url: Optional[str] = None
+    education: Optional[List[Dict[str, Any]]] = None
+    experience: Optional[List[Dict[str, Any]]] = None
+    certifications: Optional[List[Dict[str, Any]]] = None
+    achievements: Optional[List[Dict[str, Any]]] = None
+    badges: Optional[List[Dict[str, Any]]] = None
+    skills: Optional[List[str]] = None
+    projects: Optional[List[Dict[str, Any]]] = None
+    raw_text: Optional[str] = None
+
+@router.post("/linkedin/profile")
+async def ingest_full_linkedin_profile(
+    payload: FullProfileIngestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Ingests full LinkedIn Profile extracted by the CareerOS Chrome Extension:
+    - Personal info, headline, location, bio
+    - Work Experience (companies, roles, dates, descriptions)
+    - Education (colleges, degrees, dates)
+    - Licenses & Certifications (certificates, issuers, URLs, dates)
+    - Honors & Awards / Achievements
+    - Badges (skill badges, assessment verification)
+    - Skills & Projects
+    Updates Neo4j Knowledge Graph & Master Resume Blueprint atomically.
+    """
+    from app.services.profile_service import profile_service
+    from app.core.database import neo4j_client
+
+    import re
+    user_id = current_user["id"]
+    raw_name = (payload.full_name or "").strip()
+    # Clean any trailing LinkedIn URL slug random alphanumeric hashes like '7a6324316'
+    clean_name = re.sub(r'[\s\-_]+[a-f0-9]{6,12}$', '', raw_name, flags=re.IGNORECASE).strip()
+    full_name_to_use = clean_name if (clean_name and not clean_name.lower().startswith("candidate") and not clean_name.lower().startswith("activity")) else raw_name
+
+    logger.info(f"Ingesting full LinkedIn profile for user {user_id}: {full_name_to_use} ({payload.headline})")
+
+    profile_payload: Dict[str, Any] = {
+        "full_name": full_name_to_use,
+        "headline": payload.headline or "",
+        "bio": payload.bio or "",
+        "location": payload.location or "",
+        "linkedin_url": payload.profile_url or ""
+    }
+
+    # Only pass collections if they contain actual items to prevent wiping
+    if payload.skills and len(payload.skills) > 0:
+        profile_payload["skills"] = payload.skills
+    if payload.education and len(payload.education) > 0:
+        profile_payload["education"] = payload.education
+    if payload.experience and len(payload.experience) > 0:
+        profile_payload["experience"] = payload.experience
+    if payload.projects and len(payload.projects) > 0:
+        profile_payload["projects"] = payload.projects
+    if payload.certifications and len(payload.certifications) > 0:
+        profile_payload["certifications"] = payload.certifications
+    if payload.achievements and len(payload.achievements) > 0:
+        profile_payload["achievements"] = payload.achievements
+
+    # 1. Update Core Profile Details, Nodes & Resume Blueprint (Additive Merge)
+    updated_profile = await profile_service.update_user_profile_details(
+        user_id=user_id,
+        payload=profile_payload
+    )
+
+    nodes_merged = 1
+
+    # 2. Ingest Badges specifically into Neo4j
+    badges_merged = 0
+    if payload.badges and neo4j_client.is_connected:
+        for b in payload.badges:
+            bname = (b.get("name") or b.get("title") or "").strip()
+            if bname:
+                badge_query = """
+                MERGE (u:User {id: $user_id})
+                MERGE (bg:Badge {name: $name})
+                ON CREATE SET bg.issuer = $issuer,
+                              bg.badge_type = $badge_type,
+                              bg.date = $date,
+                              bg.created_at = datetime()
+                MERGE (u)-[:EARNED_BADGE]->(bg)
+                MERGE (u)-[:ACHIEVED]->(bg)
+                RETURN bg.name;
+                """
+                await neo4j_client.execute_query(badge_query, {
+                    "user_id": user_id,
+                    "name": bname,
+                    "issuer": b.get("issuer", "LinkedIn"),
+                    "badge_type": b.get("badge_type", "Skill / Achievement Badge"),
+                    "date": b.get("date", "")
+                })
+                badges_merged += 1
+        nodes_merged += badges_merged
+
+    # 3. If raw_text contains post/hackathon references, extract milestones too
+    hackathons_count = 0
+    if payload.raw_text and len(payload.raw_text) > 100:
+        from app.services.linkedin_posts_service import linkedin_posts_service
+        try:
+            extra_knowledge = await linkedin_posts_service.extract_knowledge_from_posts(payload.raw_text[:15000])
+            if extra_knowledge.get("hackathons") or extra_knowledge.get("achievements"):
+                merged = await linkedin_posts_service.merge_posts_knowledge_to_graph(user_id, extra_knowledge)
+                nodes_merged += merged
+                hackathons_count = len(extra_knowledge.get("hackathons", []))
+        except Exception as e:
+            logger.warning(f"Optional milestone extraction warning: {e}")
+
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "full_name": payload.full_name,
+        "headline": payload.headline,
+        "certifications_count": len(payload.certifications or []),
+        "achievements_count": len(payload.achievements or []),
+        "badges_count": len(payload.badges or []) + badges_merged,
+        "experience_count": len(payload.experience or []),
+        "education_count": len(payload.education or []),
+        "skills_count": len(payload.skills or []),
+        "projects_count": len(payload.projects or []),
+        "hackathons_count": hackathons_count,
+        "nodes_merged": nodes_merged
+    }
+
 
 class LeadPostRequest(BaseModel):
     post_text: str
@@ -289,6 +509,47 @@ async def ingest_hiring_lead_post(
 
 class PostsIngestRequest(BaseModel):
     posts_text: str
+
+@router.post("/linkedin/posts/manual")
+@router.post("/linkedin/posts/raw")
+async def ingest_linkedin_manual_posts_json(
+    payload: PostsIngestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Ingests manually pasted post text, hackathons, achievements, or milestones directly as JSON.
+    Extracts high-value entities with Gemini and merges nodes/relationships into Neo4j Graph DB.
+    """
+    from app.services.linkedin_posts_service import linkedin_posts_service
+    user_id = current_user["id"]
+    posts_text = (payload.posts_text or "").strip()
+
+    if not posts_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Post text cannot be empty."
+        )
+
+    # 1. Extract intelligence via Gemini
+    knowledge = await linkedin_posts_service.extract_knowledge_from_posts(posts_text)
+
+    # 2. Merge into Neo4j Knowledge Graph
+    nodes_merged = await linkedin_posts_service.merge_posts_knowledge_to_graph(
+        user_id=user_id,
+        knowledge=knowledge
+    )
+
+    return {
+        "status": "success",
+        "user_id": user_id,
+        "extracted_knowledge": knowledge,
+        "hackathons_count": len(knowledge.get("hackathons", [])),
+        "achievements_count": len(knowledge.get("achievements", [])),
+        "certifications_count": len(knowledge.get("certifications_or_workshops", [])),
+        "badges_count": len(knowledge.get("badges", [])),
+        "skills_count": len(knowledge.get("extracted_skills", [])),
+        "graph_nodes_merged": nodes_merged
+    }
 
 @router.post("/linkedin/posts")
 async def ingest_linkedin_user_posts(
@@ -343,6 +604,7 @@ async def ingest_linkedin_user_posts(
         "hackathons_count": len(knowledge.get("hackathons", [])),
         "achievements_count": len(knowledge.get("achievements", [])),
         "certifications_count": len(knowledge.get("certifications_or_workshops", [])),
+        "badges_count": len(knowledge.get("badges", [])),
         "skills_count": len(knowledge.get("extracted_skills", [])),
         "graph_nodes_merged": nodes_merged
     }

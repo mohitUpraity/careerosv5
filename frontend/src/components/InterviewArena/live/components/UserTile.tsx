@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Video, VideoOff, Sparkles, User } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff, User } from "lucide-react";
 
 interface UserTileProps {
   stream: MediaStream | null;
@@ -21,7 +21,6 @@ export const UserTile: React.FC<UserTileProps> = ({
   onToggleVideo,
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [blurBackground, setBlurBackground] = useState(false);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -42,13 +41,12 @@ export const UserTile: React.FC<UserTileProps> = ({
       {/* Video Element */}
       {!isVideoOff && stream ? (
         <video
+          id="active-user-webcam-video"
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`w-full h-full object-cover transform -scale-x-100 transition-all duration-300 ${
-            blurBackground ? "filter backdrop-blur-md scale-105" : ""
-          }`}
+          className="w-full h-full object-cover transform -scale-x-100 transition-all duration-300"
         />
       ) : (
         <div className="flex flex-col items-center justify-center">
@@ -74,20 +72,12 @@ export const UserTile: React.FC<UserTileProps> = ({
         </div>
       )}
 
-      {/* Top Left Status & Background Effect Toggle */}
+      {/* Top Left Status: Verified Sharp Feed */}
       <div className="absolute top-4 left-4 z-10 flex items-center space-x-2">
-        <button
-          onClick={() => setBlurBackground(!blurBackground)}
-          className={`px-2.5 py-1 rounded-full text-xs font-medium backdrop-blur-md border transition-all flex items-center space-x-1 ${
-            blurBackground
-              ? "bg-blue-600/90 text-white border-blue-400"
-              : "bg-[#202124]/80 text-gray-300 border-[#3c4043] hover:bg-[#303134]"
-          }`}
-          title="Toggle Portrait Blur Effect"
-        >
-          <Sparkles className="w-3 h-3 text-amber-300" />
-          <span className="hidden sm:inline">Portrait Blur</span>
-        </button>
+        <div className="px-2.5 py-1 rounded-full text-xs font-medium backdrop-blur-md border bg-[#202124]/80 text-emerald-400 border-emerald-500/30 flex items-center space-x-1.5 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-mono text-[11px] text-gray-200">HD Vision Active</span>
+        </div>
       </div>
 
       {/* Top Right Quick Controls */}

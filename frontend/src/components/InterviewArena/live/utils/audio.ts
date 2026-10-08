@@ -17,6 +17,7 @@ export class AudioStreamingManager {
   private nextPlayTime: number = 0;
   private onAudioChunkCallback: ((base64Pcm: string) => void) | null = null;
   private onVolumeChangeCallback: ((inputVolume: number, outputVolume: number) => void) | null = null;
+  private onUserInterruptCallback: (() => void) | null = null;
   private isMuted: boolean = false;
   private isRunning: boolean = false;
   private animationFrameId: number | null = null;
@@ -31,6 +32,10 @@ export class AudioStreamingManager {
 
   public setOnVolumeChange(cb: (inputVol: number, outputVol: number) => void) {
     this.onVolumeChangeCallback = cb;
+  }
+
+  public setOnUserInterrupt(cb: () => void) {
+    this.onUserInterruptCallback = cb;
   }
 
   private unlockHandler: (() => void) | null = null;
@@ -82,6 +87,22 @@ export class AudioStreamingManager {
     this.outputAnalyser.fftSize = 64;
     this.outputAnalyser.smoothingTimeConstant = 0.5;
 
+    if (stream.getAudioTracks().length === 0) {
+      try {
+        const osc = this.inputAudioCtx.createOscillator();
+        const dst = this.inputAudioCtx.createMediaStreamDestination();
+        const gain = this.inputAudioCtx.createGain();
+        gain.gain.value = 0;
+        osc.connect(gain);
+        gain.connect(dst);
+        osc.start();
+        const silentTrack = dst.stream.getAudioTracks()[0];
+        if (silentTrack) stream.addTrack(silentTrack);
+      } catch (err) {
+        console.warn("Could not attach fallback silent track:", err);
+      }
+    }
+
     this.inputSourceNode = this.inputAudioCtx.createMediaStreamSource(stream);
     this.inputSourceNode.connect(this.inputAnalyser);
 
@@ -100,14 +121,18 @@ export class AudioStreamingManager {
       }
       const rms = Math.sqrt(sumSquares / channelData.length);
 
-      // Prevent acoustic echo when AI speaks (ignore low speaker feedback)
+      // Full-Duplex Proactive Barge-In:
+      // When candidate speaks (rms >= 0.005) while AI is playing audio, cut off speaker immediately!
       const isAiSpeaking = this.scheduledSources.length > 0;
-      if (isAiSpeaking && rms < 0.015) {
-        return;
+      if (isAiSpeaking && rms >= 0.005) {
+        this.stopPlayback();
+        if (this.onUserInterruptCallback) {
+          this.onUserInterruptCallback();
+        }
       }
 
-      // Ignore pure background silence when candidate is speaking
-      if (!isAiSpeaking && rms < 0.001) {
+      // Ignore pure background room silence / static (< 0.001 RMS)
+      if (rms < 0.001) {
         return;
       }
 
@@ -260,6 +285,10 @@ export class AudioStreamingManager {
     } catch (err) {
       console.error("Error playing audio chunk:", err);
     }
+  }
+
+  public isAiAudioPlaying(): boolean {
+    return this.scheduledSources.length > 0;
   }
 
   /**

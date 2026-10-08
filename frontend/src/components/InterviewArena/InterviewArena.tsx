@@ -368,29 +368,37 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center gap-2 mt-6 pt-4 border-t flex-wrap" style={{ borderColor: 'var(--border-primary)' }}>
+        <div 
+          className="inline-flex p-1 rounded-xl border mt-5 flex-wrap gap-1" 
+          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
+        >
           <button
             onClick={() => setCurrentTab('live')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTab === 'live'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/25'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'hover:text-blue-600'
             }`}
+            style={{ color: currentTab === 'live' ? '#ffffff' : 'var(--text-secondary)' }}
           >
-            <Zap className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-            <span>🎙️ Gemini 3 Live (Audio + Vision + Proctor)</span>
+            <Zap className="w-3.5 h-3.5 text-amber-300" />
+            <span>Gemini 3 Live Voice & Vision</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-400 text-slate-900">
+              Live
+            </span>
           </button>
 
           <button
             onClick={() => setCurrentTab('arena')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTab === 'arena'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'hover:text-blue-600'
             }`}
+            style={{ color: currentTab === 'arena' ? '#ffffff' : 'var(--text-secondary)' }}
           >
             <Swords className="w-3.5 h-3.5" />
-            Step-by-Step QA Arena
+            <span>Step-by-Step QA Arena</span>
           </button>
 
           <button
@@ -398,16 +406,16 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
               setCurrentTab('intelligence');
               if (!jobIntel) handleFetchJobIntel();
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               currentTab === 'intelligence'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'hover:text-blue-600'
             }`}
+            style={{ color: currentTab === 'intelligence' ? '#ffffff' : 'var(--text-secondary)' }}
           >
             <Brain className="w-3.5 h-3.5" />
-            360° Job & Company Intel
+            <span>360° Company & Role Intel</span>
           </button>
-
         </div>
       </div>
 

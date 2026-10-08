@@ -101,6 +101,7 @@ export interface ExperienceEntry {
   start_date?: string;
   end_date?: string;
   is_current?: boolean;
+  description?: string;
   bullets: string[];
 }
 
@@ -163,12 +164,12 @@ export interface Opportunity {
   category: 'jobs' | 'internships' | 'hackathons' | 'opensource';
   opportunity_type: string;
   location: string;
-  reward: string;
-  deadline_date: string;
+  reward?: string;
+  deadline_date?: string;
   deadline_formatted: string;
   days_left: number;
   is_urgent: boolean;
-  urgency_level: 'normal' | 'high' | 'critical';
+  urgency_level?: 'normal' | 'high' | 'critical';
   source_platform: string;
   apply_url: string;
   skills_required: string[];
@@ -179,6 +180,13 @@ export interface Opportunity {
   eligibility?: string;
   verified?: boolean;
   is_dream_company?: boolean;
+  work_mode?: string;
+  is_primary_choice?: boolean;
+  is_priority_domain_match?: boolean;
+  match_reasons?: string[];
+  deadline?: string;
+  salary_or_prize?: string;
+  source?: string;
 }
 
 export interface OpportunitiesResponse {
@@ -222,8 +230,103 @@ export interface UserPreferences {
   custom_locations?: string[];
 }
 
+export interface VerifiedSkill {
+  name: string;
+  category?: string;
+  difficulty_tier: string;
+  verification_score: number;
+  proctoring_score: number;
+  audio_proof_url?: string;
+  radar_scores?: {
+    system_architecture?: number;
+    code_efficiency?: number;
+    debugging_speed?: number;
+    communication?: number;
+    problem_solving?: number;
+  };
+  feedback_summary?: string;
+  verified_at?: string;
+  backed_by_projects?: string[];
+}
+
+export interface PublicProfileData {
+  id: string;
+  username: string;
+  full_name: string;
+  headline: string;
+  bio?: string;
+  location?: string;
+  github_username?: string;
+  github_url?: string;
+  linkedin_url?: string;
+  portfolio_url?: string;
+  is_public: boolean;
+  metrics: {
+    verified_skills_count: number;
+    total_projects: number;
+    overall_readiness_score: number;
+    proctoring_trust_score: number;
+  };
+  verified_skills: VerifiedSkill[];
+  claimed_skills: string[];
+  projects: Array<{
+    id?: string;
+    name: string;
+    description?: string;
+    repo_url?: string;
+    live_url?: string;
+    primary_language?: string;
+    tech_stack?: string[];
+    stars?: number;
+  }>;
+  experience?: Array<{
+    company: string;
+    role?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string;
+    is_current?: boolean;
+    description?: string;
+  }>;
+  education?: Array<{
+    university: string;
+    degree?: string;
+    field_of_study?: string;
+    start_date?: string;
+    end_date?: string;
+    gpa?: string;
+  }>;
+  certifications?: Array<{
+    name: string;
+    issuer?: string;
+    date?: string;
+    url?: string;
+  }>;
+  achievements?: Array<{
+    title: string;
+    organization?: string;
+    date?: string;
+    description?: string;
+  }>;
+  public_graph?: {
+    nodes: Array<{
+      id: string;
+      label: string;
+      type: string;
+      [key: string]: any;
+    }>;
+    links: Array<{
+      source: string;
+      target: string;
+      type: string;
+    }>;
+  };
+}
+
 export interface UserProfileDetails {
   id?: string;
+  username?: string;
+  is_public?: boolean;
   full_name: string;
   email: string;
   phone?: string;
@@ -274,6 +377,7 @@ export interface UserProfileDetails {
     description?: string;
   }>;
   skills?: string[];
+  verified_skills?: VerifiedSkill[];
   preferences: UserPreferences;
 }
 
@@ -325,7 +429,69 @@ export interface MarketIntelligenceResponse {
   };
 }
 
+export interface NoteGPTMindMapNode {
+  id: string;
+  label: string;
+  category: string;
+  summary: string;
+  deep_dive?: string;
+  code_snippet?: string;
+  interview_tip?: string;
+  children?: NoteGPTMindMapNode[];
+}
 
+export interface NoteGPTRoadmapPhase {
+  phase_number: number;
+  title: string;
+  duration: string;
+  milestones: string[];
+  hands_on_lab: string;
+  deliverable: string;
+}
+
+export interface NoteGPTVerifiedCertification {
+  title: string;
+  issuer: string;
+  type: string;
+  cost: string;
+  url: string;
+  duration: string;
+  format: string;
+  proof_value: string;
+  credibility_rating: string;
+  skills_tested: string[];
+  is_verifiable_on_credly?: boolean;
+  verification_badge?: string;
+}
+
+export interface NoteGPTStudyNotes {
+  tldr: string[];
+  cheat_sheet_commands: Array<{ cmd: string; desc: string }>;
+  senior_vs_junior: Array<{ junior: string; senior: string }>;
+}
+
+export interface NoteGPTFlashcard {
+  question: string;
+  answer: string;
+}
+
+export interface NoteGPTSkillBridgeResponse {
+  status: string;
+  skill: string;
+  category: string;
+  tagline: string;
+  mindmap: NoteGPTMindMapNode;
+  roadmap: {
+    total_duration: string;
+    phases: NoteGPTRoadmapPhase[];
+  };
+  verified_certifications: {
+    free_options: NoteGPTVerifiedCertification[];
+    paid_credentials: NoteGPTVerifiedCertification[];
+  };
+  study_notes: NoteGPTStudyNotes;
+  flashcards: NoteGPTFlashcard[];
+}
 export interface BenchmarkPeer {
   id: string;
   name: string;

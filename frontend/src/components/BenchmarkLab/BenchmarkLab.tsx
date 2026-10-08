@@ -18,12 +18,14 @@ import {
   ExternalLink,
   Code2,
   Trash2,
-  BookOpen
+  BookOpen,
+  Brain
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { apiService } from '../../services/api';
 import { BenchmarkPeer, BenchmarkComparisonResult } from '../../types';
+import { NoteGPTModal } from '../CareerGrowth/NoteGPTModal';
 
 interface BenchmarkLabProps {
   onSelectTailorResume?: (role: string, company: string, jd: string) => void;
@@ -45,6 +47,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
   const [comparison, setComparison] = useState<BenchmarkComparisonResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [comparing, setComparing] = useState<boolean>(false);
+  const [notegptModalSkill, setNotegptModalSkill] = useState<string | null>(null);
 
   // Add Peer Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -201,21 +204,18 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
           <button
             onClick={() => runComparison(selectedPeerId)}
             disabled={comparing}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer"
-            style={{
-              backgroundColor: 'var(--bg-secondary)',
-              color: 'var(--text-primary)',
-              borderColor: 'var(--border-primary)',
-            }}
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            style={{ height: '36px' }}
             title="Re-run Gap Matrix"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${comparing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">Refresh Matrix</span>
           </button>
 
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer"
+            className="btn-primary text-xs flex items-center gap-1.5"
+            style={{ height: '36px' }}
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Target Peer</span>
@@ -541,6 +541,16 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                     <span className="font-semibold text-blue-600 block mb-0.5">Recommended Project:</span>
                     <p style={{ color: 'var(--text-primary)' }}>{item.action_item}</p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setNotegptModalSkill(item.skill)}
+                    className="w-full mt-2 py-1.5 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                    title={`Open NoteGPT Mind Map, Roadmap & Verified Certs for ${item.skill}`}
+                  >
+                    <Brain className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>NoteGPT Mindmap & Proofs</span>
+                  </button>
                 </div>
               ))}
             </div>
@@ -733,6 +743,17 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* NoteGPT Skill Gap Modal */}
+      {notegptModalSkill && (
+        <NoteGPTModal
+          isOpen={!!notegptModalSkill}
+          onClose={() => setNotegptModalSkill(null)}
+          skillName={notegptModalSkill}
+          onSuccessToast={onSuccess}
+          onErrorToast={onError}
+        />
       )}
     </div>
   );

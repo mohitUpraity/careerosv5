@@ -9,8 +9,8 @@ class LiveEngineConfig(BaseModel):
     output_sample_rate: int = 24000
     channels: int = 1
     chunk_size: int = 512
-    silence_duration_ms: int = 850  # Patient human turn-taking: gives candidate time to breathe & complete thoughts
-    prefix_padding_ms: int = 100
+    silence_duration_ms: int = 600  # Fast, natural turn-taking and quick barge-in
+    prefix_padding_ms: int = 40
     system_instruction: Optional[str] = (
         "You are an expert technical interviewer conducting a live conversational interview. "
         "Keep your answers and questions concise (2-3 short sentences max) for a natural live back-and-forth dialogue. "

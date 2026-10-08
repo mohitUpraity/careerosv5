@@ -21,13 +21,15 @@ async def get_live_opportunities(
     search: Optional[str] = Query(None, description="Search term for title, company, or skills"),
     remote_only: bool = Query(False, description="Filter for 100% remote or virtual opportunities"),
     location_filter: Optional[str] = Query(None, description="Filter: India, Remote Worldwide, All"),
+    platform_filter: Optional[str] = Query(None, description="Filter: all, unstop, devfolio, remotive, jobicy, remoteok, arbeitnow, flagship"),
     sort_by: str = Query("match_score", description="match_score, deadline, newest"),
-    refresh: bool = Query(False, description="Force re-scrape Devfolio, Unstop and live feeds"),
+    refresh: bool = Query(False, description="Force re-scrape all multi-platform feeds"),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Returns real-time verified opportunities (Jobs, Internships, Hackathons, Open Source Fellowships)
-    scraped directly from Devfolio, Unstop, and Jobicy APIs and scored semantically against user profile.
+    scraped directly from Unstop, Devfolio, Remotive, Jobicy, Arbeitnow, RemoteOK & Flagship Portals
+    and scored semantically against user profile with strict unexpired deadline verification.
     """
     user_id = current_user["id"]
     try:
@@ -37,6 +39,7 @@ async def get_live_opportunities(
             search_query=search,
             remote_only=remote_only,
             location_filter=location_filter,
+            platform_filter=platform_filter,
             sort_by=sort_by,
             force_refresh=refresh
         )
@@ -49,10 +52,14 @@ async def get_live_opportunities(
             "opensource": sum(1 for o in opportunities if o["category"] == "opensource"),
         }
 
+        # Collect distinct platforms present in current opportunity pool
+        platforms_present = sorted(list(set(o.get("source_platform", "Other") for o in opportunities)))
+
         return {
             "status": "success",
             "total": len(opportunities),
             "category_counts": counts,
+            "platforms": platforms_present,
             "opportunities": opportunities
         }
     except Exception as e:

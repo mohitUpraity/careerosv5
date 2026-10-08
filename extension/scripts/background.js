@@ -3,13 +3,14 @@ const LOCAL_API_URL = "http://localhost:8000/api/v1";
 
 async function getApiBase() {
   try {
-    const stored = await chrome.storage.local.get(["apiUrl"]);
-    if (stored.apiUrl) return stored.apiUrl;
-    
+    const stored = await chrome.storage.local.get(["apiUrl", "backendUrl"]);
+    const chosen = stored.backendUrl || stored.apiUrl;
+    if (chosen) return chosen;
+
     // Auto-probe localhost with 800ms timeout
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 800);
-    const res = await fetch(`${LOCAL_API_URL}/health`, { signal: controller.signal });
+    const res = await fetch(`http://localhost:8000/health`, { signal: controller.signal });
     clearTimeout(timer);
     if (res.ok) return LOCAL_API_URL;
   } catch (e) {
@@ -21,7 +22,8 @@ async function getApiBase() {
 chrome.runtime.onInstalled.addListener(() => {
   console.log("CareerOS Extension Installed & Ready.");
   chrome.storage.local.set({
-    apiUrl: PROD_API_URL
+    apiUrl: PROD_API_URL,
+    backendUrl: PROD_API_URL
   });
 });
 
@@ -29,18 +31,44 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     try {
       const apiBase = await getApiBase();
-      
+
       const storedUser = await chrome.storage.local.get(["userId"]);
       const effectiveUserId = request.userId || storedUser.userId || "4JzJQX61eshV7BAfG1OxHTBY0Xp2";
 
       if (request.action === "HEALTH_CHECK") {
         try {
-          const res = await fetch(`${apiBase}/health`);
+          const rootUrl = apiBase.replace("/api/v1", "");
+          const res = await fetch(`${rootUrl}/health`);
           const data = await res.json();
           sendResponse({ success: true, data, apiBase });
         } catch (err) {
           sendResponse({ success: false, error: err.message, apiBase });
         }
+      } else if (request.action === "INGEST_PROFILE_FULL") {
+        const res = await fetch(`${apiBase}/ingest/linkedin/profile`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": effectiveUserId
+          },
+          body: JSON.stringify(request.profileData)
+        });
+        const data = await res.json();
+        sendResponse({ success: res.ok, status: res.status, data });
+      } else if (request.action === "INGEST_CONNECTIONS_JSON") {
+        const res = await fetch(`${apiBase}/ingest/linkedin/connections`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": effectiveUserId
+          },
+          body: JSON.stringify({
+            connections: request.connections,
+            shared_college: request.sharedCollege || "Anand Engineering College"
+          })
+        });
+        const data = await res.json();
+        sendResponse({ success: res.ok, status: res.status, data });
       } else if (request.action === "INGEST_POSTS_TEXT") {
         const formData = new FormData();
         formData.append("posts_text", request.postsText);
@@ -53,7 +81,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           body: formData
         });
         const data = await res.json();
-        sendResponse({ success: true, data });
+        sendResponse({ success: res.ok, status: res.status, data });
       } else if (request.action === "ANALYZE_JOB") {
         const res = await fetch(`${apiBase}/matches/analyze`, {
           method: "POST",
@@ -68,7 +96,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           })
         });
         const data = await res.json();
-        sendResponse({ success: true, data });
+        sendResponse({ success: res.ok, status: res.status, data });
       }
     } catch (err) {
       sendResponse({ success: false, error: err.message });

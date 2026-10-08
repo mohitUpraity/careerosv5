@@ -44,6 +44,8 @@ interface LobbyProps {
   userVolume: number;
   onToggleMic: () => void;
   onToggleVideo: () => void;
+  onRequestPermissions?: () => void;
+  permissionError?: string | null;
   initialCompany?: string;
   initialRole?: string;
   initialJobDescription?: string;
@@ -98,6 +100,8 @@ export const Lobby: React.FC<LobbyProps> = ({
   userVolume,
   onToggleMic,
   onToggleVideo,
+  onRequestPermissions,
+  permissionError,
   initialCompany,
   initialRole,
   initialJobDescription,
@@ -142,12 +146,26 @@ export const Lobby: React.FC<LobbyProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const hasLiveVideo = Boolean(
+    !isVideoOff &&
+    stream &&
+    stream.getVideoTracks().some((t) => t.readyState === "live" && t.enabled)
+  );
+
+  const hasLiveAudio = Boolean(
+    !isMuted &&
+    stream &&
+    stream.getAudioTracks().some((t) => t.readyState === "live" && t.enabled)
+  );
+
   useEffect(() => {
     if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
       videoRef.current.play().catch(() => {});
     }
-  }, [stream, isVideoOff]);
+  }, [stream, isVideoOff, hasLiveVideo]);
 
   // Handle Preset Selection
   const handleSelectPreset = (preset: typeof COMPANY_PRESETS[0]) => {
@@ -263,6 +281,15 @@ export const Lobby: React.FC<LobbyProps> = ({
       document.documentElement.requestFullscreen().catch(() => {});
     }
 
+    // Actively prompt for camera and microphone on direct user click if not already live
+    if ((!hasLiveVideo || !hasLiveAudio) && onRequestPermissions) {
+      try {
+        await onRequestPermissions();
+      } catch (err) {
+        console.warn("Lobby permission request notice:", err);
+      }
+    }
+
     onJoinMeeting({
       candidateName: candidateName.trim() || "Candidate",
       company: company.trim() || "Target Company",
@@ -300,10 +327,22 @@ export const Lobby: React.FC<LobbyProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          <div className="hidden md:flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-800/40">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="font-medium">Audio + Camera + Proctoring Active</span>
-          </div>
+          {hasLiveVideo && hasLiveAudio ? (
+            <div className="hidden md:flex items-center space-x-2 text-xs text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-800/40">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="font-medium">Live Camera & Mic Ready</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onRequestPermissions || onToggleVideo}
+              className="hidden md:flex items-center space-x-2 text-xs text-amber-300 bg-amber-950/50 hover:bg-amber-900/60 px-3 py-1.5 rounded-xl border border-amber-600/50 transition-all cursor-pointer animate-pulse"
+              title="Click to request Camera & Microphone access"
+            >
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-semibold">Allow Camera & Microphone</span>
+            </button>
+          )}
 
           {onBack && (
             <button
@@ -323,36 +362,44 @@ export const Lobby: React.FC<LobbyProps> = ({
         {/* Left Column (5 Cols): Live Camera & Mic Preview */}
         <div className="lg:col-span-5 flex flex-col space-y-4">
           <div className="relative w-full aspect-video bg-[#1e1e24] rounded-3xl overflow-hidden border border-[#3c4043] shadow-2xl flex items-center justify-center group">
-            {!isVideoOff && stream ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover transform -scale-x-100"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center text-center p-6">
+            {/* Live Video Element constantly mounted to preserve stream attachment */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`w-full h-full object-cover transform -scale-x-100 transition-opacity duration-300 ${
+                hasLiveVideo
+                  ? "opacity-100 z-0"
+                  : "opacity-0 pointer-events-none"
+              }`}
+            />
+
+            {/* Camera Off / Permission Required Overlay */}
+            {!hasLiveVideo && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-[#1e1e24]/95 backdrop-blur-sm z-10">
                 <div className="w-20 h-20 rounded-full bg-[#2d2f34] flex items-center justify-center text-white text-2xl font-semibold mb-3 border border-[#3c4043] shadow-inner">
                   {candidateName ? candidateName.slice(0, 2).toUpperCase() : <User className="w-8 h-8 text-gray-400" />}
                 </div>
                 <p className="text-sm font-semibold text-gray-200">Camera is Off</p>
-                <p className="text-xs text-gray-400 mt-1 max-w-xs">
-                  Enable your camera to preview your video feed before entering the arena.
+                <p className="text-xs text-gray-400 mt-1 max-w-xs leading-relaxed">
+                  {permissionError || "Click below to enable your camera and microphone preview before entering the arena."}
                 </p>
-                <button
-                  type="button"
-                  onClick={onToggleVideo}
-                  className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                >
-                  <Video className="w-3.5 h-3.5" />
-                  <span>Turn On Camera</span>
-                </button>
+                <div className="flex items-center gap-2 mt-3.5">
+                  <button
+                    type="button"
+                    onClick={onRequestPermissions || onToggleVideo}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md cursor-pointer hover:shadow-blue-500/25"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Turn On Camera & Mic</span>
+                  </button>
+                </div>
               </div>
             )}
 
             {/* Mic Visualizer Badge */}
-            <div className="absolute bottom-4 left-4 bg-[#202124]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#3c4043] flex items-center space-x-2 text-xs text-white shadow-lg">
+            <div className="absolute bottom-4 left-4 bg-[#202124]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#3c4043] flex items-center space-x-2 text-xs text-white shadow-lg z-20">
               {isMuted ? (
                 <MicOff className="w-4 h-4 text-red-400" />
               ) : (
@@ -372,7 +419,7 @@ export const Lobby: React.FC<LobbyProps> = ({
             </div>
 
             {/* Camera / Mic Quick Action Pills */}
-            <div className="absolute bottom-4 right-4 flex items-center space-x-2">
+            <div className="absolute bottom-4 right-4 flex items-center space-x-2 z-20">
               <button
                 type="button"
                 onClick={onToggleMic}
@@ -390,13 +437,13 @@ export const Lobby: React.FC<LobbyProps> = ({
                 type="button"
                 onClick={onToggleVideo}
                 className={`p-2.5 rounded-full transition-all duration-200 shadow-xl cursor-pointer ${
-                  isVideoOff
+                  !hasLiveVideo
                     ? "bg-[#ea4335] text-white hover:bg-[#d93025]"
                     : "bg-[#3c4043] text-white hover:bg-[#4a4e52]"
                 }`}
-                title={isVideoOff ? "Turn Video On" : "Turn Video Off"}
+                title={!hasLiveVideo ? "Turn Video On" : "Turn Video Off"}
               >
-                {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                {!hasLiveVideo ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -405,17 +452,17 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div className="bg-[#1e1e24] p-4 rounded-2xl border border-[#3c4043] space-y-2.5 text-xs">
             <div className="flex items-center justify-between text-gray-300">
               <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className={`w-2 h-2 rounded-full ${hasLiveAudio ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                 Microphone Feed
               </span>
-              <span className="text-gray-400 font-mono">{isMuted ? "Muted" : "Active (16kHz PCM)"}</span>
+              <span className="text-gray-400 font-mono">{hasLiveAudio ? "Active (16kHz PCM)" : "Muted / Inactive"}</span>
             </div>
             <div className="flex items-center justify-between text-gray-300">
               <span className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${isVideoOff ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                <span className={`w-2 h-2 rounded-full ${hasLiveVideo ? 'bg-emerald-400' : 'bg-red-400'}`} />
                 Video Camera
               </span>
-              <span className="text-gray-400 font-mono">{isVideoOff ? "Disabled" : "720p HD Feed"}</span>
+              <span className="text-gray-400 font-mono">{hasLiveVideo ? "720p HD Active" : "Camera Disabled"}</span>
             </div>
             <div className="flex items-center justify-between text-gray-300">
               <span className="flex items-center gap-2">
