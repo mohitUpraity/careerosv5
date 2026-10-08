@@ -3,6 +3,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 from app.core.database import neo4j_client
+from app.services.skill_taxonomy import normalize_skill_category, normalize_skill_name
 
 logger = logging.getLogger(__name__)
 
@@ -467,14 +468,20 @@ class Neo4jService:
                 if tech_stack_str:
                     tech_tokens = [t.strip() for t in re.split(r'[,|/•]', tech_stack_str) if t.strip()]
                     for ts in tech_tokens:
-                        if len(ts) >= 2 and len(ts) <= 25 and not any(w in ts.lower() for w in ["system", "concept", "working"]):
+                        skill_name = normalize_skill_name(ts)
+                        if len(skill_name) >= 2 and len(skill_name) <= 40 and not any(w in skill_name.lower() for w in ["system", "concept", "working"]):
                             await neo4j_client.execute_query("""
                             MATCH (p:Project {id: $pid}), (u:User {id: $user_id})
                             MERGE (s:Skill {name: $sname})
-                            ON CREATE SET s.category = 'Technical'
+                            SET s.category = $category
                             MERGE (p)-[:USES_TECH]->(s)
                             MERGE (u)-[:HAS_SKILL {source: 'project'}]->(s);
-                            """, {"pid": pid, "user_id": user_id, "sname": ts})
+                            """, {
+                                "pid": pid,
+                                "user_id": user_id,
+                                "sname": skill_name,
+                                "category": normalize_skill_category(skill_name)
+                            })
 
         # 6. Purge rogue skill nodes in the DB that contain achievement text
         try:
