@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 from app.core.database import neo4j_client
+from app.services.skill_taxonomy import normalize_skill_category, normalize_skill_name
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +351,16 @@ class ProfileService:
                 gh_handle = u_res[0].get("gh", "") if u_res else ""
                 add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "Candidate Profile", "github": gh_handle})
 
+                verified_res = await neo4j_client.execute_query(
+                    """
+                    MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
+                    WHERE r.is_verified = true
+                    RETURN collect(DISTINCT toLower(s.name)) AS names
+                    """,
+                    {"user_id": user_id}
+                )
+                verified_skill_names = set((verified_res[0].get("names") or []) if verified_res else [])
+
                 # 2. Projects & Skills
                 proj_res = await neo4j_client.execute_query(
                     """
@@ -372,7 +383,7 @@ class ProfileService:
 
                     for sname in p.get("skills", []):
                         sid = f"skill_{sname.lower()}"
-                        add_node(sid, sname, "skill", "Technical Skill", {"verified": True})
+                        add_node(sid, sname, "skill", "Technical Skill", {"verified": sname.lower() in verified_skill_names})
                         add_link(pid, sid, "USES_TECH")
                         add_link(f"user_{user_id}", sid, "HAS_SKILL")
 
@@ -465,8 +476,9 @@ class ProfileService:
                 }
                 skill_res = await neo4j_client.execute_query(
                     """
-                    MATCH (u:User {id: $user_id})-[:HAS_SKILL]->(s:Skill)
-                    RETURN DISTINCT s.name as name, s.category as category
+                    MATCH (u:User {id: $user_id})-[r:HAS_SKILL]->(s:Skill)
+                    RETURN s.name as name, s.category as category,
+                           max(CASE WHEN r.is_verified = true THEN 1 ELSE 0 END) = 1 AS verified
                     LIMIT 40
                     """,
                     {"user_id": user_id}
@@ -483,7 +495,7 @@ class ProfileService:
                     if sname.lower() == user_name.lower() or sname.lower() in user_name_tokens:
                         continue
                     sid = f"skill_{sname.lower()}"
-                    add_node(sid, sname, "skill", s.get("category") or "Technical Skill", {"verified": True})
+                    add_node(sid, sname, "skill", s.get("category") or "Other", {"verified": s.get("verified", False)})
                     add_link(f"user_{user_id}", sid, "HAS_SKILL")
 
                 # 7. Connections & Alumni Bridges (Inter-relations with individual companies, schools, & skills)
@@ -1036,12 +1048,22 @@ class ProfileService:
             # 2. Update Skills if provided (Strictly Additive - Never delete resume skills)
             skills = payload.get("skills")
             if isinstance(skills, list) and len(skills) > 0:
-                clean_skills = [str(s).strip() for s in skills if str(s).strip()]
+                clean_skills = []
+                seen_skill_names = set()
+                for skill in skills:
+                    clean_name = normalize_skill_name(str(skill))
+                    if clean_name and clean_name.lower() not in seen_skill_names:
+                        seen_skill_names.add(clean_name.lower())
+                        clean_skills.append({
+                            "name": clean_name,
+                            "category": normalize_skill_category(clean_name)
+                        })
                 if clean_skills:
                     insert_skills_query = """
                     MATCH (u:User {id: $user_id})
-                    UNWIND $skills AS sname
-                    MERGE (s:Skill {name: sname})
+                    UNWIND $skills AS skill_data
+                    MERGE (s:Skill {name: skill_data.name})
+                    SET s.category = coalesce(skill_data.category, s.category, 'Other')
                     MERGE (u)-[:HAS_SKILL {source: 'user_profile'}]->(s);
                     """
                     await neo4j_client.execute_query(insert_skills_query, {
