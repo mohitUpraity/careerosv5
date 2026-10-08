@@ -89,7 +89,8 @@ class ResumeService:
         Parses unstructured resume text into a strict JSON Layout Blueprint
         using high-precision Groq (Llama 3.3 / GPT-OSS) and Gemini.
         """
-        from app.services.llm_service import llm_service
+from app.services.llm_service import llm_service
+from app.services.skill_taxonomy import normalize_skill_category, normalize_skill_name
 
         if not raw_text or not raw_text.strip():
             return self._advanced_heuristic_parser("", "")
@@ -213,7 +214,7 @@ JSON Schema:
 
                 # 2. Strict separation of Skills vs Achievements / Milestones
                 extracted_achievements = list(parsed_data.get("achievements") or [])
-                cleaned_skill_categories = []
+                cleaned_skill_categories: Dict[str, List[str]] = {}
                 achievement_triggers = {
                     "hackathon", "place", "winner", "award", "prize", "1st", "2nd", "3rd",
                     "first", "second", "third", "presented", "demonstrated", "built", "championship",
@@ -221,10 +222,9 @@ JSON Schema:
                 }
 
                 for cat in parsed_data.get("skills", []):
-                    cat_name = cat.get("category", "Technical")
-                    clean_skills_for_cat = []
+                    cat_name = cat.get("category", "Other")
                     for s in cat.get("skills", []):
-                        s_str = str(s).strip()
+                        s_str = normalize_skill_name(str(s))
                         # If a skill contains hackathon or achievement phrases, move to achievements!
                         if any(w in s_str.lower() for w in achievement_triggers) or len(s_str.split()) > 3:
                             if len(s_str) > 4 and s_str not in extracted_achievements:
@@ -241,15 +241,13 @@ JSON Schema:
                             continue
                         
                         if s_str and len(s_str) >= 2 and len(s_str) <= 25:
-                            clean_skills_for_cat.append(s_str)
+                            category = normalize_skill_category(s_str, cat_name)
+                            cleaned_skill_categories.setdefault(category, []).append(s_str)
 
-                    if clean_skills_for_cat:
-                        cleaned_skill_categories.append({
-                            "category": cat_name,
-                            "skills": list(dict.fromkeys(clean_skills_for_cat))
-                        })
-
-                parsed_data["skills"] = cleaned_skill_categories
+                parsed_data["skills"] = [
+                    {"category": category, "skills": list(dict.fromkeys(skills))}
+                    for category, skills in cleaned_skill_categories.items()
+                ]
                 parsed_data["achievements"] = list(dict.fromkeys(extracted_achievements))
                 parsed_data["raw_text"] = normalized_text
                 return ResumeBlueprint(**parsed_data)
@@ -440,7 +438,9 @@ JSON Schema:
         categorized_skills: Dict[str, List[str]] = {}
         for skill_name, category in known_skills_vocab:
             if re.search(rf"\b{re.escape(skill_name)}\b", normalized, re.IGNORECASE):
-                categorized_skills.setdefault(category, []).append(skill_name)
+                canonical_name = normalize_skill_name(skill_name)
+                canonical_category = normalize_skill_category(canonical_name, category)
+                categorized_skills.setdefault(canonical_category, []).append(canonical_name)
 
         skill_categories = [
             SkillCategory(category=cat, skills=list(dict.fromkeys(s_list)))
