@@ -258,7 +258,8 @@ class BenchmarkService:
         MATCH (u:User {id: $user_id})
         OPTIONAL MATCH (u)-[:BUILT]->(p:Project)
         OPTIONAL MATCH (p)-[:USES]->(ps:Skill)
-        OPTIONAL MATCH (u)-[:VERIFIED_SKILL]->(vs:Skill)
+        OPTIONAL MATCH (u)-[verification:HAS_SKILL]->(vs:Skill)
+        WHERE verification.is_verified = true
         OPTIONAL MATCH (u)-[:CONNECTED_TO]->(c:Contact)
         RETURN u.name AS name,
                count(DISTINCT p) AS repos_count,

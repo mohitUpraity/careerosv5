@@ -123,7 +123,7 @@ Job Description:
             RETURN s.name AS skill,
                    s.category AS category,
                    collect(DISTINCT p.name) AS projects,
-                   count(DISTINCT p) > 0 AS is_verified
+                   max(CASE WHEN r.is_verified = true THEN 1 ELSE 0 END) = 1 AS is_verified
             """
             skills_data = await neo4j_client.execute_query(skill_query, {"user_id": user_id})
 
@@ -157,7 +157,7 @@ Job Description:
                         "skill": info["name"],
                         "matched": True,
                         "repo_name": repo,
-                        "code_evidence": f"AST verified in repo {repo}",
+                        "code_evidence": f"Project evidence in repo {repo}" if info["projects"] else None,
                         "confidence": 95 if info["is_verified"] else 80
                     })
                     if info["is_verified"]:

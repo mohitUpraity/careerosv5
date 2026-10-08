@@ -366,7 +366,8 @@ class ProfileService:
                     """
                     MATCH (u:User {id: $user_id})-[:BUILT]->(p:Project)
                     OPTIONAL MATCH (p)-[:USES_TECH]->(s:Skill)
-                    RETURN p.id as pid, p.name as name, p.description as desc, p.repo_url as url, p.primary_language as lang, p.stars_count as stars, collect(DISTINCT s.name) as skills
+                    RETURN p.id as pid, p.name as name, p.description as desc, p.repo_url as url, p.primary_language as lang, p.stars_count as stars,
+                           collect(DISTINCT CASE WHEN s IS NULL THEN null ELSE {name: s.name, category: s.category} END) as skill_details
                     """,
                     {"user_id": user_id}
                 )
@@ -377,15 +378,19 @@ class ProfileService:
                         "url": p.get("url") or f"https://github.com/{gh_handle}/{p['name']}",
                         "lang": p.get("lang") or "Code",
                         "stars": p.get("stars", 0),
-                        "skills": p.get("skills", [])
+                        "skills": [item.get("name") for item in p.get("skill_details", []) if item and item.get("name")]
                     })
                     add_link(f"user_{user_id}", pid, "BUILT")
 
-                    for sname in p.get("skills", []):
+                    for skill_detail in p.get("skill_details", []):
+                        if not skill_detail or not skill_detail.get("name"):
+                            continue
+                        sname = skill_detail["name"]
                         sid = f"skill_{sname.lower()}"
-                        add_node(sid, sname, "skill", "Technical Skill", {"verified": sname.lower() in verified_skill_names})
+                        is_verified = sname.lower() in verified_skill_names
+                        add_node(sid, sname, "skill", skill_detail.get("category") or "Other", {"verified": is_verified})
                         add_link(pid, sid, "USES_TECH")
-                        add_link(f"user_{user_id}", sid, "HAS_SKILL")
+                        add_link(f"user_{user_id}", sid, "VERIFIED_SKILL" if is_verified else "HAS_SKILL")
 
                 # 3. Work Experience & Companies (Strictly Filtered)
                 invalid_comp_set = {
@@ -495,8 +500,9 @@ class ProfileService:
                     if sname.lower() == user_name.lower() or sname.lower() in user_name_tokens:
                         continue
                     sid = f"skill_{sname.lower()}"
-                    add_node(sid, sname, "skill", s.get("category") or "Other", {"verified": s.get("verified", False)})
-                    add_link(f"user_{user_id}", sid, "HAS_SKILL")
+                    is_verified = s.get("verified", False)
+                    add_node(sid, sname, "skill", s.get("category") or "Other", {"verified": is_verified})
+                    add_link(f"user_{user_id}", sid, "VERIFIED_SKILL" if is_verified else "HAS_SKILL")
 
                 # 7. Connections & Alumni Bridges (Inter-relations with individual companies, schools, & skills)
                 conn_res = await neo4j_client.execute_query(
@@ -1713,6 +1719,7 @@ class ProfileService:
                 r.feedback_summary = $feedback,
                 r.verified_at = toString(datetime()),
                 r.updated_at = datetime()
+            MERGE (u)-[:VERIFIED_SKILL]->(s)
             RETURN s.name AS skill, r.verification_score AS score
             """
             await neo4j_client.execute_query(query, {
