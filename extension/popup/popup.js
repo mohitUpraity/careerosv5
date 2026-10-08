@@ -5,6 +5,9 @@
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
+  const syncPageParams = new URLSearchParams(window.location.search);
+  const isPersistentSyncPage = syncPageParams.get("runMasterSync") === "1";
+  const persistentSyncTabId = Number(syncPageParams.get("linkedinTabId"));
   // Elements - Header & Config
   const backendStatus = document.getElementById("backendStatus");
   const statusText = document.getElementById("statusText");
@@ -211,30 +214,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         await new Promise((r) => setTimeout(r, 1200));
         return;
       }
-      await chrome.tabs.update(tabId, { url });
-    } catch (e) {
-      console.warn("Navigation update notice:", e);
-    }
-
-    return new Promise((resolve) => {
-      let isDone = false;
-      const finish = () => {
-        if (!isDone) {
+      return await new Promise((resolve) => {
+        let isDone = false;
+        const finish = () => {
+          if (isDone) return;
           isDone = true;
           try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) {}
           setTimeout(resolve, 1500);
-        }
-      };
-
-      const listener = (updatedTabId, changeInfo) => {
-        if (updatedTabId === tabId && changeInfo.status === "complete") {
+        };
+        const listener = (updatedTabId, changeInfo) => {
+          if (updatedTabId === tabId && changeInfo.status === "complete") finish();
+        };
+        chrome.tabs.onUpdated.addListener(listener);
+        chrome.tabs.update(tabId, { url }).catch((error) => {
+          console.warn("Navigation update notice:", error);
           finish();
-        }
-      };
-
-      chrome.tabs.onUpdated.addListener(listener);
-      setTimeout(finish, 6500);
-    });
+        });
+        setTimeout(finish, 15000);
+      });
+    } catch (e) {
+      console.warn("Navigation update notice:", e);
+    }
   }
 
   // Auto-Detect Active CareerOS Web App Session
@@ -608,6 +608,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         let noNew = 0;
         let totalCount = 0;
 
+        if (!location.pathname.includes("/mynetwork/invite-connect/connections")) return [];
+        for (let attempt = 0; attempt < 30; attempt++) {
+          const root = document.querySelector("main .scaffold-finite-scroll__content, main ul.mn-connections, main [data-view-name*='connections']") || document.querySelector("main");
+          if (root && root.querySelector("a[href*='/in/']")) break;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+
         // Multi-pattern extraction of total connection count
         const headerText = document.body ? document.body.innerText : "";
         const cappedLinkedInCount = /500\+\s+connections/i.test(headerText);
@@ -688,7 +695,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const cleanUrl = (link.href || rawHref).split("?")[0].replace(/\/+$/, "") + "/";
             if (!cleanUrl || cleanUrl.endsWith("/in/") || cleanUrl.includes("/in/me")) return;
 
-            const card = link.closest("li.mn-connection-card, li, [role='listitem'], div[data-view-name*='connection']");
+            const card = link.closest(".mn-connection-card, li.mn-connection-card, li, [role='listitem'], .artdeco-list__item, .entity-result, div[data-view-name*='connection']");
             if (!card || !listRoot.contains(card)) return;
 
             const cardText = (card?.innerText || "").trim();
@@ -1094,7 +1101,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   // =========================================================================
   masterSyncBtn?.addEventListener("click", async () => {
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!isPersistentSyncPage) {
+        const [linkedinTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!linkedinTab?.id) throw new Error("Could not find the active LinkedIn tab.");
+        const runnerUrl = new URL(chrome.runtime.getURL("popup/popup.html"));
+        runnerUrl.searchParams.set("runMasterSync", "1");
+        runnerUrl.searchParams.set("linkedinTabId", String(linkedinTab.id));
+        await chrome.tabs.create({ url: runnerUrl.toString(), active: true });
+        return;
+      }
+
+      const tab = persistentSyncTabId ? await chrome.tabs.get(persistentSyncTabId) : null;
       if (!tab || !tab.url || !tab.url.includes("linkedin.com")) {
         showToast("Please open LinkedIn in the active tab first!", "error");
         return;
@@ -1166,6 +1183,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const connections = await performLiveConnectionsScan(tab.id);
+      let connectionSyncFailed = connections.length === 0;
+      let connectionsImported = 0;
 
       if (connections.length > 0) {
         try {
@@ -1181,7 +1200,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             })
           });
 
-          if (!connResp.ok) {
+          if (connResp.ok) {
+            const ingestResult = await connResp.json();
+            connectionsImported = Number(ingestResult.total_connections_imported) || 0;
+            connectionSyncFailed = connectionsImported === 0;
+          } else {
             let csvContent = "First Name,Last Name,URL,Company,Position,Connected On\n";
             connections.forEach((c) => {
               csvContent += `"${c.first_name}","${c.last_name}","${c.profile_url}","${c.company}","${c.position}","${c.connected_on}"\n`;
@@ -1189,17 +1212,28 @@ document.addEventListener("DOMContentLoaded", async () => {
             const blob = new Blob([csvContent], { type: "text/csv" });
             const form = new FormData();
             form.append("file", blob, "Connections.csv");
-            await fetch(`${apiUrl}/ingest/linkedin`, {
+            const fallbackResp = await fetch(`${apiUrl}/ingest/linkedin`, {
               method: "POST",
               headers: { "x-user-id": userId },
               body: form
             });
+            if (!fallbackResp.ok) throw new Error(`Connections ingest failed (${fallbackResp.status})`);
+            connectionsImported = connections.length;
+            connectionSyncFailed = false;
           }
         } catch (err) {
           console.error("Connections sync error:", err);
+          connectionSyncFailed = true;
         }
       }
-      updateStep(2, "completed", 66, `2. Synced: ${connections.length} Contacts into Knowledge Graph ✓`);
+      updateStep(
+        2,
+        connectionSyncFailed ? "error" : "completed",
+        66,
+        connectionSyncFailed
+          ? `2. Connection sync failed (${connections.length} scanned) · continuing to scan posts`
+          : `2. Synced: ${connectionsImported} Contacts into Knowledge Graph ✓`
+      );
 
       // Step 3: Posts Feed & Milestones Extraction (Zero-Disruption)
       updateStep(3, "active", 75, "3. Extracting Milestone Posts & Knowledge Nodes...");
@@ -1234,6 +1268,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       let hackathonsMerged = 0;
       let awardsMerged = 0;
+      let postsSyncFailed = false;
       if (postsText) {
         try {
           const resp = await fetch(`${apiUrl}/ingest/linkedin/posts/manual`, {
@@ -1248,10 +1283,16 @@ document.addEventListener("DOMContentLoaded", async () => {
             const pData = await resp.json();
             hackathonsMerged = pData.hackathons_count || 0;
             awardsMerged = (pData.achievements_count || 0) + (pData.badges_count || 0);
+          } else {
+            postsSyncFailed = true;
+            console.warn("Posts ingest failed:", resp.status, await resp.text());
           }
         } catch (err) {
           console.warn("Posts ingest error:", err);
+          postsSyncFailed = true;
         }
+      } else {
+        postsSyncFailed = true;
       }
 
       // Return user to their main profile page cleanly
@@ -1274,7 +1315,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const candidateName = profileData?.name || "Candidate Workspace";
       chrome.storage.local.set({
         lastSyncedTime: `Today, ${nowStr}`,
-        syncedConnCount: connections.length,
+        syncedConnCount: connectionsImported,
         syncedCertsCount: certsCount + badgeCount + awardsMerged,
         syncedExpEduCount: expCount + eduCount,
         candidateName: candidateName
@@ -1284,18 +1325,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (reportCandidate) reportCandidate.textContent = candidateName;
       if (reportCertsBadges) reportCertsBadges.textContent = `${certsCount + badgeCount + awardsMerged} Synced`;
       if (reportExpEdu) reportExpEdu.textContent = `${expCount + eduCount} Mapped`;
-      if (reportConnections) reportConnections.textContent = `${connections.length} Contacts`;
+      if (reportConnections) reportConnections.textContent = `${connectionsImported} Contacts`;
       if (syncReportCard) syncReportCard.classList.remove("hidden");
 
       showToast(
-        `Master Sync Complete! Synced ${certsCount} Certs, ${connections.length} Contacts, and extracted graph milestones!`,
-        "success"
+        connectionSyncFailed || postsSyncFailed
+          ? `Sync finished with issues: ${connectionsImported} contacts saved; ${postsText ? "posts ingest failed" : "no posts found"}. Check the failed step and retry.`
+          : `Master Sync Complete! Synced ${certsCount} Certs, ${connectionsImported} Contacts, and extracted graph milestones!`,
+        connectionSyncFailed || postsSyncFailed ? "error" : "success"
       );
     } catch (err) {
       console.error("Master sync error:", err);
       showToast(`Sync Notice: ${err.message}`, "error");
     }
   });
+
+  if (isPersistentSyncPage && persistentSyncTabId) {
+    setTimeout(() => masterSyncBtn?.click(), 300);
+  }
 
   // =========================================================================
   // QUICK DELTA SYNC

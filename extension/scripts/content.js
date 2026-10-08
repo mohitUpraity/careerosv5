@@ -530,7 +530,7 @@
       }
 
       // Find enclosing contact card / list item
-      let card = linkEl.closest("li, [role='listitem'], div[data-view-name*='connection'], div.scaffold-finite-scroll__content > div");
+      let card = linkEl.closest(".mn-connection-card, li.mn-connection-card, li, [role='listitem'], .artdeco-list__item, .entity-result, div[data-view-name*='connection'], div.scaffold-finite-scroll__content > div");
       if (!card) {
         let curr = linkEl;
         for (let s = 0; s < 7 && curr && curr !== document.body; s++) {
