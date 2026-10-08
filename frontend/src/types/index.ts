@@ -26,6 +26,7 @@ export interface GraphLink {
   target: string | GraphNode;
   type: string;
   relation?: string;
+  label?: string;
   weight?: number;
 }
 
@@ -102,6 +103,7 @@ export interface ExperienceEntry {
   end_date?: string;
   is_current?: boolean;
   bullets: string[];
+  description?: string;
 }
 
 export interface EducationEntry {
@@ -179,6 +181,13 @@ export interface Opportunity {
   eligibility?: string;
   verified?: boolean;
   is_dream_company?: boolean;
+  is_primary_choice?: boolean;
+  is_priority_domain_match?: boolean;
+  work_mode?: string;
+  deadline?: string;
+  match_reasons?: string[];
+  salary_or_prize?: string;
+  source?: string;
 }
 
 export interface OpportunitiesResponse {

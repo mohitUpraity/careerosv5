@@ -1,260 +1,51 @@
-import React from 'react';
-import { 
-  Network, 
-  Target, 
-  Send, 
-  FileText, 
-  Activity, 
-  Cpu, 
-  Database, 
-  Shield, 
-  ExternalLink,
-  Code2,
-  GitCompare,
-  Compass,
-  UserCog,
-  Sparkles,
-  TrendingUp,
-  Rocket,
-  Swords
-} from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { ExternalLink, Sparkles, ArrowUpRight, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-
-export type ActiveTab = 'graph' | 'opportunities' | 'growth' | 'interview' | 'matcher' | 'benchmark' | 'referrals' | 'resume' | 'profile' | 'brain';
-
-interface SidebarProps {
-  activeTab: ActiveTab;
-  setActiveTab: (tab: ActiveTab) => void;
-}
-
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+import { ActiveTab, workspaceGroups } from './workspaceNavigation';
+export type { ActiveTab } from './workspaceNavigation';
+interface SidebarProps { activeTab: ActiveTab; setActiveTab: (tab: ActiveTab) => void; open: boolean; onClose: () => void; }
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, open, onClose }) => {
   const { activeProfile } = useAuth();
-
-  const navItems = [
-    {
-      id: 'brain' as ActiveTab,
-      label: 'Brain Chat AI',
-      sublabel: 'GraphRAG Copilot',
-      icon: Sparkles,
-      highlight: true
-    },
-    {
-      id: 'interview' as ActiveTab,
-      label: 'Interview Arena & Prep',
-      sublabel: 'AI Simulation & Intel',
-      icon: Swords,
-    },
-    {
-      id: 'growth' as ActiveTab,
-      label: 'Career Growth & Skills',
-      sublabel: 'High-ROI Gap & Sprints',
-      icon: TrendingUp,
-    },
-    {
-      id: 'profile' as ActiveTab,
-      label: 'Profile & Preferences',
-      sublabel: 'Roles, Locations & Skills',
-      icon: UserCog,
-    },
-    {
-      id: 'graph' as ActiveTab,
-      label: 'Knowledge Graph',
-      sublabel: 'Skills & Project Topology',
-      icon: Network,
-    },
-    {
-      id: 'opportunities' as ActiveTab,
-      label: 'Opportunities Radar',
-      sublabel: 'Jobs, Internships, Unstop',
-      icon: Compass,
-    },
-    {
-      id: 'matcher' as ActiveTab,
-      label: 'Job Matchmaker',
-      sublabel: 'AI-Powered Scoring',
-      icon: Target,
-    },
-    {
-      id: 'benchmark' as ActiveTab,
-      label: 'Benchmark Lab',
-      sublabel: 'Peer Gap Analysis',
-      icon: GitCompare,
-    },
-    {
-      id: 'referrals' as ActiveTab,
-      label: 'Referral Hub',
-      sublabel: 'Network Outreach',
-      icon: Send,
-    },
-    {
-      id: 'resume' as ActiveTab,
-      label: 'Resume Studio',
-      sublabel: 'ATS-Optimized Builder',
-      icon: FileText,
-    },
-  ];
-
-  return (
-    <aside
-      className="w-full lg:w-60 shrink-0 flex flex-col justify-between p-4 min-h-[calc(100vh-57px)]"
-      style={{
-        backgroundColor: 'var(--bg-primary)',
-        borderRight: '1px solid var(--border-primary)',
-      }}
-    >
-      {/* Top Section: User Profile Card & Navigation */}
-      <div className="space-y-4">
-        {/* Active Profile Card - Clickable to open Profile & Preferences */}
-        <div
-          onClick={() => setActiveTab('profile')}
-          className="p-3 rounded-xl cursor-pointer hover:border-blue-500 transition-all group"
-          title="Click to edit profile & matching preferences"
-          style={{
-            backgroundColor: activeTab === 'profile' ? 'var(--brand-50)' : 'var(--bg-secondary)',
-            border: activeTab === 'profile' ? '1px solid var(--brand-600)' : '1px solid var(--border-primary)',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="relative shrink-0">
-              {activeProfile.avatar ? (
-                <img
-                  src={activeProfile.avatar}
-                  alt={activeProfile.name}
-                  className="w-10 h-10 rounded-lg object-cover"
-                  style={{ border: '2px solid var(--border-primary)' }}
-                />
-              ) : (
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm bg-blue-600 text-white"
-                  style={{ border: '2px solid var(--border-primary)' }}
-                >
-                  {(activeProfile.name || 'U').charAt(0).toUpperCase()}
-                </div>
-              )}
-              <span
-                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full"
-                style={{
-                  backgroundColor: 'var(--success-600)',
-                  border: '2px solid var(--bg-primary)',
-                }}
-              />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
-                {activeProfile.name}
-              </h4>
-              <p className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                {activeProfile.role}
-              </p>
-              {activeProfile.githubUser ? (
-                <a
-                  href={`https://github.com/${activeProfile.githubUser}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[10px] font-mono mt-0.5"
-                  style={{ color: 'var(--brand-600)' }}
-                >
-                  <Code2 className="w-3 h-3" />
-                  @{activeProfile.githubUser}
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-[10px] font-mono mt-0.5 text-slate-400">
-                  <Code2 className="w-3 h-3" />
-                  No GitHub Synced
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-all relative"
-                style={{
-                  backgroundColor: isActive ? 'var(--brand-50)' : 'transparent',
-                  color: isActive ? 'var(--brand-600)' : 'var(--text-secondary)',
-                  fontWeight: isActive ? 600 : 500,
-                }}
-              >
-                {isActive && (
-                  <span
-                    className="absolute left-0 top-2 bottom-2 w-0.5 rounded-r-full"
-                    style={{ backgroundColor: 'var(--brand-600)' }}
-                  />
-                )}
-
-                <div
-                  className="p-1.5 rounded"
-                  style={{
-                    backgroundColor: isActive ? 'var(--brand-100)' : 'var(--bg-tertiary)',
-                    color: isActive ? 'var(--brand-600)' : 'var(--text-tertiary)',
-                  }}
-                >
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="block text-xs font-semibold">{item.label}</span>
-                  <span className="block text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-                    {item.sublabel}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </nav>
+  const sidebarRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    if (sidebarRef.current) sidebarRef.current.scrollTop = 0;
+    const focusFrame = requestAnimationFrame(() => sidebarRef.current?.querySelector<HTMLButtonElement>('button')?.focus());
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab') {
+        const targets = sidebarRef.current?.querySelectorAll<HTMLElement>('button, a[href]');
+        if (!targets?.length) return;
+        const first = targets[0], last = targets[targets.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    const onResize = () => { if (window.innerWidth >= 1024) onClose(); };
+    document.addEventListener('keydown', handleKey);
+    window.addEventListener('resize', onResize);
+    return () => { cancelAnimationFrame(focusFrame); document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', handleKey); window.removeEventListener('resize', onResize); previousFocus?.focus(); };
+  }, [open, onClose]);
+  const navigate = (tab: ActiveTab) => { setActiveTab(tab); if (open) onClose(); };
+  return <>
+    {open && <button className="dashboard-sidebar-backdrop" aria-label="Close navigation" onClick={onClose} tabIndex={-1} />}
+    <aside ref={sidebarRef} id="dashboard-navigation" className={`dashboard-sidebar no-print ${open ? 'is-open' : ''}`} role={open ? 'dialog' : undefined} aria-modal={open ? true : undefined} aria-label="Workspace navigation">
+      <div className="dashboard-sidebar-mobile-title"><strong>Your workspace</strong><button className="dashboard-icon-button" onClick={onClose} aria-label="Close navigation"><X size={20} /></button></div>
+      <div className="dashboard-profile-card">
+        <button onClick={() => navigate('profile')} className="dashboard-profile-card-button" title="Edit profile and preferences">
+          <span className="dashboard-profile-avatar">{activeProfile.avatar ? <img src={activeProfile.avatar} alt="" referrerPolicy="no-referrer" /> : activeProfile.name.charAt(0).toUpperCase()}</span>
+          <span className="dashboard-profile-card-copy"><strong>{activeProfile.name}</strong><span>{activeProfile.role}</span></span>
+        </button>
+        {activeProfile.githubUser ? <a className="dashboard-github-status" href={`https://github.com/${activeProfile.githubUser}`} target="_blank" rel="noopener noreferrer"><span className="dashboard-status-dot" />GitHub synced<ExternalLink size={12} /></a> : <span className="dashboard-github-status">GitHub not synced</span>}
       </div>
-
-      {/* Bottom Section: System Status */}
-      <div className="pt-4 space-y-2" style={{ borderTop: '1px solid var(--border-primary)' }}>
-        <div
-          className="p-3 rounded-lg text-[11px] space-y-2"
-          style={{
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-primary)',
-          }}
-        >
-          <div className="flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}>
-            <span className="flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-              LLM Engine
-            </span>
-            <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>Groq Llama 3.3</span>
-          </div>
-
-          <div className="flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}>
-            <span className="flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-              Graph DB
-            </span>
-            <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>Neo4j Aura</span>
-          </div>
-
-          <div className="flex items-center justify-between" style={{ color: 'var(--text-secondary)' }}>
-            <span className="flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-              Security
-            </span>
-            <span className="font-mono font-medium" style={{ color: 'var(--text-primary)' }}>Multi-Tenant</span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between px-2 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-          <span className="flex items-center gap-1">
-            <Activity className="w-3 h-3" style={{ color: 'var(--success-600)' }} />
-            Backend Online
-          </span>
-          <span className="font-mono">v5.0</span>
-        </div>
-      </div>
+      <nav className="dashboard-sidebar-nav">
+        {workspaceGroups.map(group => <div className="dashboard-nav-group" key={group.label}><span className="dashboard-nav-group-label">{group.label}</span>{group.items.map(({ id, label, description, icon: Icon }) => <button key={id} className={`dashboard-nav-item ${activeTab === id ? 'is-active' : ''}`} title={description} aria-current={activeTab === id ? 'page' : undefined} onClick={() => navigate(id)}><span className="dashboard-nav-icon"><Icon size={19} /></span><span><strong>{label}</strong><span>{description}</span></span></button>)}</div>)}
+      </nav>
+      <div className="dashboard-sidebar-tip"><span className="dashboard-soft-icon is-violet"><Sparkles size={19} /></span><strong>A clearer next step</strong><p>Your co-pilot can help connect your skills with your next career move.</p><button onClick={() => navigate('brain')}>Ask Brain Chat <ArrowUpRight size={15} /></button></div>
+      <span className="dashboard-sidebar-footer">CareerOS <span>Your career, connected.</span></span>
     </aside>
-  );
+  </>;
 };

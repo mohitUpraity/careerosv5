@@ -1,0 +1,38 @@
+.dashboard-shell:has(.dashboard-header-v2) { --dashboard-header-height: 80px; }
+.dashboard-header-v2 { gap: 28px; background: color-mix(in srgb, var(--bg-primary) 94%, transparent); backdrop-filter: blur(16px); box-shadow: 0 2px 12px #13274603; }
+.dashboard-header-v2 .dashboard-brand-group { align-self: stretch; border-right: 1px solid var(--border-primary); margin-right: 2px; width: calc(var(--dashboard-sidebar-width) - 20px); }
+.dashboard-header-v2 .dashboard-brand-mark { width: 40px; height: 40px; border-radius: 13px; background: linear-gradient(145deg,#507afa,#315ee7 75%); box-shadow: inset 0 1px 1px #ffffff38, 0 4px 10px #315ee718; }
+.dashboard-header-v2 .dashboard-brand-copy strong { font-size: 22px; letter-spacing: -.9px; }
+.dashboard-header-v2 .dashboard-brand-copy > span { font-size: 10px; letter-spacing: .02em; margin-top: 4px; }
+.dashboard-header-location { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.dashboard-header-page-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border-primary); background: var(--bg-secondary); border-radius: 10px; color: var(--brand-600); flex-shrink: 0; }
+.dashboard-header-location > div { min-width: 0; }
+.dashboard-header-location > div > span { display: block; font-size: 10px; line-height: 1.5; color: var(--text-tertiary); }
+.dashboard-header-location strong { display: block; font-size: 13px; line-height: 1.5; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.dashboard-header-updating { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 10px; margin-left: 8px; }
+.dashboard-header-v2 .dashboard-topbar-actions { gap: 12px; }
+.dashboard-header-v2 .dashboard-search-trigger { width: 260px; height: 42px; padding: 0 13px; font-size: 12px; border-radius: 11px; background: var(--bg-secondary); transition: border-color .18s, background .18s; }
+.dashboard-header-v2 .dashboard-search-trigger:hover { border-color: var(--brand-600); background: var(--bg-primary); }
+.dashboard-header-v2 .dashboard-search-trigger kbd { font-size: 10px; padding: 3px 5px; border-radius: 5px; }
+.dashboard-header-v2 .dashboard-theme-toggle { width: 42px; height: 42px; border-radius: 11px; background: var(--bg-primary) !important; }
+.dashboard-header-v2 .dashboard-sync-menu > button { min-height: 42px; border-radius: 11px; padding: 11px 15px; font-weight: 600; }
+.dashboard-header-v2 .dashboard-sync-menu > button > svg:last-child { margin-left: 3px; opacity: .75; transition: transform .18s; }
+.dashboard-header-v2 .dashboard-sync-menu > button[aria-expanded=true] > svg:last-child { transform: rotate(180deg); }
+.dashboard-header-v2 .dashboard-account:not(.dashboard-sync-menu) { border-left: 1px solid var(--border-primary); padding-left: 12px; }
+.dashboard-header-v2 .dashboard-account-trigger { gap: 10px; padding: 5px 7px; min-height: 44px; text-align: left; transition: background .18s; }
+.dashboard-header-v2 .dashboard-account-trigger:hover,.dashboard-header-v2 .dashboard-account-trigger[aria-expanded=true] { background: var(--bg-secondary); }
+.dashboard-account-avatar { position: relative; width: 34px; height: 34px; border-radius: 11px; overflow: hidden; display: grid; place-items: center; background: var(--brand-50); color: var(--brand-600); font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.dashboard-header-v2 .dashboard-account-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: inherit; }
+.dashboard-account-summary { display: block; max-width: 125px; }
+.dashboard-account-summary strong { display: block; font-size: 11px; line-height: 1.5; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-account-summary small { display: block; font-size: 9px; line-height: 1.5; color: var(--text-tertiary); margin-top: 1px; }
+.dashboard-header-v2 .dashboard-account-trigger > svg { color: var(--text-tertiary); width: 12px; }
+.dashboard-header-v2 .dashboard-account-panel { border-radius: 16px; box-shadow: 0 12px 48px #15274b20; top: calc(100% + 12px); }
+.dashboard-header-v2 :is(button,a):focus-visible { outline: 2px solid var(--brand-600); outline-offset: 3px; }
+@media (max-width: 1450px) { .dashboard-header-updating { display: none; } .dashboard-header-v2 .dashboard-search-trigger { width: 220px; } .dashboard-header-v2 .dashboard-topbar-actions { gap: 9px; } }
+@media (max-width: 1250px) { .dashboard-account-summary { display: none; } .dashboard-header-v2 { gap: 20px; } }
+@media (max-width: 1100px) { .dashboard-header-page-icon { display: none; } .dashboard-header-location { gap: 0; } }
+@media (max-width: 1023px) { .dashboard-shell:has(.dashboard-header-v2) { --dashboard-header-height: 72px; } .dashboard-header-v2 { padding: 0 20px; gap: 12px; } .dashboard-header-v2 .dashboard-brand-group { border: 0; width: auto; } .dashboard-header-location { display: none; } .dashboard-header-v2 .dashboard-search-trigger { width: 180px; } }
+@media (max-width: 767px) { .dashboard-header-v2 { padding: 0 14px; gap: 10px; } .dashboard-header-v2 .dashboard-search-trigger { width: 40px; height: 40px; padding: 9px; } .dashboard-header-v2 .dashboard-topbar-actions { gap: 8px; } .dashboard-header-v2 .dashboard-account:not(.dashboard-sync-menu) { padding-left: 8px; } }
+@media (max-width: 479px) { .dashboard-shell:has(.dashboard-header-v2) { --dashboard-header-height: 68px; } .dashboard-header-v2 { padding: 0 10px; gap: 6px; } .dashboard-header-v2 .dashboard-brand-group { gap: 5px; } .dashboard-header-v2 .dashboard-brand-mark { width: 30px; height: 30px; border-radius: 9px; } .dashboard-header-v2 .dashboard-brand-copy strong { font-size: 17px; } .dashboard-header-v2 .dashboard-topbar-actions { gap: 4px; } .dashboard-header-v2 .dashboard-sync-menu > button { padding: 8px; min-height: 40px; } .dashboard-header-v2 .dashboard-account:not(.dashboard-sync-menu) { border: 0; padding-left: 0; } .dashboard-header-v2 .dashboard-account-trigger { padding: 3px; min-height: 40px; gap: 0; } .dashboard-header-v2 .dashboard-account-avatar { width: 32px; height: 32px; border-radius: 10px; } .dashboard-header-v2 .dashboard-theme-toggle { width: 36px; height: 40px; } .dashboard-header-v2 .dashboard-search-trigger { width: 36px; height: 40px; } }
+@media (max-width: 359px) { .dashboard-header-v2 .dashboard-brand-mark { display: none; } .dashboard-header-v2 .dashboard-brand-copy strong { font-size: 16px; } }

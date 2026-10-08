@@ -1,3 +1,4 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState } from '../WorkspaceUI';
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { 
@@ -216,6 +217,19 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
   // DOM Refs
   const svgRef = useRef<SVGSVGElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      const width = Math.round(container.clientWidth);
+      const height = Math.round(container.clientHeight);
+      if (!width || !height) return;
+      setCanvasSize(previous => previous.width === width && previous.height === height ? previous : { width, height });
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
 
   // Core State
@@ -229,7 +243,14 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isPhysicsPaused, setIsPhysicsPaused] = useState<boolean>(false);
   const [showPhysicsSettings, setShowPhysicsSettings] = useState<boolean>(false);
-  const [showLegend, setShowLegend] = useState<boolean>(true);
+  const [showLegend, setShowLegend] = useState<boolean>(() => window.innerWidth >= 768);
+  useEffect(() => {
+    const narrowScreen = window.matchMedia('(max-width: 767px)');
+    const collapseLegend = () => { if (narrowScreen.matches) setShowLegend(false); };
+    collapseLegend();
+    narrowScreen.addEventListener('change', collapseLegend);
+    return () => narrowScreen.removeEventListener('change', collapseLegend);
+  }, []);
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [hopDistance, setHopDistance] = useState<number>(0); // 0 = all, 1 = 1-hop, 2 = 2-hop
 
@@ -664,7 +685,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
       .force('link', d3.forceLink<GraphNode, GraphLink>(links).id(d => d.id).distance(linkDistanceVal))
       .force('charge', d3.forceManyBody().strength(chargeStrength))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collide', d3.forceCollide().radius(d => getThemeForNode(d).radius + collisionRadiusVal));
+      .force('collide', d3.forceCollide<GraphNode>().radius(d => getThemeForNode(d).radius + collisionRadiusVal));
 
     if (isPhysicsPaused) {
       simulation.stop();
@@ -932,7 +953,9 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
     linkDistanceVal, 
     collisionRadiusVal,
     selectedNode,
-    hopDistance
+    hopDistance,
+    canvasSize.width,
+    canvasSize.height
   ]);
 
   // Zoom Controls
@@ -1033,76 +1056,21 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
 
   return (
     <div
-      className={`relative w-full flex flex-col rounded-2xl overflow-hidden border shadow-sm transition-all duration-200 ${
+      className={`dashboard-view ws-page dashboard-view--graph relative w-full flex flex-col rounded-2xl overflow-hidden border shadow-sm transition-all duration-200 ${
         isFullscreen 
           ? 'fixed inset-0 z-50 rounded-none h-screen' 
           : 'h-[calc(100vh-125px)]'
       } ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}
-    >
+    ><WorkspacePageHeader page="graph" eyebrow="THE BIG PICTURE" title="Your career, connected." description="Explore the links between your skills, projects, experience, and network. Select a connection to discover the evidence behind it." /><WorkspaceMetrics items={[{label:"Connections",value:graphSummary.totalLinks,detail:"Relationships across your career",icon:GitBranch},{label:"Career evidence",value:graphSummary.totalNodes,detail:"Skills, projects, people and more",icon:Network,tone:"violet"},{label:"Verified skills",value:graphSummary.verifiedSkills,detail:"Capabilities evidenced in your code",icon:CheckCircle2,tone:"teal"},{label:"Network bridges",value:graphSummary.alumniCount,detail:"People connected to your journey",icon:Users,tone:"amber"}]} />
       {/* 1. Header & Live Graph Analytics Strip */}
       <div
-        className={`px-5 py-3 border-b flex flex-col gap-2.5 transition-colors duration-200 ${
+        className={`dashboard-page-header px-5 py-3 border-b flex flex-col gap-2.5 transition-colors duration-200 ${
           isDark ? 'bg-slate-900/95 border-slate-800' : 'bg-slate-50/90 border-slate-200'
         }`}
       >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Title & GraphRAG Badge */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
-              <Network className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className={`text-base font-bold tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-                  Knowledge Graph
-                </h2>
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                  <ShieldCheck className="w-3 h-3 text-blue-500" /> Neo4j Multi-Hop AuraDB
-                </span>
-              </div>
-              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                AST verified code topology, technical skills ontology, and warm alumni bridges
-              </p>
-            </div>
-          </div>
-
-          {/* Dynamic Live Graph Metric Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0 scrollbar-none text-xs">
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-              isDark ? 'bg-slate-800/80 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
-            }`}>
-              <Cpu className="w-3.5 h-3.5 text-blue-500" />
-              <span className="font-semibold tabular-nums">{graphSummary.totalNodes}</span>
-              <span className="text-[11px] text-slate-400">Nodes</span>
-            </div>
-
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-              isDark ? 'bg-slate-800/80 border-slate-700 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
-            }`}>
-              <GitBranch className="w-3.5 h-3.5 text-purple-500" />
-              <span className="font-semibold tabular-nums">{graphSummary.totalLinks}</span>
-              <span className="text-[11px] text-slate-400">Edges</span>
-            </div>
-
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-              isDark ? 'bg-emerald-950/50 border-emerald-800/80 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-            }`}>
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="font-semibold tabular-nums">{graphSummary.verifiedSkills}</span>
-              <span className="text-[11px]">AST Verified</span>
-            </div>
-
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
-              isDark ? 'bg-pink-950/50 border-pink-800/80 text-pink-300' : 'bg-pink-50 border-pink-200 text-pink-700'
-            }`}>
-              <Users className="w-3.5 h-3.5 text-pink-500" />
-              <span className="font-semibold tabular-nums">{graphSummary.alumniCount}</span>
-              <span className="text-[11px]">Network Bridges</span>
-            </div>
-          </div>
-        </div>
+        
 
         {/* NLP Smart Query Input & Preset Chips */}
         <div className="flex flex-col gap-2">
@@ -1119,7 +1087,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                   executeSmartNlpQuery(nlpQuery);
                 }
               }}
-              placeholder="Ask Knowledge Graph in plain English (e.g. 'Show DRDO firewall stack & python', 'Alumni at Google', 'SIH hackathons')..."
+              aria-label="Search your knowledge graph" placeholder="Search your graph — try ‘projects using Python’ or ‘connections at Google’"
               className={`w-full pl-10 pr-28 py-2 text-xs sm:text-sm rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 ${
                 isDark
                   ? 'bg-slate-800/90 border-slate-700 text-slate-100 placeholder:text-slate-500'
@@ -1536,7 +1504,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
       {/* 3. Interactive Canvas Area */}
       <div
         ref={containerRef}
-        className={`relative flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden ${
+        className={`dashboard-graph-canvas relative flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden ${
           isDark ? 'bg-slate-950' : 'bg-slate-50'
         }`}
         onClick={() => {
@@ -1633,7 +1601,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
         )}
 
         {/* 4. Interactive Docked Legend & Category Filter — Bottom Left */}
-        {showLegend && (
+        {showLegend && (graphData?.nodes?.length ?? 0) > 1 && (
           <div
             className={`absolute bottom-4 left-4 p-3.5 rounded-2xl z-10 backdrop-blur-md border shadow-lg max-w-sm w-[90%] sm:w-auto transition-all ${
               isDark ? 'bg-slate-900/95 border-slate-800 text-slate-100' : 'bg-white/95 border-slate-200 text-slate-900'
@@ -1676,7 +1644,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                           className="w-2.5 h-2.5 rounded-full ring-2 shrink-0"
                           style={{ 
                             backgroundColor: val.bg,
-                            ringColor: isDark ? '#1E293B' : '#FFFFFF'
+                            boxShadow: `0 0 0 2px ${isDark ? '#1E293B' : '#FFFFFF'}`
                           }}
                         />
                         <span className={`text-[11px] font-medium truncate ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>

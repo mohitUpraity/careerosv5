@@ -1,276 +1,96 @@
-import React, { useState } from 'react';
-import { 
-  Sparkles, 
-  GitFork, 
-  Users, 
-  GraduationCap, 
-  Share2, 
-  Trash2, 
-  LogIn, 
-  LogOut, 
-  ChevronDown, 
-  ShieldCheck,
-  UserCheck,
-  Github,
-  Download,
-  FileText,
-  Linkedin
-} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Sparkles, Trash2, LogOut, ChevronDown, ShieldCheck, UserCheck, Github, Download, FileText, Linkedin, Menu, RefreshCw, Plus, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ProfileAnalysis } from '../services/api';
 import { ThemeToggle } from './ThemeToggle';
+import { WorkspaceSearch } from './WorkspaceSearch';
+import { ActiveTab, workspacePages } from './workspaceNavigation';
+import './Navbar.css';
 
 interface NavbarProps {
-  analysis: ProfileAnalysis | null;
+  activeTab: ActiveTab;
+  onNavigate: (tab: ActiveTab) => void;
   onOpenResetModal: () => void;
   onOpenSyncGitHub: () => void;
-  onOpenSyncResume?: () => void;
-  onOpenSyncLinkedIn?: () => void;
-  onOpenExtensionModal?: () => void;
+  onOpenSyncResume: () => void;
+  onOpenSyncLinkedIn: () => void;
+  onOpenExtensionModal: () => void;
   onRefreshData: () => void;
   loading: boolean;
+  onToggleSidebar: () => void;
+  sidebarOpen: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  analysis,
-  onOpenResetModal,
-  onOpenSyncGitHub,
-  onOpenSyncResume,
-  onOpenSyncLinkedIn,
-  onOpenExtensionModal,
-  onRefreshData,
-  loading,
-}) => {
-  const { user, isLoggedIn, activeProfile, loginWithGoogle, logout, switchProfile } = useAuth();
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+export const Navbar: React.FC<NavbarProps> = (props) => {
+  const { user, activeProfile, logout, switchProfile } = useAuth();
+  const [openMenu, setOpenMenu] = useState<'account' | 'sync' | null>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const syncRef = useRef<HTMLDivElement>(null);
+  const accountTrigger = useRef<HTMLButtonElement>(null);
+  const syncTrigger = useRef<HTMLButtonElement>(null);
+  const currentPage = workspacePages.find(page => page.id === props.activeTab)!;
+  const PageIcon = currentPage.icon;
+  const profileName = activeProfile.name || user?.displayName || 'Your workspace';
+  const profileImage = activeProfile.type === 'coworker' ? activeProfile.avatar : user?.photoURL;
+  const initials = profileName.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase();
+  useEffect(() => {
+    if (!openMenu) return;
+    const root = openMenu === 'account' ? accountRef.current : syncRef.current;
+    const trigger = openMenu === 'account' ? accountTrigger.current : syncTrigger.current;
+    const closeOutside = (event: PointerEvent) => { if (!root?.contains(event.target as Node)) setOpenMenu(null); };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setOpenMenu(null); trigger?.focus(); }
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && root?.contains(document.activeElement)) {
+        const items = Array.from(root?.querySelectorAll<HTMLButtonElement>('.dashboard-account-panel button:not(:disabled)') || []);
+        if (!items.length) return;
+        event.preventDefault();
+        const index = items.indexOf(document.activeElement as HTMLButtonElement);
+        const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : index < 0 ? (event.key === 'ArrowDown' ? 0 : items.length - 1) : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[nextIndex].focus();
+      }
+    };
+    const closeOnFocusLeave = (event: FocusEvent) => { if (!root?.contains(event.target as Node)) setOpenMenu(null); };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', handleKey);
+    document.addEventListener('focusin', closeOnFocusLeave);
+    return () => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', handleKey); document.removeEventListener('focusin', closeOnFocusLeave); };
+  }, [openMenu]);
+  const runAction = (action: () => void) => { setOpenMenu(null); action(); };
+  const openWithKeyboard = (event: React.KeyboardEvent, menu: 'account' | 'sync') => {
+    if (openMenu || !['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    setOpenMenu(menu);
+    const last = event.key === 'ArrowUp';
+    requestAnimationFrame(() => {
+      const root = menu === 'account' ? accountRef.current : syncRef.current;
+      const trigger = menu === 'account' ? accountTrigger.current : syncTrigger.current;
+      const items = root?.querySelectorAll<HTMLButtonElement>('.dashboard-account-panel button:not(:disabled)');
+      if (items?.length && document.activeElement === trigger) items[last ? items.length - 1 : 0].focus();
+    });
+  };
 
-  return (
-    <header
-      className="sticky top-0 z-30 w-full px-4 lg:px-6 py-3"
-      style={{
-        backgroundColor: 'var(--bg-primary)',
-        borderBottom: '1px solid var(--border-primary)',
-      }}
-    >
-      <div className="flex items-center justify-between gap-4">
-        {/* Left: Brand and Profile Mode Indicator */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex items-center justify-center w-9 h-9 rounded-lg"
-              style={{ backgroundColor: 'var(--brand-600)' }}
-            >
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  CareerOS
-                </span>
-                <span
-                  className="badge-brand text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded"
-                >
-                  v5.0
-                </span>
-              </div>
-              <p className="text-[11px] font-medium hidden sm:block" style={{ color: 'var(--text-secondary)' }}>
-                Career Co-Pilot & Referral Network
-              </p>
-            </div>
-          </div>
-
-          {/* Profile Switcher Pill */}
-          <div className="relative hidden md:flex items-center">
-            <div
-              className="flex items-center p-1 rounded-lg"
-              style={{
-                backgroundColor: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-              }}
-            >
-              <button
-                onClick={() => switchProfile('candidate')}
-                className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all"
-                style={{
-                  backgroundColor: activeProfile.type === 'candidate' ? 'var(--brand-50)' : 'transparent',
-                  color: activeProfile.type === 'candidate' ? 'var(--brand-600)' : 'var(--text-secondary)',
-                  fontWeight: activeProfile.type === 'candidate' ? 600 : 500,
-                }}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                Candidate
-              </button>
-              <button
-                onClick={() => switchProfile('coworker')}
-                className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all"
-                style={{
-                  backgroundColor: activeProfile.type === 'coworker' ? 'var(--brand-50)' : 'transparent',
-                  color: activeProfile.type === 'coworker' ? 'var(--brand-600)' : 'var(--text-secondary)',
-                  fontWeight: activeProfile.type === 'coworker' ? 600 : 500,
-                }}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Benchmark
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Center/Right: Live Stats */}
-        <div className="hidden xl:flex items-center gap-4 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          <div className="flex items-center gap-1.5">
-            <GitFork className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Repos: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.repos_count ?? 0}</strong></span>
-          </div>
-          <span style={{ color: 'var(--border-secondary)' }}>|</span>
-          <div className="flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Network: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.connections_count ?? 0}</strong></span>
-          </div>
-          <span style={{ color: 'var(--border-secondary)' }}>|</span>
-          <div className="flex items-center gap-1.5">
-            <GraduationCap className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Alumni: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.alumni_count ?? 0}</strong></span>
-          </div>
-          <span style={{ color: 'var(--border-secondary)' }}>|</span>
-          <div className="flex items-center gap-1.5">
-            <Share2 className="w-3.5 h-3.5" style={{ color: 'var(--brand-600)' }} />
-            <span>Nodes: <strong style={{ color: 'var(--text-primary)' }}>{analysis?.graph_nodes_count ?? 0}</strong></span>
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <ThemeToggle />
-
-          {onOpenExtensionModal && (
-            <button
-              onClick={onOpenExtensionModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                backgroundColor: 'var(--bg-tertiary)',
-                border: '1px solid var(--border-primary)',
-                color: 'var(--text-primary)',
-              }}
-              title="Download Chrome Extension (.zip) & setup guide"
-            >
-              <Download className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">Extension</span>
-              <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                Beta
-              </span>
-            </button>
-          )}
-
-          {onOpenSyncResume && (
-            <button
-              onClick={onOpenSyncResume}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
-              title="Upload Master Resume PDF to parse identity and skills"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sync Resume</span>
-            </button>
-          )}
-
-          {onOpenSyncLinkedIn && (
-            <button
-              onClick={onOpenSyncLinkedIn}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
-              title="Sync LinkedIn connections & referral network"
-            >
-              <Linkedin className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sync LinkedIn</span>
-            </button>
-          )}
-
-          <button
-            onClick={onOpenSyncGitHub}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-all"
-            title="Sync GitHub repositories and extract skills"
-          >
-            <Github className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sync GitHub</span>
-          </button>
-
-          <button
-            onClick={onOpenResetModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={{
-              backgroundColor: 'var(--error-50)',
-              color: 'var(--error-600)',
-              border: '1px solid transparent',
-            }}
-            title="Reset database and start fresh"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Start Fresh</span>
-          </button>
-
-          {/* User Auth Section */}
-          {isLoggedIn ? (
-            <div className="relative">
-              <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center gap-2 p-1.5 pr-3 rounded-lg text-xs transition-all"
-                style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-primary)',
-                }}
-              >
-                <img
-                  src={user?.photoURL || activeProfile.avatar}
-                  alt={user?.displayName || 'User Avatar'}
-                  className="w-6 h-6 rounded object-cover"
-                  style={{ border: '2px solid var(--border-primary)' }}
-                />
-                <span className="font-medium max-w-[120px] truncate" style={{ color: 'var(--text-primary)' }}>
-                  {user?.displayName || 'Google User'}
-                </span>
-                <ChevronDown className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
-              </button>
-
-              {showProfileMenu && (
-                <div
-                  className="absolute right-0 mt-2 w-56 p-2 rounded-xl shadow-dropdown z-50 animate-fade-in text-xs"
-                  style={{
-                    backgroundColor: 'var(--bg-primary)',
-                    border: '1px solid var(--border-primary)',
-                  }}
-                >
-                  <div className="p-2 mb-1" style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                    <p className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>{user?.displayName}</p>
-                    <p className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>{user?.email}</p>
-                    <span className="badge-success inline-block mt-1 text-[10px] px-2 py-0.5 rounded">
-                      Signed In
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      logout();
-                      setShowProfileMenu(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-medium"
-                    style={{ color: 'var(--error-600)' }}
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={loginWithGoogle}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-white text-xs font-semibold transition-all"
-              style={{ backgroundColor: 'var(--brand-600)' }}
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              Google Sign-In
-            </button>
-          )}
-        </div>
+  return <header className="dashboard-topbar dashboard-header-v2 no-print">
+    <div className="dashboard-brand-group">
+      <button className="dashboard-icon-button dashboard-menu-toggle" onClick={props.onToggleSidebar} aria-label={props.sidebarOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={props.sidebarOpen} aria-controls="dashboard-navigation"><Menu size={20} /></button>
+      <button className="dashboard-brand-home" onClick={() => props.onNavigate('overview')} aria-label="CareerOS overview"><span className="dashboard-brand-mark"><Sparkles size={22} strokeWidth={1.7} /></span><span className="dashboard-brand-copy"><strong>CareerOS<span className="dashboard-brand-dot">.</span></strong><span>Your career workspace</span></span></button>
+    </div>
+    <nav className="dashboard-header-location" aria-label="Current workspace"><span className="dashboard-header-page-icon"><PageIcon size={18} strokeWidth={1.7} /></span><div><span>{currentPage.group}</span><strong aria-current="page">{currentPage.label}</strong></div>{props.loading && <span className="dashboard-header-updating" role="status"><RefreshCw size={12} className="animate-spin" />Updating</span>}</nav>
+    <div className="dashboard-topbar-actions" aria-label="Workspace actions">
+      <WorkspaceSearch onNavigate={props.onNavigate} />
+      <ThemeToggle className="dashboard-theme-toggle" />
+      <div className="dashboard-account dashboard-sync-menu" ref={syncRef}>
+        <button ref={syncTrigger} className="dashboard-button dashboard-button-primary" aria-label="Sync data" aria-expanded={openMenu === 'sync'} aria-controls="dashboard-sync-panel" onKeyDown={event => openWithKeyboard(event, 'sync')} onClick={() => setOpenMenu(openMenu === 'sync' ? null : 'sync')}><Plus size={17} /><span>Sync data</span><ChevronDown size={14} /></button>
+        {openMenu === 'sync' && <div id="dashboard-sync-panel" className="dashboard-account-panel dashboard-sync-panel"><div className="dashboard-menu-heading"><strong>Bring your career together</strong><span>Add evidence to your workspace.</span></div>{[
+          { icon: Github, title: 'Connect GitHub', text: 'Projects and technical skills', action: props.onOpenSyncGitHub },
+          { icon: FileText, title: 'Upload resume', text: 'Experience and qualifications', action: props.onOpenSyncResume },
+          { icon: Linkedin, title: 'Import LinkedIn', text: 'Connections and opportunities', action: props.onOpenSyncLinkedIn },
+        ].map(({ icon: Icon, title, text, action }) => <button key={title} onClick={() => runAction(action)}><span className="dashboard-menu-icon"><Icon size={18} /></span><span><strong>{title}</strong><small>{text}</small></span><ChevronRight size={14} /></button>)}<div className="dashboard-account-divider" /><button onClick={() => runAction(props.onOpenExtensionModal)}><Download size={16} />Get browser extension<span className="dashboard-menu-badge">Beta</span></button></div>}
       </div>
-    </header>
-  );
+      <div className="dashboard-account" ref={accountRef}>
+        <button ref={accountTrigger} className="dashboard-account-trigger" aria-label={`Account menu for ${profileName}`} aria-expanded={openMenu === 'account'} aria-controls="dashboard-account-panel" onKeyDown={event => openWithKeyboard(event, 'account')} onClick={() => setOpenMenu(openMenu === 'account' ? null : 'account')}>
+          <span className="dashboard-account-avatar"><span>{initials}</span>{profileImage && <img src={profileImage} alt="" referrerPolicy="no-referrer" onError={event => { event.currentTarget.style.display = 'none'; }} />}</span><span className="dashboard-account-summary"><strong title={profileName}>{profileName}</strong><small>{activeProfile.type === 'coworker' ? 'Benchmark profile' : 'Personal workspace'}</small></span><ChevronDown size={14} />
+        </button>
+        {openMenu === 'account' && <div className="dashboard-account-panel" id="dashboard-account-panel"><div className="dashboard-account-details"><strong>{user?.displayName || activeProfile.name}</strong><span>{user?.email}</span></div><button onClick={() => runAction(() => props.onNavigate('profile'))}><UserCheck size={16} />Profile & preferences</button><div className="dashboard-account-modes"><span>Profile mode</span><button onClick={() => runAction(() => switchProfile('candidate'))} aria-pressed={activeProfile.type === 'candidate'}><UserCheck size={16} />Candidate</button><button onClick={() => runAction(() => switchProfile('coworker'))} aria-pressed={activeProfile.type === 'coworker'}><ShieldCheck size={16} />Benchmark</button></div><div className="dashboard-account-divider" /><button disabled={props.loading} onClick={() => runAction(props.onRefreshData)}><RefreshCw size={16} className={props.loading ? 'animate-spin' : ''} />Refresh profile data</button><button className="dashboard-danger" onClick={() => runAction(props.onOpenResetModal)}><Trash2 size={16} />Start fresh</button><button onClick={() => runAction(() => { void logout(); })}><LogOut size={16} />Sign out</button></div>}
+      </div>
+    </div>
+  </header>;
 };

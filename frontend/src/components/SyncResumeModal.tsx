@@ -1,3 +1,4 @@
+import { DialogFrame } from './DialogFrame';
 import React, { useState, useRef } from 'react';
 import { 
   FileText, 
@@ -47,6 +48,7 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
         onErrorToast('Please upload a PDF format resume document');
         return;
       }
+      if (selected.size > 10 * 1024 * 1024) { onErrorToast('Please select a PDF smaller than 10 MB'); return; }
       setFile(selected);
       setUploadResult(null);
     }
@@ -61,6 +63,7 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
         onErrorToast('Please upload a PDF format resume document');
         return;
       }
+      if (selected.size > 10 * 1024 * 1024) { onErrorToast('Please select a PDF smaller than 10 MB'); return; }
       setFile(selected);
       setUploadResult(null);
     }
@@ -88,7 +91,7 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <DialogFrame label="Upload your resume" onClose={onClose} busy={isUploading}>
       <div 
         className="relative w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden animate-scale-up"
         style={{
@@ -122,8 +125,8 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
+          <button aria-label="Close dialog"
+            onClick={onClose} disabled={isUploading}
             className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             style={{ color: 'var(--text-tertiary)' }}
           >
@@ -141,6 +144,10 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+                aria-label="Choose PDF resume"
+                onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInputRef.current?.click(); } }}
                 className={`p-8 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
                   isDragging 
                     ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
@@ -268,7 +275,7 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
           }}
         >
           <button
-            onClick={onClose}
+            onClick={onClose} disabled={isUploading}
             className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             style={{ color: 'var(--text-secondary)' }}
           >
@@ -306,6 +313,6 @@ export const SyncResumeModal: React.FC<SyncResumeModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 };

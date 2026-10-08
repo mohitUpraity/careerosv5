@@ -1,6 +1,9 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState, WorkspaceSteps } from '../WorkspaceUI';
+import { DialogFrame } from '../DialogFrame';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, 
+  User,
   Printer, 
   Sparkles, 
   Github, 
@@ -1098,7 +1101,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                 </div>
               </div>
             ) : isEditMode ? (
-              <textarea
+              <textarea aria-label="Write a compelling executive summary highlighting your core tech strengths and architectural contributions..."
                 rows={3}
                 value={activeBlueprint.summary || ''}
                 onChange={(e) => updateActiveBlueprint({ ...activeBlueprint, summary: e.target.value })}
@@ -1164,7 +1167,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Company</label>
-                          <input
+                          <input aria-label="Company"
                             type="text"
                             value={exp.company}
                             onChange={(e) => updateExperience(expIdx, 'company', e.target.value)}
@@ -1174,7 +1177,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Role / Title</label>
-                          <input
+                          <input aria-label="Role / Title"
                             type="text"
                             value={exp.role}
                             onChange={(e) => updateExperience(expIdx, 'role', e.target.value)}
@@ -1187,7 +1190,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Location</label>
-                          <input
+                          <input aria-label="Location"
                             type="text"
                             value={exp.location || ''}
                             onChange={(e) => updateExperience(expIdx, 'location', e.target.value)}
@@ -1197,7 +1200,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Start Date</label>
-                          <input
+                          <input aria-label="Start Date"
                             type="text"
                             value={exp.start_date || ''}
                             onChange={(e) => updateExperience(expIdx, 'start_date', e.target.value)}
@@ -1207,7 +1210,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>End Date</label>
-                          <input
+                          <input aria-label="End Date"
                             type="text"
                             value={exp.end_date || ''}
                             onChange={(e) => updateExperience(expIdx, 'end_date', e.target.value)}
@@ -1262,7 +1265,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                                 </div>
                               ) : (
                                 <div className="flex items-start gap-1.5">
-                                  <textarea
+                                  <textarea aria-label="Action + Context + Quantifiable Result..."
                                     rows={2}
                                     value={bullet}
                                     onChange={(e) => updateExpBullet(expIdx, bIdx, e.target.value)}
@@ -1284,7 +1287,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       </div>
                     </div>
                   ) : (
-                    /* Clean ATS Preview Experience */
+                    /* Preview Experience */
                     <div className="space-y-0.5">
                       <div className="flex flex-col sm:flex-row sm:items-baseline justify-between">
                         <div className="flex items-baseline gap-2">
@@ -1373,7 +1376,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Project Name</label>
-                          <input
+                          <input aria-label="Project Name"
                             type="text"
                             value={proj.name}
                             onChange={(e) => updateProject(projIdx, 'name', e.target.value)}
@@ -1383,7 +1386,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Tech Stack</label>
-                          <input
+                          <input aria-label="Tech Stack"
                             type="text"
                             value={proj.tech_stack || ''}
                             onChange={(e) => updateProject(projIdx, 'tech_stack', e.target.value)}
@@ -1396,7 +1399,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>GitHub Repo URL</label>
-                          <input
+                          <input aria-label="GitHub Repo URL"
                             type="text"
                             value={proj.repo_url || ''}
                             onChange={(e) => updateProject(projIdx, 'repo_url', e.target.value)}
@@ -1406,7 +1409,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Live Demo / Link</label>
-                          <input
+                          <input aria-label="Live Demo / Link"
                             type="text"
                             value={proj.live_url || ''}
                             onChange={(e) => updateProject(projIdx, 'live_url', e.target.value)}
@@ -1461,7 +1464,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                                 </div>
                               ) : (
                                 <div className="flex items-start gap-1.5">
-                                  <textarea
+                                  <textarea aria-label="Key feature developed, algorithms implemented, or benchmarks achieved..."
                                     rows={2}
                                     value={bullet}
                                     onChange={(e) => updateProjBullet(projIdx, bIdx, e.target.value)}
@@ -1483,7 +1486,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       </div>
                     </div>
                   ) : (
-                    /* Clean ATS Preview Project */
+                    /* Preview Project */
                     <div className="space-y-0.5">
                       <div className="flex flex-col sm:flex-row sm:items-baseline justify-between">
                         <div className="flex items-baseline gap-2 flex-wrap">
@@ -1572,7 +1575,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   {isEditMode ? (
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <input
+                        <input aria-label="Category (e.g. Languages, Frameworks, Cloud)"
                           type="text"
                           value={cat.category}
                           onChange={(e) => updateSkillCategoryName(catIdx, e.target.value)}
@@ -1610,7 +1613,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                           </span>
                         ))}
                         <div className="inline-flex items-center gap-1">
-                          <input
+                          <input aria-label="+ Add skill..."
                             type="text"
                             placeholder="+ Add skill..."
                             value={newSkillInput[catIdx] || ''}
@@ -1694,7 +1697,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>University / College</label>
-                          <input
+                          <input aria-label="University / College"
                             type="text"
                             value={edu.university}
                             onChange={(e) => updateEducation(eduIdx, 'university', e.target.value)}
@@ -1704,7 +1707,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Degree & Field</label>
-                          <input
+                          <input aria-label="Degree & Field"
                             type="text"
                             value={edu.degree}
                             onChange={(e) => updateEducation(eduIdx, 'degree', e.target.value)}
@@ -1717,7 +1720,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>Start Date</label>
-                          <input
+                          <input aria-label="Start Date"
                             type="text"
                             value={edu.start_date || ''}
                             onChange={(e) => updateEducation(eduIdx, 'start_date', e.target.value)}
@@ -1727,7 +1730,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>End Date</label>
-                          <input
+                          <input aria-label="End Date"
                             type="text"
                             value={edu.end_date || ''}
                             onChange={(e) => updateEducation(eduIdx, 'end_date', e.target.value)}
@@ -1737,7 +1740,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-[11px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>CGPA / Percentage</label>
-                          <input
+                          <input aria-label="CGPA / Percentage"
                             type="text"
                             value={edu.gpa || ''}
                             onChange={(e) => updateEducation(eduIdx, 'gpa', e.target.value)}
@@ -1803,7 +1806,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               {isEditMode ? (
                 (activeBlueprint.achievements || []).map((ach, achIdx) => (
                   <div key={achIdx} className="flex items-center gap-2">
-                    <input
+                    <input aria-label="e.g. 1st Place Winner – SIH 2024, DRDO ADRDE Demonstration"
                       type="text"
                       value={ach}
                       onChange={(e) => updateAchievement(achIdx, e.target.value)}
@@ -1838,15 +1841,16 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+    <div className="dashboard-view ws-page dashboard-view--resume space-y-6 max-w-7xl mx-auto pb-16">
+      <WorkspacePageHeader page="resume" eyebrow="YOUR EXPERIENCE, WELL TOLD" title="Make your experience stand out." description="Build your master resume, tailor it for a role, and review every suggestion before you apply." />
       {/* Top Main Tab Navigation (Cleanly separates Master Template vs Job Tailor) */}
       <div 
-        className="no-print p-2 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+        className="ws-resume-control-bar dashboard-resume-toolbar no-print p-2 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
-        <div className="flex items-center gap-2">
+        <div className="ws-resume-modes">
           <button
-            onClick={() => setActiveTab('master')}
+            aria-pressed={activeTab === 'master'} onClick={() => setActiveTab('master')}
             className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
               activeTab === 'master'
                 ? 'bg-blue-600 text-white shadow-md'
@@ -1855,14 +1859,14 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             style={{ color: activeTab === 'master' ? '#ffffff' : 'var(--text-secondary)' }}
           >
             <Layers className="w-4 h-4" />
-            <span>1. Master Template & Blueprint</span>
+            <span>Master resume</span>
             {hasMasterResume && (
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
             )}
           </button>
 
           <button
-            onClick={() => setActiveTab('tailor')}
+            aria-pressed={activeTab === 'tailor'} onClick={() => setActiveTab('tailor')}
             className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
               activeTab === 'tailor'
                 ? 'bg-purple-600 text-white shadow-md'
@@ -1871,7 +1875,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             style={{ color: activeTab === 'tailor' ? '#ffffff' : 'var(--text-secondary)' }}
           >
             <Target className="w-4 h-4" />
-            <span>2. Job Application Tailor (JD Optimizer)</span>
+            <span>Tailor for a role</span>
             {pendingSuggestionsCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-gray-900 text-[10px] font-bold">
                 {pendingSuggestionsCount}
@@ -1881,7 +1885,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
         </div>
 
         {/* Action Controls for Current Active Tab */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="ws-resume-actions">
           {/* Multi-Template Selector Dropdown */}
           <div className="relative flex items-center">
             <select
@@ -1890,7 +1894,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               className="input-base text-xs font-semibold pr-8"
               style={{ height: '34px' }}
             >
-              <option value="master-default">Default Master Template</option>
+              <option value="master-default">Default template</option>
               {savedTemplates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -1915,7 +1919,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
           >
             <button
-              onClick={() => setIsEditMode(true)}
+              aria-pressed={isEditMode} onClick={() => setIsEditMode(true)}
               className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 isEditMode
                   ? 'bg-blue-600 text-white shadow-sm'
@@ -1924,10 +1928,10 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               style={{ color: isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span>Interactive Editor</span>
+              <span>Edit resume</span>
             </button>
             <button
-              onClick={() => setIsEditMode(false)}
+              aria-pressed={!isEditMode} onClick={() => setIsEditMode(false)}
               className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 !isEditMode
                   ? 'bg-blue-600 text-white shadow-sm'
@@ -1936,7 +1940,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               style={{ color: !isEditMode ? '#ffffff' : 'var(--text-secondary)' }}
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>Clean ATS Preview</span>
+              <span>Preview</span>
             </button>
           </div>
 
@@ -1957,7 +1961,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             title="Reorder & Toggle Sections"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-blue-600" />
-            <span>Reorder Sections</span>
+            <span>Sections</span>
           </button>
 
           {/* Template Style Toggle */}
@@ -1976,7 +1980,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             }}
           >
             <Palette className="w-3.5 h-3.5 text-purple-600" />
-            <span>Styling</span>
+            <span>Style</span>
           </button>
 
           {/* If on Master tab: Show Save Master Button */}
@@ -2041,7 +2045,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
 
       {/* Save Template Modal */}
       {isSaveTemplateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+        <DialogFrame label="Save resume template" onClose={() => setIsSaveTemplateModalOpen(false)} busy={false}>
           <div 
             className="w-full max-w-md p-6 rounded-2xl border space-y-4 shadow-2xl"
             style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
@@ -2053,7 +2057,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   Save Custom Template Preset
                 </h3>
               </div>
-              <button onClick={() => setIsSaveTemplateModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Close dialog" disabled={false} onClick={() => setIsSaveTemplateModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -2066,7 +2070,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Template Name
               </label>
-              <input
+              <input aria-label="Template Name"
                 type="text"
                 value={newTemplateNameInput}
                 onChange={(e) => setNewTemplateNameInput(e.target.value)}
@@ -2080,7 +2084,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button
+              <button disabled={false}
                 onClick={() => setIsSaveTemplateModalOpen(false)}
                 className="px-3.5 py-1.5 rounded-lg text-xs font-medium"
                 style={{ color: 'var(--text-secondary)' }}
@@ -2095,7 +2099,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </DialogFrame>
       )}
 
       {/* Section Reorder & Visibility Manager Drawer */}
@@ -2185,7 +2189,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             {/* Font Family */}
             <div>
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Typography</label>
-              <select
+              <select aria-label="Typography"
                 value={templateStyle.fontFamily}
                 onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontFamily: e.target.value })}
                 className="input-base w-full text-xs"
@@ -2200,7 +2204,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             {/* Font Size */}
             <div>
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Density / Text Size</label>
-              <select
+              <select aria-label="Density / Text Size"
                 value={templateStyle.fontSize}
                 onChange={(e: any) => setTemplateStyle({ ...templateStyle, fontSize: e.target.value })}
                 className="input-base w-full text-xs"
@@ -2214,7 +2218,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             {/* Header Alignment */}
             <div>
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Header Align</label>
-              <select
+              <select aria-label="Header Align"
                 value={templateStyle.headerAlign}
                 onChange={(e: any) => setTemplateStyle({ ...templateStyle, headerAlign: e.target.value })}
                 className="input-base w-full text-xs"
@@ -2258,10 +2262,10 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               </div>
               <div>
                 <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                  Job Application Tailor & Evidence Assistant
+                  Tailor your experience to the role
                 </h3>
                 <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  Align your STAR experience bullets, verify skill requirements, and weave authentic project evidence into your resume.
+                  Review the role requirements, highlight relevant experience, and keep every suggestion grounded in your work.
                 </p>
               </div>
             </div>
@@ -2278,7 +2282,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Target Role Title
               </label>
-              <input
+              <input aria-label="Target Role Title"
                 type="text"
                 placeholder="e.g. Senior Backend / Distributed Systems Engineer"
                 value={role}
@@ -2290,7 +2294,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Target Company Name
               </label>
-              <input
+              <input aria-label="Target Company Name"
                 type="text"
                 placeholder="e.g. Google, Stripe, Microsoft, DRDO"
                 value={company}
@@ -2311,7 +2315,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   `${analyzedSkills.matched.length} Matched | ${analyzedSkills.missing.length} Missing Skills`}
               </span>
             </div>
-            <textarea
+            <textarea aria-label="Paste target job description to analyze required skills and synthesize STAR bullets..."
               rows={3}
               placeholder="Paste target job description to analyze required skills and synthesize STAR bullets..."
               value={jd}
@@ -2329,11 +2333,11 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               <div className="flex items-center gap-2">
                 <HelpCircle className="w-4 h-4 text-purple-600" />
                 <h4 className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
-                  Skill Gap & Verification Assistant
+                  Review the skills for this role
                 </h4>
               </div>
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-medium">
-                AI Keyword & Evidence Verification
+                Evidence review
               </span>
             </div>
 
@@ -2459,7 +2463,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                                 <label className="block text-[11px] font-semibold mb-0.5 flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
                                   <Link2 className="w-3 h-3 text-blue-500" /> Evidence / Project / GitHub Link (Optional)
                                 </label>
-                                <input
+                                <input aria-label="Evidence / Project / GitHub Link (Optional)"
                                   type="text"
                                   placeholder="e.g. https://github.com/myaccount/redis-cache-service"
                                   value={decision?.evidenceUrl || ''}
@@ -2471,7 +2475,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                                 <label className="block text-[11px] font-semibold mb-0.5 flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
                                   <FileText className="w-3 h-3 text-purple-500" /> Context / What you built (Optional)
                                 </label>
-                                <input
+                                <input aria-label="Context / What you built (Optional)"
                                   type="text"
                                   placeholder="e.g. Built microservice handling 5k rps using this skill"
                                   value={decision?.notes || ''}
@@ -2495,7 +2499,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   onClick={() => setShowAddCustomSkill(true)}
                   className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 pt-1"
                 >
-                  <PlusCircle className="w-3.5 h-3.5" /> + Add Another Missing Skill / Tech Manually
+                  <PlusCircle className="w-3.5 h-3.5" /> Add a skill to review
                 </button>
               ) : (
                 <div 
@@ -2511,14 +2515,14 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                     </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <input
+                    <input aria-label="Skill name (e.g. WebRTC, Terraform)"
                       type="text"
                       placeholder="Skill name (e.g. WebRTC, Terraform)"
                       value={customSkillToAdd}
                       onChange={(e) => setCustomSkillToAdd(e.target.value)}
                       className="input-base w-full text-xs"
                     />
-                    <input
+                    <input aria-label="Evidence URL (Optional, e.g. GitHub link)"
                       type="text"
                       placeholder="Evidence URL (Optional, e.g. GitHub link)"
                       value={customEvidenceToAdd}
@@ -2557,7 +2561,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
               <label className="text-xs font-bold flex items-center gap-1.5 shrink-0" style={{ color: 'var(--text-primary)' }}>
                 <Palette className="w-3.5 h-3.5 text-purple-600" />
-                <span>Resume Template:</span>
+                <span>Template:</span>
               </label>
               <select
                 value={activeTemplateId}
@@ -2588,7 +2592,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               ) : (
                 <>
                   <Wand2 className="w-4 h-4" />
-                  <span>Optimize Resume with Verified Skills & Evidence</span>
+                  <span>Generate tailored suggestions</span>
                 </>
               )}
             </button>
@@ -2635,7 +2639,12 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
       )}
 
       {/* Main Resume Canvas (Standard ATS Resume Layout) */}
-      <div className="w-full max-w-4xl mx-auto">
+      <div className="dashboard-resume-canvas-layout w-full max-w-4xl mx-auto">
+        <nav className="dashboard-resume-sections no-print" aria-label="Resume sections">
+          <span className="dashboard-nav-group-label">Your resume</span>
+          <a href="#resume-basics"><User size={16} />Basics</a>
+          {sectionOrder.filter(key => visibleSections[key]).map(key => <a key={key} href={`#resume-${key}`}><FileText size={16} />{key.charAt(0).toUpperCase() + key.slice(1)}</a>)}
+        </nav>
         <div
           className={`resume-paper p-8 sm:p-12 rounded-2xl shadow-xl space-y-5 transition-all ${getFontSizeClass()}`}
           style={{
@@ -2646,7 +2655,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           }}
         >
           {/* ================= HEADER / CONTACT ================= */}
-          <div 
+          <div id="resume-basics"
             className="pb-3 space-y-1.5 border-b-2" 
             style={{ 
               borderColor: templateStyle.accentColor,
@@ -2660,7 +2669,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                     Candidate Name & Contact Details ({activeTab === 'master' ? 'Master Blueprint' : 'Tailored Copy'})
                   </span>
                 </div>
-                <input
+                <input aria-label="Your Full Name"
                   type="text"
                   value={activeBlueprint.contact?.full_name || ''}
                   onChange={(e) => updateContact('full_name', e.target.value)}
@@ -2672,7 +2681,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div className="flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <input
+                    <input aria-label="Email"
                       type="email"
                       value={activeBlueprint.contact?.email || ''}
                       onChange={(e) => updateContact('email', e.target.value)}
@@ -2682,7 +2691,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <input
+                    <input aria-label="Phone"
                       type="text"
                       value={activeBlueprint.contact?.phone || ''}
                       onChange={(e) => updateContact('phone', e.target.value)}
@@ -2692,7 +2701,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <input
+                    <input aria-label="Location (e.g. City, Country)"
                       type="text"
                       value={activeBlueprint.contact?.location || ''}
                       onChange={(e) => updateContact('location', e.target.value)}
@@ -2705,7 +2714,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                   <div className="flex items-center gap-1.5">
                     <Github className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                    <input
+                    <input aria-label="GitHub URL"
                       type="text"
                       value={activeBlueprint.contact?.github_url || ''}
                       onChange={(e) => updateContact('github_url', e.target.value)}
@@ -2715,7 +2724,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Linkedin className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                    <input
+                    <input aria-label="LinkedIn URL"
                       type="text"
                       value={activeBlueprint.contact?.linkedin_url || ''}
                       onChange={(e) => updateContact('linkedin_url', e.target.value)}
@@ -2725,7 +2734,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                   </div>
                   <div className="flex items-center gap-1.5">
                     <Globe className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <input
+                    <input aria-label="Portfolio / Website URL"
                       type="text"
                       value={activeBlueprint.contact?.portfolio_url || ''}
                       onChange={(e) => updateContact('portfolio_url', e.target.value)}
@@ -2806,7 +2815,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
           </div>
 
           {/* ================= DYNAMICALLY ORDERED RESUME SECTIONS ================= */}
-          {sectionOrder.map(key => renderSection(key))}
+          {sectionOrder.filter(key => visibleSections[key]).map(key => <section key={key} id={`resume-${key}`} className="dashboard-resume-section">{renderSection(key)}</section>)}
         </div>
       </div>
 
@@ -2830,3 +2839,4 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
     </div>
   );
 };
+

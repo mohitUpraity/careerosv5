@@ -1,3 +1,4 @@
+import { DialogFrame } from './DialogFrame';
 import React, { useState, useRef } from 'react';
 import { 
   Share2, 
@@ -34,7 +35,7 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
   onErrorToast,
   onSyncSuccess,
 }) => {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, user } = useAuth();
   const [activeTab, setActiveTab] = useState<'extension' | 'csv'>('extension');
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -96,7 +97,7 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <DialogFrame label="Import LinkedIn connections" onClose={onClose} busy={isUploading}>
       <div 
         className="relative w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-scale-up"
         style={{
@@ -130,8 +131,8 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
+          <button aria-label="Close dialog"
+            onClick={onClose} disabled={isUploading}
             className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             style={{ color: 'var(--text-tertiary)' }}
           >
@@ -237,14 +238,16 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
                   Active CareerOS Account ID (For Extension)
                 </span>
                 <span className="font-mono text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
-                  {useAuth().user?.uid || useAuth().user?.email || 'candidate-workspace'}
+                  {user?.uid || user?.email || 'candidate-workspace'}
                 </span>
               </div>
               <button
-                onClick={() => {
-                  const id = useAuth().user?.uid || useAuth().user?.email || 'candidate-workspace';
-                  navigator.clipboard.writeText(id);
-                  onSuccessToast('Account ID copied to clipboard!');
+                onClick={async () => {
+                  const id = user?.uid || user?.email || 'candidate-workspace';
+                  try {
+                    await navigator.clipboard.writeText(id);
+                    onSuccessToast('Account ID copied to clipboard!');
+                  } catch { onErrorToast('Could not copy the account ID. Please select and copy it manually.'); }
                 }}
                 className="px-3 py-1 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs shrink-0 transition-colors"
               >
@@ -268,6 +271,10 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
               <>
                 <div
                   onClick={() => fileInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Choose LinkedIn connections CSV"
+                  onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileInputRef.current?.click(); } }}
                   className="p-7 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-sky-500 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-slate-50/50 dark:bg-slate-900/30"
                 >
                   <input 
@@ -363,7 +370,7 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
           }}
         >
           <button
-            onClick={onClose}
+            onClick={onClose} disabled={isUploading}
             className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             style={{ color: 'var(--text-secondary)' }}
           >
@@ -404,6 +411,6 @@ export const SyncLinkedInModal: React.FC<SyncLinkedInModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 };

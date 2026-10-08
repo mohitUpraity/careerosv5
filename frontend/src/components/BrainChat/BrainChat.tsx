@@ -1,10 +1,10 @@
+import { DialogFrame } from '../DialogFrame';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
   Send, 
   Bot, 
   User, 
-  RotateCcw, 
   Copy, 
   Check, 
   Network, 
@@ -13,18 +13,21 @@ import {
   Target, 
   Compass, 
   ChevronRight,
-  ExternalLink,
   Layers,
   Database,
-  HelpCircle,
   Lightbulb,
   ArrowRight,
   ArrowUpRight,
   Eye,
-  Filter
+  Plus,
+  PanelRight,
+  X,
+  FileText,
+  TrendingUp
 } from 'lucide-react';
-import { apiService } from '../../services/api';
+import { apiService, ProfileAnalysis } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import './BrainChat.css';
 
 interface Citation {
   type: string;
@@ -47,9 +50,39 @@ interface ChatMessage {
   graphLens?: GraphLens | null;
   suggestedFollowups?: string[];
   timestamp: string;
+  contextMode?: ContextMode;
 }
 
+type ContextMode = 'general' | 'code' | 'benchmark' | 'opportunities';
+const CHAT_CONTEXTS = [
+  { id: 'general', label: 'My profile', detail: 'Skills, experience & goals', icon: User, welcome: 'Discover your strengths, plan your next step, or turn your experience into a stronger application.', prompts: [
+    { label: 'Discover my strengths', detail: 'See the skills I can prove', icon: Sparkles, query: 'What are my strongest skills and projects, based on my profile evidence?' },
+    { label: 'Plan my next move', detail: 'Find a useful step forward', icon: Compass, query: 'Based on my experience and career goals, what should I focus on next?' },
+    { label: 'Find matching roles', detail: 'Explore where I could fit', icon: Briefcase, query: 'Which opportunities match my skills and experience best?' },
+    { label: 'Write an introduction', detail: 'Start a thoughtful conversation', icon: Send, query: 'Help me draft a warm referral introduction grounded in my actual project experience.' },
+  ] },
+  { id: 'code', label: 'My projects', detail: 'Code & repository evidence', icon: Code2, welcome: 'Explore what your projects demonstrate and make your technical experience easier to explain.', prompts: [
+    { label: 'Explore my best work', detail: 'Find strong project evidence', icon: Code2, query: 'Which of my projects best demonstrate my technical strengths, and why?' },
+    { label: 'Explain my decisions', detail: 'Prepare a clear project story', icon: Layers, query: 'Help me explain the architecture and technical decisions in my projects.' },
+    { label: 'Strengthen a project', detail: 'Choose a meaningful improvement', icon: TrendingUp, query: 'What improvements to my projects would create stronger evidence of my skills?' },
+    { label: 'Write a resume bullet', detail: 'Show my work with clarity', icon: FileText, query: 'Draft resume bullets from my project evidence without inventing impact metrics.' },
+  ] },
+  { id: 'benchmark', label: 'My benchmark', detail: 'Peer comparison & skill gaps', icon: Target, welcome: 'Understand how your experience compares and choose a practical skill to develop next.', prompts: [
+    { label: 'Compare my experience', detail: 'Understand the differences', icon: Target, query: 'How does my experience compare with my benchmark peer?' },
+    { label: 'Find my unique strengths', detail: 'See what sets me apart', icon: Sparkles, query: 'Which capabilities differentiate me from my benchmark peer?' },
+    { label: 'Prioritise a skill gap', detail: 'Focus on what matters next', icon: TrendingUp, query: 'Which gaps in my benchmark comparison should I focus on first, and why?' },
+    { label: 'Create a learning plan', detail: 'Turn a gap into a project', icon: Layers, query: 'Create a focused two-week project plan to close my most important benchmark skill gap.' },
+  ] },
+  { id: 'opportunities', label: 'Opportunities', detail: 'Relevant roles & challenges', icon: Briefcase, welcome: 'Explore opportunities through your own experience and prepare for the roles that interest you.', prompts: [
+    { label: 'Find relevant roles', detail: 'Match my skills to opportunities', icon: Briefcase, query: 'Which current opportunities best match my skills, experience, and career preferences?' },
+    { label: 'Understand my fit', detail: 'See strengths and gaps', icon: Target, query: 'Explain my fit for the most relevant available role, including my strengths and skill gaps.' },
+    { label: 'Prepare an application', detail: 'Choose useful next steps', icon: FileText, query: 'How should I prepare my application for a role that matches my profile?' },
+    { label: 'Find a warm introduction', detail: 'Use my network with context', icon: Send, query: 'How can I use my existing network to find a relevant introduction for opportunities that fit me?' },
+  ] },
+] as const;
+
 interface BrainChatProps {
+  analysis?: ProfileAnalysis | null;
   onNavigateToTab?: (tab: string) => void;
   onNavigateToGraphQuery?: (query: string) => void;
   onTailorResume?: (role: string, company: string, jd: string) => void;
@@ -58,9 +91,9 @@ interface BrainChatProps {
 }
 
 export const BrainChat: React.FC<BrainChatProps> = ({
+  analysis,
   onNavigateToTab,
   onNavigateToGraphQuery,
-  onTailorResume,
   onError,
   onSuccess
 }) => {
@@ -73,13 +106,8 @@ export const BrainChat: React.FC<BrainChatProps> = ({
   const getDefaultWelcomeMessage = (): ChatMessage => ({
     id: 'welcome-1',
     role: 'assistant',
-    content: `👋 **Hi ${activeProfile?.name?.split(' ')[0] || (activeProfile as any)?.full_name?.split(' ')[0] || 'there'}! I'm CareerOS Brain.**\n\nI am your GraphRAG career copilot powered by your personal **Neo4j Knowledge Graph**, code-verified GitHub repositories, resume experience, and real-time opportunity index.\n\nAsk me anything about your skill topology, benchmark rankings, targeted job matches, or ask me to draft tailored messages citing your authentic projects.`,
-    suggestedFollowups: [
-      'What are my strongest code-verified skills and projects?',
-      'How do I compare against Senior / DRDO engineer benchmarks?',
-      'Which live opportunities match my tech stack best?',
-      'Draft an alumni referral outreach message citing my hackathon project'
-    ],
+    content: 'Welcome to CareerOS Brain. Explore your strengths, plan your next move, or prepare an application with guidance grounded in your career context.',
+    suggestedFollowups: CHAT_CONTEXTS[0].prompts.map(prompt => prompt.query),
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   });
 
@@ -100,23 +128,29 @@ export const BrainChat: React.FC<BrainChatProps> = ({
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [contextMode, setContextMode] = useState<'general' | 'code' | 'benchmark' | 'opportunities'>(() => {
+  const [contextMode, setContextMode] = useState<ContextMode>(() => {
     try {
       const saved = localStorage.getItem(`careeros_brain_context_mode_${userId}`);
       if (saved && ['general', 'code', 'benchmark', 'opportunities'].includes(saved)) {
-        return saved as any;
+        return saved as ContextMode;
       }
     } catch (e) {}
     return 'general';
   });
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [showGraphDrawer, setShowGraphDrawer] = useState(false);
+  const [showContextDrawer, setShowContextDrawer] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const focus = CHAT_CONTEXTS.find(context => context.id === contextMode)!;
+  const FocusIcon = focus.icon;
+  const hasConversation = messages.some(message => !message.id.startsWith('welcome-'));
+  const loadedUser = useRef(userId);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Sync messages to localStorage whenever they change
   useEffect(() => {
+    if (loadedUser.current !== userId) return;
     try {
       if (messages && messages.length > 0) {
         localStorage.setItem(storageKey, JSON.stringify(messages));
@@ -128,6 +162,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
 
   // Sync contextMode to localStorage
   useEffect(() => {
+    if (loadedUser.current !== userId) return;
     try {
       localStorage.setItem(contextModeKey, contextMode);
     } catch (e) {}
@@ -135,6 +170,11 @@ export const BrainChat: React.FC<BrainChatProps> = ({
 
   // Reload chat when user ID changes (e.g. login/logout)
   useEffect(() => {
+    loadedUser.current = userId;
+    try {
+      const savedMode = localStorage.getItem(contextModeKey);
+      setContextMode(CHAT_CONTEXTS.some(context => context.id === savedMode) ? savedMode as ContextMode : 'general');
+    } catch { setContextMode('general'); }
     try {
       const saved = localStorage.getItem(`careeros_brain_chat_history_${userId}`);
       if (saved) {
@@ -149,12 +189,20 @@ export const BrainChat: React.FC<BrainChatProps> = ({
   }, [userId]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const feed = historyRef.current;
+    if (feed) feed.scrollTo({ top: hasConversation ? feed.scrollHeight : 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  useEffect(() => {
+    const field = inputRef.current;
+    if (!field) return;
+    field.style.height = 'auto';
+    field.style.height = Math.min(Math.max(field.scrollHeight, 44), 140) + 'px';
+  }, [input]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const query = (textToSend || input).trim();
@@ -164,7 +212,8 @@ export const BrainChat: React.FC<BrainChatProps> = ({
       id: `user-${Date.now()}`,
       role: 'user',
       content: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      contextMode
     };
 
     const updatedMessages = [...messages, userMessage];
@@ -184,6 +233,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
         contextMode,
         getAuthHeaders()
       );
+      if (typeof res.reply !== 'string' || !res.reply.trim()) throw new Error('No answer was returned. Please try again.');
 
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
@@ -193,7 +243,8 @@ export const BrainChat: React.FC<BrainChatProps> = ({
         graphNodes: res.graph_nodes_referenced || [],
         graphLens: res.graph_lens || null,
         suggestedFollowups: res.suggested_followups || [],
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        contextMode
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -202,7 +253,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
       const errorMessage: ChatMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ Sorry, I encountered an issue traversing your graph context: ${err.message || 'Please check your connection and try again.'}`,
+        content: `I couldn’t complete that answer. ${err.message || 'Check your connection and try again.'}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -212,37 +263,32 @@ export const BrainChat: React.FC<BrainChatProps> = ({
     }
   };
 
-  const handleCopyText = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyText = async (id: string, text: string) => {
+    try { await navigator.clipboard.writeText(text); }
+    catch { onError('Could not copy the response. Select the text and copy it manually.'); return; }
     setCopiedId(id);
     onSuccess('Response copied to clipboard');
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleClearChat = () => {
-    const welcomeMsg: ChatMessage = {
-      id: `welcome-${Date.now()}`,
-      role: 'assistant',
-      content: `Chat session reset. What career or graph questions can I help you with today?`,
-      suggestedFollowups: [
-        'What are my strongest code-verified skills?',
-        'Show matching opportunities for my stack',
-        'Evaluate my readiness for Senior Backend roles'
-      ],
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setMessages([welcomeMsg]);
+    if (loading) return;
+    setMessages([getDefaultWelcomeMessage()]);
+    setInput('');
+    setCopiedId(null);
+    setShowResetDialog(false);
     try {
       localStorage.removeItem(storageKey);
     } catch (e) {}
     onSuccess('Chat session cleared');
+    requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   // Render markdown-like elements simply and cleanly
   const renderMessageContent = (content: string) => {
     const lines = content.split('\n');
     return (
-      <div className="space-y-2 text-xs sm:text-sm leading-relaxed">
+      <div className="brain-message-content space-y-2 text-xs sm:text-sm leading-relaxed">
         {lines.map((line, idx) => {
           if (line.startsWith('### ')) {
             return (
@@ -304,72 +350,45 @@ export const BrainChat: React.FC<BrainChatProps> = ({
     });
   };
 
+  const navigateFromContext = (tab: string) => {
+    setShowContextDrawer(false);
+    onNavigateToTab?.(tab);
+  };
+
+  const contextContent = <>
+    <section className="brain-context-card brain-focus-card"><div className="brain-rail-eyebrow"><FocusIcon size={14} />IN THIS CONVERSATION</div><h2>{focus.label}</h2><p>{focus.detail}. This focus guides your next answer.</p><div className="brain-profile-summary"><span className="dashboard-avatar">{(activeProfile.name || 'U').charAt(0).toUpperCase()}</span><div><strong>{activeProfile.name}</strong><span>{activeProfile.role}</span></div></div></section>
+    <section className="brain-context-card"><div className="brain-rail-section-heading"><Network size={16} /><h2>Your career evidence</h2></div><div className="brain-evidence-metrics"><div><strong>{analysis?.top_skills?.length ?? '—'}</strong><span>Skills</span></div><div><strong>{analysis?.repos_count ?? '—'}</strong><span>Repositories</span></div></div>{analysis?.top_skills?.length ? <div className="brain-evidence-skills">{analysis.top_skills.slice(0,4).map((skill,index)=><span key={index}>{skill}</span>)}{analysis.top_skills.length > 4 && <span>+{analysis.top_skills.length - 4}</span>}</div> : <p>Add your experience and projects to make the guidance more personal.</p>}<button className="brain-rail-link" onClick={() => navigateFromContext(analysis?.top_skills?.length ? 'graph' : 'profile')}>{analysis?.top_skills?.length ? 'Explore your graph' : 'Build your profile'}<ArrowRight size={15} /></button></section>
+    <section className="brain-context-card brain-next-step-card"><span className="brain-rail-eyebrow">KEEP THE MOMENTUM</span><h2>Put your next step to work.</h2><div className="brain-quick-links">{[{tab:'resume',label:'Resume Studio',icon:FileText},{tab:'growth',label:'Career Growth',icon:TrendingUp},{tab:'opportunities',label:'Opportunities Radar',icon:Briefcase}].map(({tab,label,icon:Icon})=><button key={tab} onClick={() => navigateFromContext(tab)}><Icon size={15} /><span>{label}</span><ChevronRight size={14} /></button>)}</div></section>
+  </>;
+
   return (
-    <div className="max-w-5xl mx-auto h-[calc(100vh-90px)] flex flex-col space-y-3">
+    <div className="dashboard-view ws-page dashboard-view--brain brain-workspace">
       {/* Top Header & Context Controls */}
-      <div 
-        className="p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
-        style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-blue-600 text-white flex items-center justify-center shadow-md shrink-0">
-            <Sparkles className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-                CareerOS Brain
-              </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1">
-                <Network className="w-3 h-3" /> GraphRAG Engine
-              </span>
-            </div>
-            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Conversational intelligence grounded in your Neo4j Knowledge Graph, verified repositories, & live opportunities.
-            </p>
-          </div>
-        </div>
+      <header className="brain-workspace-header">
+        <div className="brain-header-identity"><span className="brain-header-mark"><Sparkles size={23} strokeWidth={1.6} /></span><div><span className="brain-header-eyebrow">BRAIN CHAT AI</span><h1>Think through your next move.</h1><p>Personal guidance, grounded in your career.</p></div></div>
+        <div className="brain-header-actions"><button className="dashboard-button brain-context-toggle" onClick={() => setShowContextDrawer(true)} aria-label="View conversation context"><PanelRight size={16} /><span>Context</span></button><button className="dashboard-button brain-new-chat" onClick={() => hasConversation ? setShowResetDialog(true) : handleClearChat()} disabled={loading} aria-label="Start a new conversation"><Plus size={16} /><span>New chat</span></button></div>
+      </header>
 
-        {/* Right Action Tools */}
-        <div className="flex flex-wrap items-center gap-2 self-end sm:self-center">
-          {/* Focus Mode Selector */}
-          <select
-            value={contextMode}
-            onChange={(e) => setContextMode(e.target.value as any)}
-            className="input-base text-xs font-semibold"
-            style={{ height: '32px' }}
-          >
-            <option value="general">🌐 Unified Graph Context</option>
-            <option value="code">💻 Code & Projects Topology</option>
-            <option value="benchmark">📊 Peer Benchmark & Gaps</option>
-            <option value="opportunities">🎯 Job Matches & Radar</option>
-          </select>
-
-          <button
-            onClick={handleClearChat}
-            className="p-1.5 rounded-xl border hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium flex items-center gap-1"
-            style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
-            title="Reset Chat"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset</span>
-          </button>
-        </div>
-      </div>
-
+      <div className="brain-context-bar"><div className="brain-context-intro"><strong>Choose a focus</strong><span>Guides your next answer</span></div><div className="dashboard-context-selector" role="group" aria-label="Answer context">
+        {CHAT_CONTEXTS.map(({id,label,detail,icon:Icon}) => <button key={id} title={detail} aria-pressed={contextMode === id} onClick={() => setContextMode(id)}><span className="brain-focus-icon"><Icon size={17} /></span><span><strong>{label}</strong><span>{detail}</span></span>{contextMode === id && <Check size={13} className="brain-focus-check" />}</button>)}
+      </div></div>
+      <div className="dashboard-chat-workspace">
+      <section className="dashboard-chat-conversation" aria-label="Career conversation">
+      <div className="brain-conversation-heading"><span><span className="brain-assistant-symbol"><Sparkles size={15} /></span><strong>CareerOS Brain</strong><span className="brain-assistant-label">Career co-pilot</span></span><span className="brain-context-status"><FocusIcon size={14} />{focus.label}</span></div>
       {/* Main Chat Feed */}
       <div 
-        className="flex-1 overflow-y-auto p-4 sm:p-6 rounded-2xl border space-y-6 shadow-inner"
+        ref={historyRef} role="log" aria-label="Conversation messages" aria-live="polite" aria-relevant="additions"
+        className="dashboard-chat-history"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
-        {messages.map((msg) => (
+        {messages.filter(msg => !msg.id.startsWith("welcome-") || !hasConversation).map((msg) => (
           <div 
             key={msg.id} 
-            className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''} animate-in fade-in duration-150`}
+            className={`brain-message brain-message--${msg.role} ${msg.id.startsWith('welcome-') ? 'brain-message--welcome' : ''} flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''} animate-in fade-in duration-150`}
           >
             {/* Avatar */}
             <div 
-              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+              className={`brain-message-avatar w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                 msg.role === 'user'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white'
@@ -379,9 +398,10 @@ export const BrainChat: React.FC<BrainChatProps> = ({
             </div>
 
             {/* Message Bubble Container */}
-            <div className={`max-w-3xl space-y-2.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+            <div className={`brain-message-body max-w-3xl space-y-2.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className="brain-message-author">{msg.role === 'assistant' ? 'CareerOS Brain' : 'You'}</div>
               <div 
-                className={`p-4 rounded-2xl border ${
+                className={`brain-message-bubble p-4 rounded-2xl border ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white border-blue-500 rounded-tr-none shadow-md'
                     : 'rounded-tl-none shadow-sm'
@@ -392,11 +412,11 @@ export const BrainChat: React.FC<BrainChatProps> = ({
                   color: msg.role === 'user' ? '#ffffff' : 'var(--text-primary)'
                 }}
               >
-                {renderMessageContent(msg.content)}
+                {msg.id.startsWith('welcome-') ? <div className="brain-welcome"><span className="brain-welcome-mark" aria-hidden="true"><Sparkles size={27} strokeWidth={1.5} /></span><span className="brain-welcome-eyebrow">A LITTLE DIRECTION GOES A LONG WAY</span><h2>What’s your next move, {activeProfile?.name?.split(' ')[0] || 'there'}?</h2><p>{focus.welcome}</p><div className="brain-starter-grid">{focus.prompts.map(({label,detail,query,icon:Icon}) => <button key={label} onClick={() => handleSendMessage(query)} disabled={loading}><span className="brain-starter-icon"><Icon size={17} strokeWidth={1.7} /></span><span><strong>{label}</strong><small>{detail}</small></span><ArrowUpRight size={15} /></button>)}</div><span className="brain-welcome-note"><Network size={12} />Choose a starting point, or ask your own question below.</span></div> : renderMessageContent(msg.content)}
 
                 {/* Bottom Timestamp & Copy Button */}
-                <div className="flex items-center justify-between gap-4 pt-2 mt-2 border-t opacity-70 text-[10px]" style={{ borderColor: 'var(--border-primary)' }}>
-                  <span>{msg.timestamp}</span>
+                <div className="brain-message-meta flex items-center justify-between gap-4 pt-2 mt-2 border-t opacity-70 text-[10px]" style={{ borderColor: 'var(--border-primary)' }}>
+                  <span>{msg.timestamp}{msg.contextMode && <span className="brain-message-focus"> · {CHAT_CONTEXTS.find(context => context.id === msg.contextMode)?.label}</span>}</span>
                   {msg.role === 'assistant' && (
                     <button
                       onClick={() => handleCopyText(msg.id, msg.content)}
@@ -431,7 +451,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-purple-900 dark:text-purple-200">
-                          {msg.graphLens?.title || 'Knowledge Graph Subgraph Lens'}
+                          {msg.graphLens?.title || 'Explore the evidence'}
                         </span>
                         {msg.graphNodes && msg.graphNodes.length > 0 && (
                           <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300">
@@ -440,7 +460,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
                         )}
                       </div>
                       <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
-                        {msg.graphLens?.explanation || 'View this clean, uncluttered subgraph directly in the interactive Graph Explorer.'}
+                        {msg.graphLens?.explanation || 'Explore the career evidence referenced in this answer.'}
                       </p>
                     </div>
                   </div>
@@ -451,7 +471,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
                       className="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 hover:bg-purple-200 dark:hover:bg-purple-900 border border-purple-300 dark:border-purple-700 flex items-center justify-center gap-1.5 transition-all shadow-xs shrink-0"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>View in Graph Explorer</span>
+                      <span>Explore in graph</span>
                       <ArrowUpRight className="w-3 h-3" />
                     </button>
                   )}
@@ -462,7 +482,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
               {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 pl-1">
                   <span className="text-[10px] font-semibold text-gray-400 flex items-center gap-1">
-                    <Database className="w-3 h-3 text-purple-500" /> Graph Citations:
+                    <Database className="w-3 h-3 text-purple-500" /> Supporting evidence:
                   </span>
                   {msg.citations.map((cite, cIdx) => (
                     <span
@@ -477,12 +497,12 @@ export const BrainChat: React.FC<BrainChatProps> = ({
               )}
 
               {/* Suggested Follow-up Prompt Chips */}
-              {msg.role === 'assistant' && msg.suggestedFollowups && msg.suggestedFollowups.length > 0 && (
-                <div className="space-y-1.5 pt-1 pl-1">
-                  <div className="text-[11px] font-semibold flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                    <Lightbulb className="w-3 h-3" /> Suggested Follow-ups:
+              {msg.role === 'assistant' && !msg.id.startsWith('welcome-') && msg.suggestedFollowups && msg.suggestedFollowups.length > 0 && (
+                <div className="brain-suggestions space-y-1.5 pt-1 pl-1">
+                  <div className="brain-suggestions-label text-[11px] font-semibold flex items-center gap-1">
+                    <Lightbulb className="w-3 h-3" /> {msg.id.startsWith('welcome-') ? 'A few ways to get started' : 'Continue exploring'}
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="brain-suggestions-grid flex flex-wrap gap-1.5">
                     {msg.suggestedFollowups.map((suggestion, sIdx) => (
                       <button
                         key={sIdx}
@@ -491,7 +511,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
                         className="text-left px-3 py-1.5 rounded-xl text-xs font-medium border bg-white dark:bg-gray-800/80 hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:border-purple-300 dark:hover:border-purple-700 transition-all flex items-center gap-1.5 group shadow-xs disabled:opacity-50"
                         style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
                       >
-                        <span>{suggestion}</span>
+                        <span>{msg.id.startsWith('welcome-') ? ['Discover my strongest skills', 'Compare my career readiness', 'Find matching opportunities', 'Draft a referral message'][sIdx] || suggestion : suggestion}</span>
                         <ArrowRight className="w-3 h-3 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
                     ))}
@@ -504,7 +524,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
 
         {/* Loading Indicator Bubble */}
         {loading && (
-          <div className="flex items-start gap-3 animate-in fade-in duration-150">
+          <div role="status" className="flex items-start gap-3 animate-in fade-in duration-150">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
               <Bot className="w-4 h-4 animate-spin" />
             </div>
@@ -514,7 +534,7 @@ export const BrainChat: React.FC<BrainChatProps> = ({
             >
               <div className="flex items-center gap-2 text-xs font-semibold text-purple-600 dark:text-purple-400">
                 <div className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
-                <span>Traversing Neo4j Graph & Synthesizing GraphRAG Response...</span>
+                <span>Reviewing your context…</span>
               </div>
               <div className="flex gap-1.5 pt-1">
                 <div className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -525,35 +545,36 @@ export const BrainChat: React.FC<BrainChatProps> = ({
           </div>
         )}
 
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Chat Input Bar */}
       <div 
-        className="p-3 rounded-2xl border shadow-md"
+        className="dashboard-chat-composer p-3 rounded-2xl border shadow-md"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
-        <div className="flex items-end gap-2">
+        <div className="brain-composer-input flex items-end gap-2">
           <textarea
             ref={inputRef}
-            rows={2}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 handleSendMessage();
               }
             }}
-            placeholder="Ask CareerOS Brain about your graph, skills, benchmark gaps, or draft outreach messages... (Press Enter to send)"
+            placeholder={{general:"Ask a career question…", code:"Ask about projects…", benchmark:"Ask about your fit…", opportunities:"Ask about a role…"}[contextMode]}
+            aria-label="Message CareerOS Brain"
             className="input-base flex-1 text-xs sm:text-sm resize-none leading-relaxed"
-            style={{ minHeight: '52px' }}
+            style={{ minHeight: '44px' }}
             disabled={loading}
           />
 
           <button
             onClick={() => handleSendMessage()}
             disabled={!input.trim() || loading}
+            aria-label={loading ? 'Preparing response' : 'Send message'}
             className="h-[52px] px-5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 shrink-0"
           >
             {loading ? (
@@ -567,11 +588,18 @@ export const BrainChat: React.FC<BrainChatProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center justify-between pt-2 px-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
-          <span>💡 Tip: CareerOS Brain verifies skills against actual GitHub repos in Neo4j to prevent hallucination.</span>
-          <span className="hidden sm:inline font-mono">Shift + Enter for new line</span>
+        <div className="brain-composer-footer flex items-center justify-between pt-2 px-1 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+          <span><Network size={12} /> Grounded in your selected context</span>
+          <span className="hidden sm:inline">Enter to send · Shift + Enter for a new line</span>
         </div>
       </div>
+      </section>
+      <aside className="dashboard-context-rail" aria-label="Your career context">{contextContent}</aside>
+      </div>
+      {showResetDialog && <DialogFrame label="Start a new conversation" onClose={() => setShowResetDialog(false)}><div className="brain-dialog-panel"><span className="brain-dialog-icon"><Plus size={23} /></span><h2>Start a new conversation?</h2><p>This will clear the current chat. Your career profile and selected focus will stay available.</p><div className="brain-dialog-actions"><button className="dashboard-button" onClick={() => setShowResetDialog(false)}>Keep chatting</button><button className="dashboard-button dashboard-button-primary" onClick={handleClearChat}>Start new chat</button></div></div></DialogFrame>}
+      {showContextDrawer && <DialogFrame label="Your conversation context" onClose={() => setShowContextDrawer(false)}><div className="brain-context-dialog"><div className="brain-context-dialog-heading"><div><span className="brain-header-eyebrow">BEHIND YOUR ANSWERS</span><h2>Your conversation context</h2></div><button className="dashboard-icon-button" onClick={() => setShowContextDrawer(false)} aria-label="Close conversation context"><X size={18} /></button></div>{contextContent}</div></DialogFrame>}
     </div>
   );
 };
+
+
