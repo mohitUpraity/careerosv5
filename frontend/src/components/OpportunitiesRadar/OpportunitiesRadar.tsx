@@ -1,3 +1,5 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState, WorkspaceSteps } from '../WorkspaceUI';
+import { DialogFrame } from '../DialogFrame';
 import React, { useState, useEffect } from 'react';
 import { 
   Compass, 
@@ -100,6 +102,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<CategoryTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterReset, setFilterReset] = useState(0);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [locationFilter, setLocationFilter] = useState<string>('India');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
@@ -139,7 +142,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
 
   useEffect(() => {
     fetchOpportunities();
-  }, [activeCategory, remoteOnly, locationFilter, platformFilter, sortBy]);
+  }, [activeCategory, remoteOnly, locationFilter, platformFilter, sortBy, filterReset]);
 
   const loadUserPreferences = async () => {
     try {
@@ -393,77 +396,114 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+    <div className="dashboard-view ws-page dashboard-view--opportunities space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Header Banner */}
+      <WorkspacePageHeader
+        page="opportunities"
+        eyebrow="FIND YOUR NEXT CHAPTER"
+        title="The right opportunity starts here."
+        description="Explore roles, internships, and challenges through the lens of your skills and career goals."
+        actions={
+          <div className="ws-heading-controls">
+            {/* + Paste College Notice / Raw JD */}
+            <button
+              onClick={() => setIsNoticeModalOpen(true)}
+              className="dashboard-button dashboard-button-primary"
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>+ Paste Notice / JD</span>
+            </button>
+
+            {/* Smart URL Ingest */}
+            <button
+              onClick={() => setIsUrlModalOpen(true)}
+              className="dashboard-button"
+            >
+              <Link2 className="w-3.5 h-3.5 text-purple-600" />
+              <span>Paste Job URL</span>
+            </button>
+
+            {/* Preferences Settings */}
+            <button
+              onClick={() => setIsPreferencesModalOpen(true)}
+              className="dashboard-button"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
+              <span>Preferences</span>
+            </button>
+
+            {/* Re-scan */}
+            <button
+              onClick={() => fetchOpportunities(true)}
+              disabled={loading}
+              className="dashboard-button"
+              style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
+              title="Force immediate live re-scan of all job boards & hackathon platforms"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-500' : ''}`} />
+              <span>Refresh feed</span>
+            </button>
+          </div>
+        }
+      />
+      <WorkspaceMetrics
+        loading={loading}
+        items={[
+          { label: "In your feed", value: categoryCounts.all, detail: "Opportunities across every category", icon: Compass },
+          { label: "Jobs", value: categoryCounts.jobs, detail: "Roles to explore and apply for", icon: Briefcase, tone: "violet" },
+          { label: "Internships", value: categoryCounts.internships, detail: "A place to gain hands-on experience", icon: GraduationCap, tone: "teal" },
+          { label: "Saved", value: bookmarkedIds.size, detail: "Opportunities to come back to", icon: Bookmark, tone: "amber" }
+        ]}
+      />
+
+
+      {/* User Location Preference Active Bar */}
       <div 
-        className="p-5 sm:p-6 rounded-2xl border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+        className="p-3.5 px-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-sm"
         style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
       >
-        <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
-            <Compass className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg sm:text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                Live Opportunities & Match Radar
-              </h2>
-              <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                Multi-Platform Live Radar
-              </span>
-            </div>
-            <p className="text-xs pt-0.5" style={{ color: 'var(--text-secondary)' }}>
-              100% real tech jobs, paid internships, hackathons & fellowships across Unstop, Devfolio, Remotive, Jobicy, Arbeitnow & RemoteOK with active deadline verification.
-            </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-blue-600" />
+            Your focus:
+          </span>
+          <div className="flex items-center gap-1.5">
+            {[
+              { id: 'India', label: '🇮🇳 India & Remote' },
+              { id: 'Remote Worldwide', label: 'Global remote' },
+              { id: 'All', label: 'All locations' }
+            ].map(loc => (
+              <button
+                key={loc.id}
+                onClick={() => setLocationFilter(loc.id)}
+                className={`px-3 py-1 rounded-lg font-bold transition-all border ${
+                  locationFilter === loc.id
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {loc.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Clean Action Deck */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* + Paste College Notice / Raw JD */}
-          <button
-            onClick={() => setIsNoticeModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] shadow-xs transition-all cursor-pointer"
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>+ Paste Notice / JD</span>
-          </button>
-
-          {/* Smart URL Ingest */}
-          <button
-            onClick={() => setIsUrlModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-          >
-            <Link2 className="w-3.5 h-3.5 text-purple-500" />
-            <span>Paste Job URL</span>
-          </button>
-
-          {/* Preferences Settings */}
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 dark:text-gray-400">
+            Target Roles: <strong className="text-blue-600 dark:text-blue-400">{userPreferences.preferred_roles.slice(0, 2).join(', ')}{userPreferences.preferred_roles.length > 2 ? ` +${userPreferences.preferred_roles.length - 2}` : ''}</strong>
+          </span>
           <button
             onClick={() => setIsPreferencesModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+            className="text-blue-600 hover:underline font-semibold"
           >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" />
-            <span>Preferences</span>
-          </button>
-
-          {/* Re-scan */}
-          <button
-            onClick={() => fetchOpportunities(true)}
-            disabled={loading}
-            className="p-2 rounded-lg border hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-            style={{ borderColor: 'var(--border-primary)' }}
-            title="Force immediate live re-scan of all job boards & hackathon platforms"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-500' : ''}`} />
+            Edit
           </button>
         </div>
       </div>
 
       {/* Career & Location Preferences Modal */}
       {isPreferencesModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <DialogFrame label="Career and location preferences" onClose={() => setIsPreferencesModalOpen(false)} busy={isSavingPreferences}>
           <div 
             className="w-full max-w-2xl p-6 rounded-2xl border space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto"
             style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
@@ -480,7 +520,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   </p>
                 </div>
               </div>
-              <button onClick={() => setIsPreferencesModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Close dialog" disabled={isSavingPreferences} onClick={() => setIsPreferencesModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -571,7 +611,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
 
                 {/* Add Custom Role */}
                 <div className="flex items-center gap-2 max-w-sm pt-1">
-                  <input
+                  <input aria-label="Add custom role (e.g. Distributed Systems)..."
                     type="text"
                     placeholder="Add custom role (e.g. Distributed Systems)..."
                     value={customRoleInput}
@@ -622,7 +662,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   <label className="block font-bold mb-1.5" style={{ color: 'var(--text-primary)' }}>
                     5. Minimum Target CTC / Stipend
                   </label>
-                  <input
+                  <input aria-label="5. Minimum Target CTC / Stipend"
                     type="text"
                     value={userPreferences.min_salary || ''}
                     onChange={(e) => setUserPreferences(prev => ({ ...prev, min_salary: e.target.value }))}
@@ -634,7 +674,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
 
               {/* Modal Actions */}
               <div className="flex items-center justify-end gap-2 pt-4 border-t" style={{ borderColor: 'var(--border-primary)' }}>
-                <button
+                <button disabled={isSavingPreferences}
                   type="button"
                   onClick={() => setIsPreferencesModalOpen(false)}
                   className="px-4 py-2 rounded-xl text-xs font-semibold"
@@ -662,12 +702,12 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DialogFrame>
       )}
 
       {/* Smart Job URL Parsing Modal */}
       {isUrlModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150">
+        <DialogFrame label="Import a job link" onClose={() => setIsUrlModalOpen(false)} busy={isParsingUrl}>
           <div 
             className="w-full max-w-lg p-6 rounded-2xl border space-y-4 shadow-2xl"
             style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
@@ -679,7 +719,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   Smart Job URL Ingestion
                 </h3>
               </div>
-              <button onClick={() => setIsUrlModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Close dialog" disabled={isParsingUrl} onClick={() => setIsUrlModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -693,7 +733,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                 <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                   Job Posting URL
                 </label>
-                <input
+                <input aria-label="Job Posting URL"
                   type="url"
                   placeholder="https://boards.greenhouse.io/... or https://jobs.lever.co/..."
                   value={jobUrlInput}
@@ -705,7 +745,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
-                <button
+                <button disabled={isParsingUrl}
                   type="button"
                   onClick={() => setIsUrlModalOpen(false)}
                   className="px-3.5 py-1.5 rounded-lg text-xs font-medium"
@@ -733,12 +773,12 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DialogFrame>
       )}
 
       {/* College Placement Notice / Raw JD Extraction Modal */}
       {isNoticeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <DialogFrame label="Extract a placement notice" onClose={() => setIsNoticeModalOpen(false)} busy={isExtractingNotice}>
           <div 
             className="w-full max-w-2xl p-6 rounded-3xl border space-y-4 shadow-2xl"
             style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}
@@ -757,7 +797,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   </p>
                 </div>
               </div>
-              <button 
+              <button aria-label="Close dialog" disabled={isExtractingNotice}
                 onClick={() => setIsNoticeModalOpen(false)} 
                 className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
@@ -770,7 +810,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                 <label className="block text-xs font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                   Paste Raw Notice / Circular / Telegram Post:
                 </label>
-                <textarea
+                <textarea aria-label="Paste Raw Notice / Circular / Telegram Post:"
                   rows={8}
                   placeholder={`Example:\n🚀 Placement Drive Announcement!\nCompany: Apponward Technologies\nRole: SDE Intern / Backend Developer\nEligibility: 2025/2026 Batch B.Tech/MCA (CGPA > 7.0)\nStipend: ₹45,000/month (PPO: ₹14-18 LPA)\nLocation: Noida / Hybrid\nSkills: Python, FastAPI, React, SQL\nDeadline: Oct 15, 2026`}
                   value={rawNoticeInput}
@@ -789,7 +829,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                 </span>
 
                 <div className="flex items-center gap-2">
-                  <button
+                  <button disabled={isExtractingNotice}
                     type="button"
                     onClick={() => setIsNoticeModalOpen(false)}
                     className="px-4 py-2 rounded-xl text-xs font-medium"
@@ -818,7 +858,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DialogFrame>
       )}
 
       {/* Unified Command & Filter Deck */}
@@ -874,6 +914,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
+                aria-label="Search opportunities"
                 placeholder="Search by role, company, or tech keywords (FastAPI, React, Neo4j)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -963,25 +1004,18 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
         <div className="p-16 text-center space-y-3 rounded-2xl border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
           <Compass className="w-8 h-8 animate-spin mx-auto text-blue-600" />
           <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-            Scanning Verified Tech Feeds & Computing Semantic Fit for {locationFilter}...
+            Finding relevant opportunities for {locationFilter}…
           </p>
           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
             Matching live requirements against your verified skills, projects, and career preferences
           </p>
         </div>
       ) : opportunities.length === 0 ? (
-        <div className="p-16 text-center space-y-3 rounded-2xl border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
-          <AlertCircle className="w-8 h-8 mx-auto text-amber-500" />
-          <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-            No opportunities matched your search filter for {locationFilter}
-          </h3>
-          <p className="text-xs max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
-            Try clearing your search keyword, switching to "All Locations", or adjusting your target roles in preferences.
-          </p>
-          <div className="flex items-center justify-center gap-2 pt-2">
+        <WorkspaceEmptyState icon={Compass} title="Let’s broaden your search" description="There are no opportunities in this view yet. Try another keyword, change your location, or adjust your preferences."><div className="flex items-center justify-center gap-2 pt-2">
             <button
               onClick={() => {
                 setSearchQuery('');
+                setFilterReset(value => value + 1);
                 setActiveCategory('all');
                 setRemoteOnly(false);
                 setLocationFilter('India');
@@ -996,17 +1030,16 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
             >
               Edit Preferences
             </button>
-          </div>
-        </div>
+          </div></WorkspaceEmptyState>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="ws-opportunities-grid">
           {opportunities.map((opp) => {
             const isBookmarked = bookmarkedIds.has(opp.id);
 
             return (
               <div
                 key={opp.id}
-                className="p-5 rounded-2xl border card-hover flex flex-col justify-between gap-4 transition-all relative overflow-hidden"
+                className="ws-opportunity-card ws-surface flex flex-col justify-between gap-4 relative overflow-hidden"
                 style={{
                   backgroundColor: 'var(--bg-primary)',
                   borderColor: 'var(--border-primary)',

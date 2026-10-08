@@ -345,7 +345,7 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
 
   if (meetingConfig) {
     return (
-      <div className="fixed inset-0 z-50 w-screen h-screen bg-[#202124] text-[#e8eaed] overflow-hidden select-none">
+      <div className="dashboard-live-arena fixed inset-0 z-50 w-screen h-screen bg-[#202124] text-[#e8eaed] overflow-hidden select-none">
         <MeetingRoom
           config={meetingConfig}
           userStream={userStream}
@@ -360,7 +360,7 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
   }
 
   return (
-    <div className="w-full min-h-[calc(100vh-140px)] bg-[#202124] text-[#e8eaed] rounded-3xl overflow-hidden shadow-2xl border border-[#3c4043]">
+    <div className="dashboard-live-arena ws-interview-lobby-frame w-full">
       <Lobby
         onJoinMeeting={handleJoinMeeting}
         stream={userStream}

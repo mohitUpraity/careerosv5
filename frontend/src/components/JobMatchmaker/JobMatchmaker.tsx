@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState, WorkspaceSteps } from '../WorkspaceUI';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Sparkles, 
+  Sparkles, FileText,
   Target, 
   CheckCircle2, 
   AlertCircle, 
@@ -15,7 +16,7 @@ import {
   Swords,
   Brain
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+
 import { MatchAnalysisResponse } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -100,6 +101,13 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<MatchAnalysisResponse | null>(null);
   const [notegptModalSkill, setNotegptModalSkill] = useState<string | null>(null);
+  const matchRequest = useRef(0);
+
+  useEffect(() => {
+    matchRequest.current += 1;
+    setAnalysisResult(null);
+    setLoading(false);
+  }, [company, role, jobDescription]);
 
   const handleSelectPreset = (presetId: string) => {
     const preset = PRESET_JOBS.find(p => p.id === presetId);
@@ -117,6 +125,7 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
       return;
     }
 
+    const request = ++matchRequest.current;
     setLoading(true);
     try {
       const result = await apiService.analyzeMatch(
@@ -127,21 +136,15 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
         },
         getAuthHeaders()
       );
+      if (request !== matchRequest.current) return;
       setAnalysisResult(result);
       onSuccess(`Match score calculated: ${result.match_score}%`);
 
-      if (result.match_score >= 70) {
-        confetti({
-          particleCount: 60,
-          spread: 60,
-          origin: { y: 0.6 },
-          colors: ['#2563EB', '#059669', '#7C3AED']
-        });
-      }
+      
     } catch (err: any) {
-      onError(err.message || 'Failed to analyze job match');
+      if (request === matchRequest.current) onError(err.message || 'Failed to analyze job match');
     } finally {
-      setLoading(false);
+      if (request === matchRequest.current) setLoading(false);
     }
   };
 
@@ -152,53 +155,44 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="dashboard-view ws-page dashboard-view--matcher space-y-6 max-w-7xl mx-auto pb-12">
       {/* Top Header & Presets */}
-      <div
-        className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl card"
-      >
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg" style={{ backgroundColor: 'var(--brand-50)', color: 'var(--brand-600)' }}>
-              <Zap className="w-4 h-4" />
-            </span>
-            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Job Matchmaker</h2>
-          </div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            AI-powered skill topology matching against job descriptions
-          </p>
-        </div>
-
-        {/* Preset Selector */}
-        <div className="flex flex-wrap items-center gap-2">
-          {PRESET_JOBS.map((preset) => {
-            const isSelected = selectedPreset === preset.id;
-            return (
+      <WorkspacePageHeader
+        page="matcher"
+        eyebrow="SEE YOUR FIT"
+        title="Understand the role. See where you stand."
+        description="Compare a job description with your experience, then turn the insights into a stronger application."
+        actions={
+          <div className="ws-heading-controls">
+            {PRESET_JOBS.map((preset) => (
               <button
                 key={preset.id}
                 onClick={() => handleSelectPreset(preset.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
-                  isSelected 
-                    ? 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 font-semibold shadow-xs' 
-                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                }`}
+                className="dashboard-button"
+                style={{
+                  backgroundColor: selectedPreset === preset.id ? 'var(--brand-50)' : 'transparent',
+                  color: selectedPreset === preset.id ? 'var(--brand-600)' : 'var(--text-secondary)',
+                  border: `1px solid ${selectedPreset === preset.id ? 'var(--brand-100)' : 'var(--border-primary)'}`,
+                  fontWeight: selectedPreset === preset.id ? 600 : 500,
+                }}
               >
-                <span>{preset.company.split(' ')[0]}</span>
-                <span className="text-[10px] opacity-75 font-normal">({preset.badge})</span>
+                {preset.company.split(' ')[0]}
               </button>
-            );
-          })}
-        </div>
-      </div>
+            ))}
+          </div>
+        }
+      />
+      <WorkspaceSteps steps={["Add the role", "Understand your fit", "Prepare your application"]} active={analysisResult ? 2 : loading ? 1 : 0} />
 
       {/* Main Grid: Input Panel & Results */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="ws-match-grid">
         {/* Left: Job Input Card */}
-        <div className="lg:col-span-5 p-5 rounded-xl card space-y-4 flex flex-col justify-between">
+        <div className="ws-match-input ws-surface space-y-5">
+          <WorkspaceSectionHeading number="01" title="Tell us about the role" description="Use a sample role above, or paste the job description you want to explore." />
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company</label>
-              <input
+              <input aria-label="Target Company"
                 type="text"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
@@ -209,7 +203,7 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
 
             <div>
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Role / Title</label>
-              <input
+              <input aria-label="Target Role / Title"
                 type="text"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
@@ -222,11 +216,11 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Job Description / Requirements
               </label>
-              <textarea
+              <textarea aria-label="Job Description / Requirements"
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
                 rows={10}
-                className="w-full px-3 py-2.5 text-sm font-mono leading-relaxed rounded-lg"
+                className="ws-job-description w-full px-3 py-2.5 text-sm leading-relaxed rounded-lg"
                 style={{
                   backgroundColor: 'var(--bg-primary)',
                   border: '1px solid var(--border-primary)',
@@ -240,8 +234,8 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
 
           <button
             onClick={handleRunMatch}
-            disabled={loading}
-            className="w-full py-3 px-4 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+            disabled={loading || !company.trim() || !role.trim() || !jobDescription.trim()}
+            className="ws-primary-action w-full py-3 px-4 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
             style={{ backgroundColor: 'var(--brand-600)' }}
           >
             {loading ? (
@@ -252,14 +246,14 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Run Match Analysis
+                Analyse my fit
               </>
             )}
           </button>
         </div>
 
         {/* Right: Analysis Dashboard */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="ws-match-results space-y-6">
           {analysisResult ? (
             <div className="space-y-6 animate-fade-in">
               {/* Score Card */}
@@ -435,21 +429,7 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
               </div>
             </div>
           ) : (
-            <div
-              className="h-full min-h-[380px] p-8 rounded-xl flex flex-col items-center justify-center text-center space-y-3"
-              style={{
-                backgroundColor: 'var(--bg-primary)',
-                border: '2px dashed var(--border-primary)',
-              }}
-            >
-              <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}>
-                <Target className="w-8 h-8" style={{ color: 'var(--text-tertiary)' }} />
-              </div>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>No Active Analysis</h3>
-              <p className="text-xs max-w-sm" style={{ color: 'var(--text-secondary)' }}>
-                Select a preset or paste a job description to calculate your match score.
-              </p>
-            </div>
+            <WorkspaceEmptyState icon={Target} title="See the story behind your match" description="Your analysis will show the strengths you can prove, the skills to develop, and a focused plan for your application."><div className="ws-preview-checks"><span><CheckCircle2 size={16} />Skills backed by your work</span><span><Target size={16} />Specific gaps to bridge</span><span><FileText size={16} />Resume and interview next steps</span></div></WorkspaceEmptyState>
           )}
         </div>
       </div>

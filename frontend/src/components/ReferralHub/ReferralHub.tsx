@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState, WorkspaceSteps } from '../WorkspaceUI';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Users, 
+  Users, CheckCircle2, 
   Search, 
   Send, 
   Copy, 
@@ -14,7 +15,7 @@ import {
   Mail,
   MessageSquare
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+
 import { Contact, PitchResponse } from '../../types';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -42,9 +43,17 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
   const [pitchResult, setPitchResult] = useState<PitchResponse | null>(null);
   const [generatingPitch, setGeneratingPitch] = useState(false);
   const [copied, setCopied] = useState(false);
+  const pitchRequest = useRef(0);
 
   // Quick company filters
   const quickCompanies = ['All', 'Apponward', 'DRDO', 'Google', 'Microsoft', 'HCST', 'Amazon'];
+
+  useEffect(() => {
+    pitchRequest.current += 1;
+    setPitchResult(null);
+    setCopied(false);
+    setGeneratingPitch(false);
+  }, [selectedContact?.id, pitchType, targetRole]);
 
   useEffect(() => {
     loadConnections(searchQuery);
@@ -55,9 +64,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
     try {
       const results = await apiService.getConnections(query === 'All' ? '' : query, getAuthHeaders());
       setContacts(results);
-      if (results.length > 0 && !selectedContact) {
-        setSelectedContact(results[0]);
-      }
+      setSelectedContact(current => results.find(contact => contact.id === current?.id) || results[0] || null);
     } catch (err: any) {
       console.error(err);
       onError('Failed to load connections list');
@@ -77,6 +84,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
       return;
     }
 
+    const request = ++pitchRequest.current;
     setGeneratingPitch(true);
     try {
       const res = await apiService.generatePitch(
@@ -89,47 +97,30 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
         },
         getAuthHeaders()
       );
+      if (request !== pitchRequest.current) return;
       setPitchResult(res);
       onSuccess(`${pitchType === 'linkedin' ? 'LinkedIn Note' : 'InMail'} generated!`);
     } catch (err: any) {
-      onError(err.message || 'Failed to generate outreach pitch');
+      if (request === pitchRequest.current) onError(err.message || 'Failed to generate outreach pitch');
     } finally {
-      setGeneratingPitch(false);
+      if (request === pitchRequest.current) setGeneratingPitch(false);
     }
   };
 
-  const handleCopyPitch = () => {
+  const handleCopyPitch = async () => {
     if (!pitchResult) return;
-    navigator.clipboard.writeText(pitchResult.content);
+    try { await navigator.clipboard.writeText(pitchResult.content); }
+    catch { onError('Could not copy the message. Select the draft text and copy it manually.'); return; }
     setCopied(true);
     onSuccess('Copied to clipboard!');
-    confetti({
-      particleCount: 30,
-      spread: 40,
-      origin: { y: 0.7 },
-      colors: ['#2563EB', '#059669']
-    });
+    
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="dashboard-view ws-page dashboard-view--referrals space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl card">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg" style={{ backgroundColor: 'var(--brand-50)', color: 'var(--brand-600)' }}>
-              <Users className="w-4 h-4" />
-            </span>
-            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Referral Hub</h2>
-          </div>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            Search your network and generate personalized outreach messages
-          </p>
-        </div>
-
-        {/* Quick Filter Pills */}
-        <div className="flex flex-wrap items-center gap-1.5">
+      <WorkspacePageHeader page="referrals" eyebrow="YOUR NETWORK, WORKING FOR YOU" title="Good opportunities start with a conversation." description="Find the right person, personalise your introduction, and take the next step with confidence." actions={<div className="ws-heading-controls">
           {quickCompanies.map((comp) => (
             <button
               key={comp}
@@ -137,7 +128,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                 setSearchQuery(comp === 'All' ? '' : comp);
                 loadConnections(comp === 'All' ? '' : comp);
               }}
-              className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+              className="dashboard-button "
               style={{
                 backgroundColor: (comp === 'All' && !searchQuery) || searchQuery.toLowerCase() === comp.toLowerCase()
                   ? 'var(--brand-50)' : 'transparent',
@@ -151,16 +142,16 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
               {comp}
             </button>
           ))}
-        </div>
-      </div>
+        </div>} />
 
       {/* Main Content: Split Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="ws-referral-grid">
         {/* Left: Contacts List */}
-        <div className="lg:col-span-5 p-5 rounded-xl card space-y-4 flex flex-col h-[640px]">
-          <form onSubmit={handleSearchSubmit} className="relative">
+        <div className="ws-contact-panel ws-surface">
+          <WorkspaceSectionHeading title="Your connections" description={loadingContacts ? "Searching your network…" : contacts.length + " connections in this view"} />
+          <form onSubmit={handleSearchSubmit} className="dashboard-referral-search relative">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
-            <input
+            <input aria-label="Search by name, company, position..."
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -177,7 +168,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
           </form>
 
           {/* Contact List */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+          <div className="ws-contact-list space-y-2">
             {loadingContacts ? (
               <div className="py-12 text-center space-y-2">
                 <div className="w-6 h-6 border-2 rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--brand-500)', borderTopColor: 'transparent' }} />
@@ -185,7 +176,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
               </div>
             ) : contacts.length === 0 ? (
               <div className="py-12 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                No contacts found matching "{searchQuery}".
+                {searchQuery ? `No contacts found matching “${searchQuery}”. Try another name or company.` : 'No connections yet. Import your LinkedIn connections from Sync data to build your network.'}
               </div>
             ) : (
               contacts.map((contact) => {
@@ -194,7 +185,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                   <div
                     key={contact.id}
                     onClick={() => setSelectedContact(contact)}
-                    className="p-3 rounded-lg cursor-pointer transition-all"
+                    className="ws-contact-row" role="button" tabIndex={0} aria-pressed={isSelected} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedContact(contact); } }}
                     style={{
                       backgroundColor: isSelected ? 'var(--brand-50)' : 'transparent',
                       border: `1px solid ${isSelected ? 'var(--brand-100)' : 'var(--border-primary)'}`,
@@ -226,7 +217,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
         </div>
 
         {/* Right: Pitch Generator */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="ws-referral-detail space-y-6">
           {selectedContact ? (
             <div className="space-y-6">
               {/* Selected Contact Card */}
@@ -311,7 +302,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
                   <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Your Target Role
                   </label>
-                  <input
+                  <input aria-label="Your Target Role"
                     type="text"
                     value={targetRole}
                     onChange={(e) => setTargetRole(e.target.value)}
@@ -391,16 +382,7 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
               )}
             </div>
           ) : (
-            <div
-              className="h-[400px] p-8 rounded-xl flex flex-col items-center justify-center text-center space-y-3"
-              style={{ backgroundColor: 'var(--bg-primary)', border: '2px dashed var(--border-primary)' }}
-            >
-              <Users className="w-8 h-8" style={{ color: 'var(--text-tertiary)' }} />
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>No Contact Selected</h3>
-              <p className="text-xs max-w-sm" style={{ color: 'var(--text-secondary)' }}>
-                Select a contact from your network to draft personalized outreach.
-              </p>
-            </div>
+            <WorkspaceEmptyState icon={Users} title="Turn a connection into a conversation" description="Choose someone from your network to create a thoughtful introduction based on the role you want."><div className="ws-preview-checks"><span><CheckCircle2 size={16} />An introduction with context</span><span><Building2 size={16} />A relevant company and role</span><span><Send size={16} />A draft you can review and copy</span></div></WorkspaceEmptyState>
           )}
         </div>
       </div>

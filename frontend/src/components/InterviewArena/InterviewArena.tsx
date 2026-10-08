@@ -1,3 +1,4 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState } from '../WorkspaceUI';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Swords, 
@@ -29,6 +30,7 @@ import {
   Code
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { DialogFrame } from '../DialogFrame';
 import { apiService } from '../../services/api';
 import { LiveMultimodalArena } from './LiveMultimodalArena';
 import { 
@@ -62,6 +64,8 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
   const [targetCompany, setTargetCompany] = useState<string>(initialJob?.company || 'Apponward Technologies');
   const [targetRole, setTargetRole] = useState<string>(initialJob?.role || 'Senior Backend Engineer');
   const [targetJd, setTargetJd] = useState<string>(initialJob?.jd || '');
+  const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
+  const [draftTarget, setDraftTarget] = useState({ company: targetCompany, role: targetRole });
   
   // Job Intelligence State
   const [jobIntel, setJobIntel] = useState<JobIntelligence | null>(null);
@@ -315,35 +319,9 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="dashboard-view ws-page dashboard-view--interview space-y-6 max-w-7xl mx-auto">
       {/* Header Banner */}
-      <div 
-        className="p-6 rounded-2xl relative overflow-hidden shadow-sm"
-        style={{
-          backgroundColor: 'var(--bg-primary)',
-          border: '1px solid var(--border-primary)',
-        }}
-      >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                <Swords className="w-5 h-5" />
-              </div>
-              <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                Interview Prep & AI Simulation Arena
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20 uppercase tracking-wide">
-                Live Simulation
-              </span>
-            </div>
-            <p className="text-xs max-w-2xl" style={{ color: 'var(--text-secondary)' }}>
-              Master your target company rounds with realistic AI interview simulations anchored on your actual projects, 360° company intelligence, and automated college WhatsApp placement notice extraction.
-            </p>
-          </div>
-
-          {/* Target Company & Role Pill */}
-          <div 
+      <WorkspacePageHeader page="interview" eyebrow="PRACTISE. REFLECT. IMPROVE." title="Practice with a purpose." description="Build confidence for the role you want, with realistic interviews, focused questions, and useful feedback." actions={<div 
             className="flex items-center gap-3 p-3 rounded-xl shrink-0"
             style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)' }}
           >
@@ -354,70 +332,64 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
             </div>
             <button
               onClick={() => {
-                const comp = prompt('Enter Company Name:', targetCompany);
-                if (comp) setTargetCompany(comp);
-                const r = prompt('Enter Target Role:', targetRole);
-                if (r) setTargetRole(r);
+                setDraftTarget({ company: targetCompany, role: targetRole });
+                setIsTargetDialogOpen(true);
               }}
               className="px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-all hover:bg-slate-100 dark:hover:bg-slate-800"
               style={{ borderColor: 'var(--border-primary)', color: 'var(--text-secondary)' }}
             >
               Change
             </button>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div 
-          className="inline-flex p-1 rounded-xl border mt-5 flex-wrap gap-1" 
-          style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
-        >
+          </div>} />
+        
+        <div className="ws-tabbar" style={{ borderColor: 'var(--border-primary)' }}>
           <button
+            aria-pressed={currentTab === 'live'}
             onClick={() => setCurrentTab('live')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              currentTab === 'live'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'hover:text-blue-600'
-            }`}
-            style={{ color: currentTab === 'live' ? '#ffffff' : 'var(--text-secondary)' }}
           >
-            <Zap className="w-3.5 h-3.5 text-amber-300" />
-            <span>Gemini 3 Live Voice & Vision</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-400 text-slate-900">
-              Live
-            </span>
+            <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            <span>Gemini Live Voice & Vision</span>
           </button>
 
           <button
+            aria-pressed={currentTab === 'arena'}
             onClick={() => setCurrentTab('arena')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              currentTab === 'arena'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'hover:text-blue-600'
-            }`}
-            style={{ color: currentTab === 'arena' ? '#ffffff' : 'var(--text-secondary)' }}
           >
             <Swords className="w-3.5 h-3.5" />
-            <span>Step-by-Step QA Arena</span>
+            <span>Question Practice</span>
           </button>
 
           <button
+            aria-pressed={currentTab === 'intelligence'}
             onClick={() => {
               setCurrentTab('intelligence');
               if (!jobIntel) handleFetchJobIntel();
             }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              currentTab === 'intelligence'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'hover:text-blue-600'
-            }`}
-            style={{ color: currentTab === 'intelligence' ? '#ffffff' : 'var(--text-secondary)' }}
           >
             <Brain className="w-3.5 h-3.5" />
-            <span>360° Company & Role Intel</span>
+            <span>Company & Role Intel</span>
           </button>
         </div>
-      </div>
+
+      {isTargetDialogOpen && <DialogFrame label="Change interview target" onClose={() => setIsTargetDialogOpen(false)}>
+        <form className="dashboard-target-dialog" onSubmit={event => {
+          event.preventDefault();
+          if (!draftTarget.company.trim() || !draftTarget.role.trim()) return;
+          setTargetCompany(draftTarget.company.trim());
+          setTargetRole(draftTarget.role.trim());
+          setJobIntel(null);
+          setIsTargetDialogOpen(false);
+        }}>
+          <span className="dashboard-soft-icon is-blue"><Building2 size={21} /></span>
+          <h2>Choose your interview target</h2>
+          <p>Set the company and role you want to prepare for.</p>
+          <label htmlFor="interview-target-company">Company</label>
+          <input id="interview-target-company" className="input-base" value={draftTarget.company} onChange={event => setDraftTarget({ ...draftTarget, company: event.target.value })} required autoFocus />
+          <label htmlFor="interview-target-role">Target role</label>
+          <input id="interview-target-role" className="input-base" value={draftTarget.role} onChange={event => setDraftTarget({ ...draftTarget, role: event.target.value })} required />
+          <div><button type="button" className="dashboard-button" onClick={() => setIsTargetDialogOpen(false)}>Cancel</button><button type="submit" className="dashboard-button dashboard-button-primary" disabled={!draftTarget.company.trim() || !draftTarget.role.trim()}>Save target</button></div>
+        </form>
+      </DialogFrame>}
 
       {/* VIEW 0: GEMINI 3 FLASH LIVE MULTIMODAL ARENA */}
       {currentTab === 'live' && (

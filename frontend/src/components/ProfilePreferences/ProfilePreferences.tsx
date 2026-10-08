@@ -1,3 +1,4 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState } from '../WorkspaceUI';
 import React, { useState, useEffect } from 'react';
 import { 
   User, 
@@ -597,192 +598,29 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-20 animate-in fade-in duration-200">
+    <div className="dashboard-view ws-page dashboard-view--profile space-y-6 max-w-7xl mx-auto pb-20 animate-in fade-in duration-200">
       {/* Top Header Card */}
-      <div 
-        className="p-6 rounded-3xl border shadow-sm relative overflow-hidden"
-        style={{ 
-          backgroundColor: 'var(--bg-primary)', 
-          borderColor: 'var(--border-primary)'
-        }}
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          {/* User Info Avatar & Title */}
-          <div className="flex items-start sm:items-center gap-4">
-            <div className="relative shrink-0">
-              <div 
-                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-2xl font-black shadow-lg"
-                style={{ border: '3px solid var(--bg-primary)' }}
-              >
-                {(profile.full_name || 'U').charAt(0).toUpperCase()}
-              </div>
-              <span 
-                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2"
-                style={{ borderColor: 'var(--bg-primary)' }}
-                title="Knowledge Graph Synced"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  {profile.full_name || 'Candidate Profile'}
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-blue-600" />
-                  Live Graph Synced
-                </span>
-                {hasUnsavedChanges && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 animate-pulse">
-                    Unsaved Changes
-                  </span>
-                )}
-              </div>
-              <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                {profile.headline || 'Software Engineer'}
-              </p>
-              <div className="flex items-center gap-3 text-[11px] pt-1" style={{ color: 'var(--text-tertiary)' }}>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-blue-600" />
-                  {profile.location || 'Location Not Set'}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Target className="w-3 h-3 text-indigo-600" />
-                  1st Choice: <strong>{profile.preferences.primary_role || 'Backend Engineer'}</strong>
-                </span>
-                <span className="flex items-center gap-1">
-                  <FolderGit2 className="w-3 h-3 text-purple-600" />
-                  {(profile.projects || []).length} Projects
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Metrics & Actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Completeness Meter */}
-            <div 
-              className="p-3 px-4 rounded-2xl border flex items-center gap-3 shadow-sm"
-              style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-primary)' }}
-            >
-              <div className="relative w-10 h-10 flex items-center justify-center">
-                <svg className="w-10 h-10 -rotate-90">
-                  <circle
-                    cx="20"
-                    cy="20"
-                    r="16"
-                    className="stroke-gray-200 dark:stroke-gray-700"
-                    strokeWidth="3.5"
-                    fill="transparent"
-                  />
-                  <circle
-                    cx="20"
-                    cy="20"
-                    r="16"
-                    className="stroke-blue-600 transition-all duration-500"
-                    strokeWidth="3.5"
-                    strokeDasharray="100"
-                    strokeDashoffset={100 - completeness}
-                    strokeLinecap="round"
-                    fill="transparent"
-                  />
-                </svg>
-                <span className="absolute text-[10px] font-bold font-mono" style={{ color: 'var(--text-primary)' }}>
-                  {completeness}%
-                </span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
-                  Profile Strength
-                </span>
-                <span className="block text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  {completeness >= 80 ? 'Ready for Matching' : 'Needs More Info'}
-                </span>
-              </div>
-            </div>
-
-            {/* Save Button */}
-            <button
-              onClick={handleSaveAll}
-              disabled={saving}
-              className="px-5 py-2.5 rounded-2xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-98 shadow-md flex items-center gap-2 transition-all disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Syncing to Graph...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Save Profile & Preferences</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Sync Quick Launch Tray */}
-        <div className="mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-3 text-xs" style={{ borderColor: 'var(--border-primary)' }}>
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Auto-populate from external sources:</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {onOpenSyncResume && (
-              <button
-                onClick={onOpenSyncResume}
-                className="px-3 py-1.5 rounded-xl border font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition-all flex items-center gap-1.5"
-                style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-              >
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                <span>Upload Resume</span>
-              </button>
-            )}
-
-            {onOpenSyncGitHub && (
-              <button
-                onClick={onOpenSyncGitHub}
-                className="px-3 py-1.5 rounded-xl border font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition-all flex items-center gap-1.5"
-                style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-              >
-                <Github className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" />
-                <span>Sync GitHub Repos</span>
-              </button>
-            )}
-
-            {onOpenSyncLinkedIn && (
-              <button
-                onClick={onOpenSyncLinkedIn}
-                className="px-3 py-1.5 rounded-xl border font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition-all flex items-center gap-1.5"
-                style={{ borderColor: 'var(--border-primary)', color: 'var(--text-primary)' }}
-              >
-                <Linkedin className="w-3.5 h-3.5 text-blue-600" />
-                <span>Import Connections</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <WorkspacePageHeader page="profile" eyebrow="MAKE IT YOURS" title="Your experience. Your direction." description="Keep your story up to date and shape the opportunities, introductions, and guidance you receive." actions={<button onClick={handleSaveAll} disabled={saving || !hasUnsavedChanges} className="dashboard-button dashboard-button-primary">{saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}{saving ? "Saving…" : hasUnsavedChanges ? "Save changes" : "All changes saved"}</button>} />
+      <div className="ws-context-strip ws-profile-summary"><div className="ws-profile-avatar">{(profile.full_name || 'U').charAt(0).toUpperCase()}</div><div><h2>{profile.full_name || 'Your profile'}</h2><p>{profile.headline || 'Add a headline that tells your story'}{profile.location ? ' · ' + profile.location : ''}</p></div><div className="ws-profile-sync">{onOpenSyncResume && <button className="dashboard-button" onClick={onOpenSyncResume}><FileText size={15} />Upload resume</button>}{onOpenSyncGitHub && <button className="dashboard-button" onClick={onOpenSyncGitHub}><Github size={15} />Sync GitHub</button>}{onOpenSyncLinkedIn && <button className="dashboard-button" onClick={onOpenSyncLinkedIn}><Linkedin size={15} />Import connections</button>}</div></div>
+      <WorkspaceMetrics items={[{label:"Profile completeness",value:completeness + "%",detail:"Based on the information you have added",icon:User},{label:"Skills & tools",value:(profile.skills || []).length,detail:"The capabilities in your profile",icon:Code2,tone:"teal"},{label:"Projects",value:(profile.projects || []).length,detail:"Evidence of what you can build",icon:FolderGit2,tone:"violet"},{label:"Experience",value:(profile.experience || []).length,detail:"Roles that tell your career story",icon:Briefcase,tone:"amber"}]} />
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b pb-3" style={{ borderColor: 'var(--border-primary)' }}>
+      <div className="ws-profile-layout"><nav aria-label="Profile sections">
         {[
-          { id: 'preferences' as SectionTab, label: '🎯 Recommendations & Preferences', icon: SlidersHorizontal },
-          { id: 'goals_companies' as SectionTab, label: '🚀 Career Goals & Dream Companies', icon: Target },
-          { id: 'identity' as SectionTab, label: '👤 Personal Info & Socials', icon: User },
-          { id: 'skills' as SectionTab, label: '⚡ Skills & Tech Stack', icon: Code2 },
-          { id: 'projects' as SectionTab, label: '🚀 Featured Projects', icon: FolderGit2 },
-          { id: 'education' as SectionTab, label: '🎓 Education', icon: GraduationCap },
-          { id: 'experience' as SectionTab, label: '💼 Experience', icon: Briefcase },
-          { id: 'honors' as SectionTab, label: '🏆 Achievements & Certs', icon: Trophy }
+          { id: 'preferences' as SectionTab, label: 'Career Preferences', icon: SlidersHorizontal },
+          { id: 'goals_companies' as SectionTab, label: 'Goals & Companies', icon: Target },
+          { id: 'identity' as SectionTab, label: 'Personal Information', icon: User },
+          { id: 'skills' as SectionTab, label: 'Skills & Tools', icon: Code2 },
+          { id: 'projects' as SectionTab, label: 'Projects', icon: FolderGit2 },
+          { id: 'education' as SectionTab, label: 'Education', icon: GraduationCap },
+          { id: 'experience' as SectionTab, label: 'Experience', icon: Briefcase },
+          { id: 'honors' as SectionTab, label: 'Achievements', icon: Trophy }
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
           return (
             <button
-              key={tab.id}
+              key={tab.id} aria-pressed={isActive}
               onClick={() => setActiveSection(tab.id)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
                 isActive
@@ -799,7 +637,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
             </button>
           );
         })}
-      </div>
+      </nav><div className="ws-profile-content">
 
       {/* SECTION 1: Career & Match Preferences */}
       {activeSection === 'preferences' && (
@@ -814,7 +652,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 How your preferences power your recommendations
               </h4>
               <p className="text-blue-800/90 dark:text-blue-300">
-                CareerOS prioritizes <strong>{profile.preferences.primary_role || 'your target role'}</strong> opportunities matching <strong>{profile.preferences.priority_domain || 'your domain'}</strong> in <strong>{(profile.preferences.preferred_cities || []).slice(0, 3).join(', ')}</strong> across <strong>{profile.preferences.target_country}</strong>. Nothing is hardcoded — edits take effect across Opportunities Radar, Job Matchmaker, and Referral Hub immediately upon saving.
+                CareerOS prioritizes <strong>{profile.preferences.primary_role || 'your target role'}</strong> opportunities matching <strong>{profile.preferences.priority_domain || 'your domain'}</strong> in <strong>{(profile.preferences.preferred_cities || []).slice(0, 3).join(', ')}</strong> across <strong>{profile.preferences.target_country}</strong>. Save your changes to update recommendations across your workspace.
               </p>
             </div>
           </div>
@@ -824,8 +662,8 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
             <div className="flex items-center gap-2.5">
               <TrendingUp className="w-4 h-4 text-blue-600 shrink-0" />
               <div className="text-xs">
-                <span className="font-bold text-gray-900 dark:text-gray-100">Want to discover high-ROI skill gaps & start 2-week project sprints?</span>
-                <span className="block text-gray-500 dark:text-gray-400">See which missing skills unlock the most high-paying opportunities.</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100">Put your next skill into practice.</span>
+                <span className="block text-gray-500 dark:text-gray-400">Explore relevant projects and two-week learning sprints.</span>
               </div>
             </div>
             {onNavigateToTab && (
@@ -866,7 +704,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </div>
 
               <div className="space-y-3">
-                <input
+                <input aria-label="e.g. Backend Engineer, AI/ML Engineer, Full Stack Developer..."
                   type="text"
                   value={profile.preferences.primary_role || ''}
                   onChange={(e) => updatePreferenceField('primary_role', e.target.value)}
@@ -1049,7 +887,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               {/* Add Custom City */}
               <div className="flex items-center gap-2 pt-1 max-w-sm">
-                <input
+                <input aria-label="Add custom city (e.g. Chandigarh, Ahmedabad)..."
                   type="text"
                   placeholder="Add custom city (e.g. Chandigarh, Ahmedabad)..."
                   value={newCityInput}
@@ -1124,7 +962,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </div>
 
               <div className="flex items-center gap-2 pt-1 max-w-sm">
-                <input
+                <input aria-label="Add role (e.g. Site Reliability Engineer)..."
                   type="text"
                   placeholder="Add role (e.g. Site Reliability Engineer)..."
                   value={newRoleInput}
@@ -1192,7 +1030,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   <label className="block font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>
                     Target Minimum Compensation / Stipend:
                   </label>
-                  <input
+                  <input aria-label="Target Minimum Compensation / Stipend:"
                     type="text"
                     value={profile.preferences.min_salary || ''}
                     onChange={(e) => updatePreferenceField('min_salary', e.target.value)}
@@ -1282,7 +1120,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Target Role / Transition Milestone:
                   </label>
-                  <input
+                  <input aria-label="Target Role / Transition Milestone:"
                     type="text"
                     value={profile.preferences.career_goals?.target_milestone || ''}
                     onChange={(e) => {
@@ -1299,7 +1137,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                     <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                       Target Timeline:
                     </label>
-                    <select
+                    <select aria-label="Target Timeline:"
                       value={profile.preferences.career_goals?.target_timeline || 'Next 30-90 Days'}
                       onChange={(e) => {
                         const currentGoals = profile.preferences.career_goals || {};
@@ -1318,7 +1156,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                     <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                       Target CTC / Compensation:
                     </label>
-                    <input
+                    <input aria-label="Target CTC / Compensation:"
                       type="text"
                       value={profile.preferences.career_goals?.target_ctc || ''}
                       onChange={(e) => {
@@ -1359,7 +1197,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label="Add focus area (e.g. Distributed Consensus, GraphRAG)..."
                       type="text"
                       placeholder="Add focus area (e.g. Distributed Consensus, GraphRAG)..."
                       value={newFocusAreaInput}
@@ -1454,7 +1292,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               {/* Add Custom Dream Company */}
               <div className="flex items-center gap-2">
-                <input
+                <input aria-label="Type company name (e.g. Google, Stripe, CRED)..."
                   type="text"
                   placeholder="Type company name (e.g. Google, Stripe, CRED)..."
                   value={newDreamCompanyInput}
@@ -1578,7 +1416,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Work Authorization / Visa Status:
                   </label>
-                  <select
+                  <select aria-label="Work Authorization / Visa Status:"
                     value={profile.preferences.work_authorization || WORK_AUTH_OPTIONS[0]}
                     onChange={(e) => updatePreferenceField('work_authorization', e.target.value)}
                     className="input-base w-full text-xs font-medium"
@@ -1617,7 +1455,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label="Add language (e.g. English - Professional, Hindi - Native)..."
                       type="text"
                       placeholder="Add language (e.g. English - Professional, Hindi - Native)..."
                       value={newLanguageInput}
@@ -1712,7 +1550,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               {/* Add Custom Blocked Company */}
               <div className="flex items-center gap-2">
-                <input
+                <input aria-label="Type company or agency to block..."
                   type="text"
                   placeholder="Type company or agency to block..."
                   value={newBlockedCompanyInput}
@@ -1831,7 +1669,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Full Name
               </label>
-              <input
+              <input aria-label="Full Name"
                 type="text"
                 value={profile.full_name || ''}
                 onChange={(e) => {
@@ -1847,7 +1685,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               <label className="block font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
                 Professional Headline / Tagline
               </label>
-              <input
+              <input aria-label="Professional Headline / Tagline"
                 type="text"
                 value={profile.headline || ''}
                 onChange={(e) => {
@@ -1865,7 +1703,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </label>
               <div className="relative">
                 <Mail className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
+                <input aria-label="e.g. candidate@example.com"
                   type="email"
                   value={profile.email || ''}
                   onChange={(e) => {
@@ -1884,7 +1722,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </label>
               <div className="relative">
                 <Phone className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
+                <input aria-label="e.g. +91 98765 43210"
                   type="tel"
                   value={profile.phone || ''}
                   onChange={(e) => {
@@ -1903,7 +1741,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </label>
               <div className="relative">
                 <MapPin className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
+                <input aria-label="e.g. Bengaluru, Karnataka, India"
                   type="text"
                   value={profile.location || ''}
                   onChange={(e) => {
@@ -1922,7 +1760,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </label>
               <div className="relative">
                 <Linkedin className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-blue-600" />
-                <input
+                <input aria-label="https://linkedin.com/in/username"
                   type="url"
                   value={profile.linkedin_url || ''}
                   onChange={(e) => {
@@ -1941,7 +1779,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </label>
               <div className="relative">
                 <Github className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
+                <input aria-label="e.g. mohitupraity"
                   type="text"
                   value={profile.github_username || ''}
                   onChange={(e) => {
@@ -1964,7 +1802,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               </label>
               <div className="relative">
                 <Globe className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-purple-600" />
-                <input
+                <input aria-label="https://myportfolio.dev"
                   type="url"
                   value={profile.portfolio_url || ''}
                   onChange={(e) => {
@@ -1982,7 +1820,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
             <label className="block font-semibold mb-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
               Professional Summary & Bio
             </label>
-            <textarea
+            <textarea aria-label="Professional Summary & Bio"
               rows={4}
               value={profile.bio || ''}
               onChange={(e) => {
@@ -2018,7 +1856,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
           {/* Add New Skill Input */}
           <div className="flex items-center gap-2 max-w-md">
-            <input
+            <input aria-label="Type a skill and press Enter (e.g. Next.js, Kafka, Redis)..."
               type="text"
               placeholder="Type a skill and press Enter (e.g. Next.js, Kafka, Redis)..."
               value={newSkillInput}
@@ -2226,7 +2064,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block font-semibold mb-1">Project Title *</label>
-                  <input
+                  <input aria-label="Project Title *"
                     type="text"
                     placeholder="e.g. Distributed Task Queue"
                     value={newProj.name}
@@ -2237,7 +2075,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Primary Language</label>
-                  <input
+                  <input aria-label="Primary Language"
                     type="text"
                     placeholder="e.g. Python, TypeScript, Go"
                     value={newProj.primary_language}
@@ -2247,7 +2085,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">GitHub Repo URL</label>
-                  <input
+                  <input aria-label="GitHub Repo URL"
                     type="url"
                     placeholder="https://github.com/username/project"
                     value={newProj.repo_url}
@@ -2257,7 +2095,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Live Demo / Product URL</label>
-                  <input
+                  <input aria-label="Live Demo / Product URL"
                     type="url"
                     placeholder="https://myproject.dev"
                     value={newProj.live_url}
@@ -2269,7 +2107,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               <div>
                 <label className="block font-semibold mb-1 text-xs">Description & Architecture</label>
-                <textarea
+                <textarea aria-label="Description & Architecture"
                   rows={2}
                   placeholder="Explain what the project solves, throughput metrics, or key innovations..."
                   value={newProj.description}
@@ -2280,7 +2118,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               <div>
                 <label className="block font-semibold mb-1 text-xs">Technologies Used (comma separated)</label>
-                <input
+                <input aria-label="Technologies Used (comma separated)"
                   type="text"
                   placeholder="e.g. FastAPI, Neo4j, Redis, Docker, React"
                   value={projTechInput}
@@ -2391,7 +2229,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block font-semibold mb-1">University / College Name *</label>
-                  <input
+                  <input aria-label="University / College Name *"
                     type="text"
                     placeholder="e.g. Anand Engineering College"
                     value={newEdu.university}
@@ -2402,7 +2240,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Degree</label>
-                  <input
+                  <input aria-label="Degree"
                     type="text"
                     placeholder="e.g. B.Tech, M.Tech, BCA, MCA"
                     value={newEdu.degree}
@@ -2412,7 +2250,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Field of Study / Major</label>
-                  <input
+                  <input aria-label="Field of Study / Major"
                     type="text"
                     placeholder="e.g. Computer Science & Engineering"
                     value={newEdu.field_of_study}
@@ -2423,7 +2261,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block font-semibold mb-1">Start Year</label>
-                    <input
+                    <input aria-label="Start Year"
                       type="text"
                       placeholder="e.g. 2021"
                       value={newEdu.start_date}
@@ -2433,7 +2271,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   </div>
                   <div>
                     <label className="block font-semibold mb-1">End Year</label>
-                    <input
+                    <input aria-label="End Year"
                       type="text"
                       placeholder="e.g. 2025"
                       value={newEdu.end_date}
@@ -2549,7 +2387,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block font-semibold mb-1">Company / Organization *</label>
-                  <input
+                  <input aria-label="Company / Organization *"
                     type="text"
                     placeholder="e.g. Google, DRDO ADRDE, Razorpay"
                     value={newExp.company}
@@ -2560,7 +2398,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Role / Job Title</label>
-                  <input
+                  <input aria-label="Role / Job Title"
                     type="text"
                     placeholder="e.g. Backend Engineering Intern"
                     value={newExp.role}
@@ -2570,7 +2408,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Location</label>
-                  <input
+                  <input aria-label="Location"
                     type="text"
                     placeholder="e.g. Bengaluru, India or Remote"
                     value={newExp.location}
@@ -2581,7 +2419,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block font-semibold mb-1">Start Date</label>
-                    <input
+                    <input aria-label="Start Date"
                       type="text"
                       placeholder="e.g. Jun 2024"
                       value={newExp.start_date}
@@ -2591,7 +2429,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   </div>
                   <div>
                     <label className="block font-semibold mb-1">End Date</label>
-                    <input
+                    <input aria-label="End Date"
                       type="text"
                       placeholder="e.g. Aug 2024"
                       value={newExp.end_date}
@@ -2617,7 +2455,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               <div>
                 <label className="block font-semibold mb-1 text-xs">Responsibilities & Achievements</label>
-                <textarea
+                <textarea aria-label="Responsibilities & Achievements"
                   rows={3}
                   placeholder="Describe your responsibilities, metrics, and key technologies used..."
                   value={newExp.description}
@@ -2705,7 +2543,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
             {isAddingAch && (
               <div className="p-4 rounded-xl border space-y-2.5 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 text-xs">
-                <input
+                <input aria-label="Achievement / Hackathon Title *"
                   type="text"
                   placeholder="Achievement / Hackathon Title *"
                   value={newAch.title}
@@ -2713,14 +2551,14 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   className="input-base w-full text-xs"
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <input aria-label="Host / Organizer (e.g. AICTE)"
                     type="text"
                     placeholder="Host / Organizer (e.g. AICTE)"
                     value={newAch.organization}
                     onChange={(e) => setNewAch(prev => ({ ...prev, organization: e.target.value }))}
                     className="input-base w-full text-xs"
                   />
-                  <input
+                  <input aria-label="Year / Date (e.g. 2024)"
                     type="text"
                     placeholder="Year / Date (e.g. 2024)"
                     value={newAch.date}
@@ -2790,7 +2628,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
             {isAddingCert && (
               <div className="p-4 rounded-xl border space-y-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 text-xs">
-                <input
+                <input aria-label="Certification Name *"
                   type="text"
                   placeholder="Certification Name *"
                   value={newCert.name}
@@ -2798,14 +2636,14 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   className="input-base w-full text-xs"
                 />
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <input aria-label="Issuer (e.g. AWS, Neo4j)"
                     type="text"
                     placeholder="Issuer (e.g. AWS, Neo4j)"
                     value={newCert.issuer}
                     onChange={(e) => setNewCert(prev => ({ ...prev, issuer: e.target.value }))}
                     className="input-base w-full text-xs"
                   />
-                  <input
+                  <input aria-label="Year (e.g. 2024)"
                     type="text"
                     placeholder="Year (e.g. 2024)"
                     value={newCert.date}
@@ -2823,15 +2661,16 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
         </div>
       )}
 
+</div></div>
       {/* Floating Save Action Bar when there are unsaved changes */}
       {hasUnsavedChanges && (
-        <div className="fixed bottom-6 right-6 z-40 animate-in slide-in-from-bottom duration-300">
+        <div className="ws-profile-savebar" role="status">
           <div 
-            className="p-3 px-5 rounded-2xl border shadow-2xl flex items-center gap-4 bg-slate-900 text-white border-blue-500 ring-2 ring-blue-500/40 backdrop-blur-md"
+            className="flex flex-wrap items-center justify-between gap-4 w-full"
           >
             <div className="flex items-center gap-2 text-xs">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
-              <span>You have unsaved profile changes!</span>
+              <span>You have unsaved changes.</span>
             </div>
             <button
               onClick={handleSaveAll}
@@ -2839,7 +2678,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
               className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md flex items-center gap-2"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              <span>Save & Sync All</span>
+              <span>Save changes</span>
             </button>
           </div>
         </div>

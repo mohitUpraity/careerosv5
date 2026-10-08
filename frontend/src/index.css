@@ -154,22 +154,15 @@
 /* ──────────────────────────────────────────────
    Scrollbar
    ────────────────────────────────────────────── */
+/* Keep native wheel, touch and keyboard scrolling; hide only the visual track. */
+*, *::before, *::after {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-secondary);
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* ──────────────────────────────────────────────

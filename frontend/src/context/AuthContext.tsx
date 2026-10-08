@@ -65,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const token = await firebaseUser.getIdToken();
           setIdToken(token);
-          const profile = {
+          const profile: ProfileMode = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || 'Candidate',
             role: 'Software Engineer',

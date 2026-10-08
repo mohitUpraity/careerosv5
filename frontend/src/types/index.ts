@@ -26,6 +26,7 @@ export interface GraphLink {
   target: string | GraphNode;
   type: string;
   relation?: string;
+  label?: string;
   weight?: number;
 }
 
@@ -180,11 +181,11 @@ export interface Opportunity {
   eligibility?: string;
   verified?: boolean;
   is_dream_company?: boolean;
-  work_mode?: string;
   is_primary_choice?: boolean;
   is_priority_domain_match?: boolean;
-  match_reasons?: string[];
+  work_mode?: string;
   deadline?: string;
+  match_reasons?: string[];
   salary_or_prize?: string;
   source?: string;
 }

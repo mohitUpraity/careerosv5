@@ -22,12 +22,13 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+    <div className="dashboard-toasts fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
       {toasts.map((toast) => {
         const style = toastStyles[toast.type];
         return (
           <div
             key={toast.id}
+            role={toast.type === 'error' ? 'alert' : 'status'}
             className="pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-lg shadow-dropdown animate-slide-in"
             style={{
               backgroundColor: style.bg,
@@ -39,6 +40,7 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
             {toast.type === 'info' && <Info className="w-4 h-4 shrink-0" style={{ color: style.color }} />}
             <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{toast.message}</p>
             <button
+              aria-label="Dismiss notification"
               onClick={() => onDismiss(toast.id)}
               className="ml-2 p-1 rounded transition-colors"
               style={{ color: 'var(--text-tertiary)' }}

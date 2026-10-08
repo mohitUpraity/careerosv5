@@ -1,0 +1,65 @@
+/* Keep navigation sizing independent of the product-preview scaling. */
+.lp .lp-header { position: sticky; top: 16px; z-index: 40; width: min(1320px, calc(100% - 48px)); margin: 16px auto 0; background: rgba(255,255,255,.86); border: 1px solid rgba(120,145,205,.16); border-radius: 24px; box-shadow: 0 8px 30px #1832680b, inset 0 1px 0 #ffffffdc; backdrop-filter: blur(18px); }
+.lp .lp-header.lp-scrolled { background: rgba(255,255,255,.94); border-color: var(--lp-border); box-shadow: 0 12px 36px #18326814; }
+.lp .lp-header {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform 380ms cubic-bezier(.22,1,.36,1), opacity 250ms ease, background 300ms ease, box-shadow 300ms ease, visibility 0s;
+}
+.lp .lp-header.lp-nav-hidden {
+  transform: translateY(calc(-100% - 32px));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 380ms cubic-bezier(.22,1,.36,1), opacity 250ms ease, background 300ms ease, box-shadow 300ms ease, visibility 0s 380ms;
+}
+.lp .lp-nav { width: 100%; padding-inline: 24px; margin-inline: auto; height: 72px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 24px; }
+.lp .lp-scrolled .lp-nav { height: 64px; }
+.lp .lp-nav-brand { display: inline-flex; align-items: center; min-height: 44px; }
+.lp .lp-nav-brand .lp-brand { font-size: 24px; gap: 10px; }
+.lp .lp-nav-brand .lp-brand-icon { width: 36px; height: 36px; border-radius: 10px; }
+.lp .lp-desktop-nav { display: flex; justify-content: center; align-items: center; gap: 24px; margin: 0; min-width: 0; }
+.lp .lp-desktop-nav a { display: inline-flex; align-items: center; min-height: 44px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.lp .lp-desktop-nav a:after { bottom: 6px; }
+.lp .lp-nav-actions { display: flex; align-items: center; gap: 9px; margin: 0; flex-shrink: 0; }
+.lp .lp-nav-actions .lp-theme-toggle { width: 40px; height: 40px; min-height: 40px; border-radius: 50%; flex-shrink: 0; }
+.lp .lp-extension-nav { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 10px; border: 1px solid var(--lp-border); border-radius: 24px; background: var(--lp-surface); color: var(--lp-ink); font-size: 10px; }
+.lp .lp-extension-nav span:not(.lp-google) { display: inline; }
+.lp .lp-nav-actions .lp-nav-login { display: inline-flex; min-height: 44px; padding: 0 16px; gap: 8px; border-radius: 26px; font-size: 11px; }
+.lp .lp-nav-login .lp-google { width: 21px; height: 21px; }
+.lp .lp-menu-button { display: none; width: 44px; height: 44px; border-radius: 12px; align-items: center; justify-content: center; }
+.lp .lp-mobile-nav { display: none; }
+.lp-dark .lp-header { background: rgba(11,18,35,.9); }
+.lp-dark .lp-header.lp-scrolled { background: rgba(11,18,35,.96); }
+.lp-dark .lp-nav-actions .lp-theme-toggle { background: #18243d !important; border-color: #354260 !important; }
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .lp .lp-nav { width: 100%; padding-inline: 18px; gap: 16px; }
+  .lp .lp-nav-brand .lp-brand { font-size: 21px; }
+  .lp .lp-desktop-nav { gap: 19px; }
+  .lp .lp-desktop-nav a { font-size: 11px; }
+  .lp .lp-nav-actions { gap: 6px; }
+  .lp .lp-nav-actions .lp-nav-login { padding-inline: 12px; font-size: 10px; }
+}
+@media (max-width: 1023px) {
+  .lp .lp-nav { width: 100%; padding-inline: 18px; grid-template-columns: 1fr auto; gap: 12px; height: 68px; }
+  .lp .lp-desktop-nav { display: none; }
+  .lp .lp-menu-button { display: inline-flex; }
+  .lp .lp-mobile-nav { display: flex; position: absolute; top: calc(100% + 10px); left: 0; right: 0; flex-direction: column; gap: 4px; padding: 12px 24px 22px; background: #fff; border: 1px solid var(--lp-border); border-radius: 22px; box-shadow: 0 16px 32px #18326814; max-height: calc(100dvh - 116px); overflow-y: auto; }
+  .lp .lp-mobile-nav > a { min-height: 46px; padding: 12px; font-size: 14px; border-radius: 10px; }
+  .lp .lp-mobile-nav > a:hover { background: #eff4ff; color: #146eff; }
+  .lp .lp-mobile-nav > button:not(.lp-primary) { min-height: 46px; padding: 12px; }
+  .lp .lp-mobile-nav > .lp-primary { align-self: stretch; margin-top: 8px; min-height: 46px; }
+  .lp-dark .lp-mobile-nav { background: #101b31; }
+  .lp-dark .lp-mobile-nav > a:hover { background: #1c2a45; }
+}
+@media (max-width: 767px) {
+  .lp .lp-header { top: 10px; width: calc(100% - 24px); margin-top: 10px; border-radius: 20px; }
+  .lp .lp-nav { width: 100%; padding-inline: 14px; height: 64px; }
+  .lp .lp-scrolled .lp-nav { height: 64px; }
+  .lp .lp-nav-brand .lp-brand { font-size: 22px; }
+  .lp .lp-nav-brand .lp-brand-icon { width: 34px; height: 34px; }
+  .lp .lp-nav-actions { gap: 7px; }
+  .lp .lp-nav-actions .lp-nav-login, .lp .lp-extension-nav { display: none; }
+  .lp .lp-mobile-nav { padding-inline: 16px; max-height: calc(100dvh - 104px); border-radius: 20px; }
+}
