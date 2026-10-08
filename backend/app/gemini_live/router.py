@@ -132,6 +132,21 @@ async def gemini_live_websocket(
                 elif msg_type == "interrupt":
                     logger.info("Client signaled manual/local speech barge-in interrupt")
                     session.handle_client_interrupted()
+                elif msg_type == "request_coding_challenge":
+                    logger.info("Client requested coding challenge from CodingChallengeSubAgent")
+                    await session.trigger_coding_challenge(msg.get("topic"))
+                elif msg_type == "test_proctor_warning":
+                    logger.info("Manual test trigger for proctor warning")
+                    await session.proctor_subagent.trigger_warning(
+                        violation_type=msg.get("violation_type", "looking_away"),
+                        reason=msg.get("reason", "Candidate averted eye contact downward towards secondary notes or phone."),
+                        is_critical=msg.get("is_critical", False)
+                    )
+                elif msg_type == "test_reaction":
+                    await send_json_to_client({
+                        "type": "interviewer_reaction",
+                        "data": {"emoji": msg.get("emoji", "👍")}
+                    })
                 elif msg_type == "conclude":
                     scorecard = await session.generate_scorecard()
                     await send_json_to_client({"type": "scorecard", "data": scorecard})

@@ -106,8 +106,8 @@ export class AudioStreamingManager {
     this.inputSourceNode = this.inputAudioCtx.createMediaStreamSource(stream);
     this.inputSourceNode.connect(this.inputAnalyser);
 
-    // Buffer size 4096 gives smooth 16kHz chunks (~256ms)
-    this.processorNode = this.inputAudioCtx.createScriptProcessor(4096, 1, 1);
+    // 2048 samples at 16kHz = 128ms, keeping speech and VAD updates responsive.
+    this.processorNode = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
 
     this.processorNode.onaudioprocess = (e) => {
       if (!this.isRunning || this.isMuted) return;
@@ -121,24 +121,12 @@ export class AudioStreamingManager {
       }
       const rms = Math.sqrt(sumSquares / channelData.length);
 
-      // Full-Duplex Proactive Barge-In:
-      // When candidate speaks (rms >= 0.005) while AI is playing audio, cut off speaker immediately!
-      const isAiSpeaking = this.scheduledSources.length > 0;
-      if (isAiSpeaking && rms >= 0.005) {
-        this.stopPlayback();
-        if (this.onUserInterruptCallback) {
-          this.onUserInterruptCallback();
-        }
-      }
-
-      // Ignore pure background room silence / static (< 0.001 RMS)
-      if (rms < 0.001) {
-        return;
-      }
-
       // Guarantee strict 16kHz PCM regardless of Safari's native hardware AudioContext rate (44.1k/48k)
       const nativeRate = this.inputAudioCtx ? this.inputAudioCtx.sampleRate : 16000;
       const resampled = this.downsampleTo16k(channelData, nativeRate);
+      // Preserve silence packets so server-side VAD can detect the end of a phrase,
+      // while zeroing low-level room noise that could trigger false speech starts.
+      if (rms < 0.001) resampled.fill(0);
       const base64Pcm = this.floatTo16BitPCMBase64(resampled);
       if (this.onAudioChunkCallback) {
         this.onAudioChunkCallback(base64Pcm);
@@ -230,7 +218,9 @@ export class AudioStreamingManager {
     if (!this.outputAudioCtx || this.outputAudioCtx.state === "closed") return;
 
     if (this.outputAudioCtx.state === "suspended") {
-      this.outputAudioCtx.resume();
+      this.outputAudioCtx.resume().catch((err) => {
+        console.warn("Could not resume interviewer audio playback:", err);
+      });
     }
 
     try {
@@ -268,7 +258,7 @@ export class AudioStreamingManager {
       // Schedule gapless playback
       const currentTime = this.outputAudioCtx.currentTime;
       if (this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime + 0.04; // 40ms smooth lead time for gapless audio
+        this.nextPlayTime = currentTime + 0.08; // Small jitter buffer for network-delivered audio chunks
       }
 
       sourceNode.start(this.nextPlayTime);

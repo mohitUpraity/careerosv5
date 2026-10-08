@@ -1750,8 +1750,10 @@ class ProfileService:
         if neo4j_client.driver and neo4j_client.is_connected:
             match_query = """
             MATCH (u:User)
-            WHERE toLower(u.username) = $username 
-               OR toLower(u.github_username) = $username 
+            WHERE toLower(coalesce(u.username, '')) = $username 
+               OR toLower(coalesce(u.github_username, '')) = $username 
+               OR toLower(split(coalesce(u.email, ''), '@')[0]) = $username
+               OR toLower(replace(coalesce(u.full_name, ''), ' ', '')) = $username
                OR u.id = $raw_user
             RETURN u.id AS id,
                    u.username AS username,
@@ -1773,6 +1775,15 @@ class ProfileService:
             if res and len(res) > 0:
                 user_record = res[0]
                 matched_user_id = user_record.get("id")
+                if not user_record.get("username") and clean_user:
+                    user_record["username"] = clean_user
+                    try:
+                        await neo4j_client.execute_query(
+                            "MATCH (u:User {id: $uid}) SET u.username = $uname",
+                            {"uid": matched_user_id, "uname": clean_user}
+                        )
+                    except Exception:
+                        pass
 
         # Fallback if user not found: retrieve latest active user or generate clean default
         if not user_record and neo4j_client.driver and neo4j_client.is_connected:
@@ -1782,6 +1793,15 @@ class ProfileService:
             if fallback_res and len(fallback_res) > 0:
                 user_record = fallback_res[0]
                 matched_user_id = user_record.get("id")
+                if not user_record.get("username") and clean_user:
+                    user_record["username"] = clean_user
+                    try:
+                        await neo4j_client.execute_query(
+                            "MATCH (u:User {id: $uid}) SET u.username = $uname",
+                            {"uid": matched_user_id, "uname": clean_user}
+                        )
+                    except Exception:
+                        pass
 
         # If user record still empty (offline/mock)
         if not user_record:

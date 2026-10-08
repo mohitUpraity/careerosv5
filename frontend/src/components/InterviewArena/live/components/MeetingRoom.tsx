@@ -123,9 +123,13 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     setAudioUnlocked(true);
   }, []);
 
-  // Disable browser WebKit TTS in Live Arena to guarantee 100% genuine Gemini Live PCM audio
-  const speakAiText = useCallback((_text: string) => {
-    return;
+  // Use browser speech only when a completed Live turn supplied captions but no PCM audio.
+  const speakAiText = useCallback((text: string) => {
+    if (!("speechSynthesis" in window) || !text.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.trim());
+    utterance.lang = /[\u0900-\u097f]/.test(text) ? "hi-IN" : "en-IN";
+    window.speechSynthesis.speak(utterance);
   }, []);
 
   const speakAiTextRef = useRef(speakAiText);
@@ -466,6 +470,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
               isFinal: true,
             },
           ]);
+        } else if (msg.type === "visual_observation") {
+          const observation = msg.data?.description;
+          if (observation) {
+            setCurrentCaption({
+              speaker: "ai",
+              speakerName: config.interviewerProfile.name,
+              text: observation,
+            });
+          }
         } else if (msg.type === "interrupted") {
           // Candidate interrupted the AI — discard in-flight stale audio from previous turn
           console.log("[Live] ⚡ Interrupted — discarding in-flight audio");
@@ -492,6 +505,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           if (discardAudioTimerRef.current) {
             clearTimeout(discardAudioTimerRef.current);
             discardAudioTimerRef.current = null;
+          }
+          if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
+            speakAiTextRef.current(currentAiTurnTextRef.current);
           }
           // Mark last AI transcript item as final
           setTranscripts((prev) => {
@@ -580,7 +596,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
     // Forward mic audio PCM to WebSocket if connected
     audioManager.setOnAudioChunk((base64Pcm) => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
+      // Never let a slow socket buffer seconds of stale speech; live voice should
+      // resume from the current phrase as soon as the connection catches up.
+      if (ws && ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 32 * 1024) {
         ws.send(JSON.stringify({ type: "audio", data: base64Pcm }));
       }
     });
@@ -620,22 +638,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
           const currentText = final || interim;
           if (currentText.trim()) {
-            if (audioManager.isAiAudioPlaying()) {
-              audioManager.stopPlayback();
-              discardAudioRef.current = true;
-              setIsAiSpeaking(false);
-              setIsInterrupted(true);
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "interrupt" }));
-              }
-              setTimeout(() => setIsInterrupted(false), 1500);
-              if (discardAudioTimerRef.current) clearTimeout(discardAudioTimerRef.current);
-              discardAudioTimerRef.current = setTimeout(() => {
-                discardAudioRef.current = false;
-                discardAudioTimerRef.current = null;
-              }, 500);
-            }
-
             setCurrentCaption({
               speaker: "user",
               speakerName: config.candidateName || "You",
@@ -684,9 +686,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       }
     }
 
-    // Video Streaming Frame Loop (~1 FPS)
+    // Keep video useful for vision while leaving the WebSocket queue for audio.
     frameIntervalRef.current = setInterval(() => {
-      if (!ws || ws.readyState !== WebSocket.OPEN || isVideoOff) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || isVideoOff || ws.bufferedAmount > 16 * 1024) return;
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
 
@@ -703,15 +705,16 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       if (activeVideo && activeVideo.readyState >= 2) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          canvas.width = 480;
-          canvas.height = 360;
+          const scale = Math.min(384 / activeVideo.videoWidth, 288 / activeVideo.videoHeight, 1);
+          canvas.width = Math.max(1, Math.round(activeVideo.videoWidth * scale));
+          canvas.height = Math.max(1, Math.round(activeVideo.videoHeight * scale));
           ctx.drawImage(activeVideo, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
           const base64Jpeg = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
           ws.send(JSON.stringify({ type: "video", data: base64Jpeg }));
         }
       }
-    }, 1000);
+    }, 1400);
 
     // Live analytics timer
     const analyticsTimer = setInterval(() => {
@@ -1077,7 +1080,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
               {/* Code Editor (Right) */}
               <div className="lg:col-span-8 h-full">
-                <CodeEditor onSyncCodeWithAi={handleSyncCodeWithAi} />
+                <CodeEditor
+                  onSyncCodeWithAi={handleSyncCodeWithAi}
+                  pushedChallenge={pushedChallenge}
+                  onRequestAiChallenge={() => {
+                    if (socketRef.current?.readyState === WebSocket.OPEN) {
+                      socketRef.current.send(JSON.stringify({ type: "request_coding_challenge" }));
+                    }
+                  }}
+                />
               </div>
             </div>
           )}

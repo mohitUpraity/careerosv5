@@ -4,16 +4,40 @@ import { DEFAULT_CODING_CHALLENGES } from "../data/interviewProfiles";
 
 interface CodeEditorProps {
   onSyncCodeWithAi: (code: string, language: string) => void;
+  pushedChallenge?: {
+    title?: string;
+    problem_description?: string;
+    starter_code?: string;
+    language?: string;
+  } | null;
+  onRequestAiChallenge?: () => void;
 }
 
-export const CodeEditor: React.FC<CodeEditorProps> = ({ onSyncCodeWithAi }) => {
+export const CodeEditor: React.FC<CodeEditorProps> = ({
+  onSyncCodeWithAi,
+  pushedChallenge,
+  onRequestAiChallenge,
+}) => {
   const [selectedChallengeIndex, setSelectedChallengeIndex] = useState(0);
-  const [language, setLanguage] = useState("javascript");
+  const [language, setLanguage] = useState("python");
   const [code, setCode] = useState(DEFAULT_CODING_CHALLENGES[0].starterCode);
   const [output, setOutput] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
+
+  // Sync pushed challenge from CodingChallengeSubAgent
+  React.useEffect(() => {
+    if (pushedChallenge) {
+      if (pushedChallenge.starter_code) {
+        setCode(pushedChallenge.starter_code);
+      }
+      if (pushedChallenge.language) {
+        setLanguage(pushedChallenge.language.toLowerCase());
+      }
+      setOutput(null);
+    }
+  }, [pushedChallenge]);
 
   const currentChallenge = DEFAULT_CODING_CHALLENGES[selectedChallengeIndex];
 
@@ -86,6 +110,17 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ onSyncCodeWithAi }) => {
 
         {/* Action Buttons */}
         <div className="flex items-center space-x-2">
+          {onRequestAiChallenge && (
+            <button
+              onClick={onRequestAiChallenge}
+              className="p-1.5 text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/60 rounded-lg text-xs flex items-center gap-1 transition-colors"
+              title="Request a dynamic coding problem from the Coding Sub-Agent"
+            >
+              <Code2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Ask AI Challenge</span>
+            </button>
+          )}
+
           <button
             onClick={handleCopy}
             className="p-1.5 text-gray-300 hover:text-white bg-[#2d2f34] hover:bg-[#3c4043] border border-[#3c4043] rounded-lg text-xs flex items-center gap-1 transition-colors"
@@ -97,7 +132,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ onSyncCodeWithAi }) => {
 
           <button
             onClick={() => {
-              setCode(currentChallenge.starterCode);
+              if (pushedChallenge?.starter_code) {
+                setCode(pushedChallenge.starter_code);
+              } else {
+                setCode(currentChallenge.starterCode);
+              }
               setOutput(null);
             }}
             className="p-1.5 text-gray-300 hover:text-white bg-[#2d2f34] hover:bg-[#3c4043] border border-[#3c4043] rounded-lg text-xs flex items-center gap-1 transition-colors"
@@ -135,8 +174,10 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({ onSyncCodeWithAi }) => {
       <div className="px-4 py-2 bg-[#282a2e] border-b border-[#3c4043] text-xs text-gray-300 flex items-start gap-2">
         <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-semibold text-white">{currentChallenge.title}: </span>
-          <span>{currentChallenge.description}</span>
+          <span className="font-semibold text-white">
+            {pushedChallenge?.title || currentChallenge.title}:{" "}
+          </span>
+          <span>{pushedChallenge?.problem_description || currentChallenge.description}</span>
         </div>
       </div>
 

@@ -18,16 +18,12 @@ def get_live_tools() -> List[types.Tool]:
                         "CRITICAL: Call this function IMMEDIATELY whenever the candidate violates interview integrity on video: "
                         "such as holding or checking a mobile phone/device, repeatedly looking away/down at hidden screens or notes, "
                         "whispering to someone, another person appearing, or suspicious postures. "
-                        "You must pass the sequential warning number (1, 2, or 3) and a detailed reason. "
+                        "Pass the observed violation category and a detailed evidence-based reason. The server assigns the authoritative sequential warning number and enforces the escalation policy. "
                         "Also speak a firm verbal warning to the candidate."
                     ),
                     parameters=types.Schema(
                         type=types.Type.OBJECT,
                         properties={
-                            "warning_number": types.Schema(
-                                type=types.Type.INTEGER,
-                                description="Sequential warning count: 1 for first offense, 2 for second offense, 3 for third offense"
-                            ),
                             "violation_type": types.Schema(
                                 type=types.Type.STRING,
                                 description="Specific category of integrity violation",
@@ -45,7 +41,7 @@ def get_live_tools() -> List[types.Tool]:
                                 description="Precise explanation of what was visually or auditorily detected (e.g., candidate holding smartphone, eyes averted sideways, phone in hand)"
                             )
                         },
-                        required=["warning_number", "violation_type", "warning_reason"]
+                        required=["violation_type", "warning_reason"]
                     )
                 ),
                 types.FunctionDeclaration(

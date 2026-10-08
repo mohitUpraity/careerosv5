@@ -47,8 +47,8 @@ class GeminiLiveEngine:
         self.is_closing = False
         self._send_lock = asyncio.Lock()
 
-        # Upstream and downstream queues
-        self.audio_in_queue = asyncio.Queue(maxsize=100)
+        # Keep a short real-time buffer; stale speech only adds latency if sends stall.
+        self.audio_in_queue = asyncio.Queue(maxsize=4)
         self.video_in_slot: Optional[bytes] = None  # Latest frame wins
         self._loop_task: Optional[asyncio.Task] = None
 
@@ -72,6 +72,15 @@ class GeminiLiveEngine:
             except Exception as e:
                 logger.warning(f"Error in send_client_content: {e}")
 
+    async def _safe_send_tool_response(self, function_responses):
+        if not self.session or not self.is_connected or self.is_closing:
+            return
+        async with self._send_lock:
+            try:
+                await self.session.send_tool_response(function_responses=function_responses)
+            except Exception as e:
+                logger.warning("Error sending live tool response: %s", e)
+
     def push_audio(self, pcm_bytes: bytes):
         """Enqueue 16kHz PCM16 audio bytes from microphone."""
         if self.is_closing or not pcm_bytes:
@@ -79,6 +88,7 @@ class GeminiLiveEngine:
         if self.audio_in_queue.full():
             try:
                 self.audio_in_queue.get_nowait()
+                self.audio_in_queue.task_done()
             except asyncio.QueueEmpty:
                 pass
         try:
@@ -118,11 +128,12 @@ class GeminiLiveEngine:
             system_instruction=types.Content(
                 parts=[types.Part.from_text(text=self.config.system_instruction or "")]
             ),
+            tools=self.tools or [],
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(
                     disabled=False,
-                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
+                    start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_LOW,
+                    end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
                     prefix_padding_ms=self.config.prefix_padding_ms,
                     silence_duration_ms=self.config.silence_duration_ms,
                 ),
@@ -218,6 +229,27 @@ class GeminiLiveEngine:
             try:
                 turn = self.session.receive()
                 async for response in turn:
+                    # Function calls are delivered at the response level, alongside
+                    # server_content. Execute each action and return its result so
+                    # Gemini can continue speaking in the same interview turn.
+                    tool_call = getattr(response, "tool_call", None)
+                    if tool_call and tool_call.function_calls:
+                        function_responses = []
+                        for function_call in tool_call.function_calls:
+                            args = dict(function_call.args or {})
+                            try:
+                                result = await self.on_tool_call(function_call.name, args) if self.on_tool_call else {"status": "unavailable"}
+                            except Exception as tool_error:
+                                logger.exception("Live tool %s failed", function_call.name)
+                                result = {"status": "error", "message": str(tool_error)}
+                            function_responses.append(types.FunctionResponse(
+                                id=function_call.id,
+                                name=function_call.name,
+                                response=result,
+                            ))
+                        if function_responses:
+                            await self._safe_send_tool_response(function_responses)
+
                     sc = response.server_content
                     if not sc:
                         continue
