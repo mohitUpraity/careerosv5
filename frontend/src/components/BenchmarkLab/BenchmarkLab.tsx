@@ -1,3 +1,5 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState, WorkspaceSteps } from '../WorkspaceUI';
+import { DialogFrame } from '../DialogFrame';
 import React, { useState, useEffect } from 'react';
 import { 
   Users, 
@@ -155,42 +157,16 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
+    <div className="dashboard-view ws-page dashboard-view--benchmark space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       {/* Top Header & Peer Selector */}
-      <div
-        className="p-5 rounded-2xl border backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-4"
-        style={{
-          backgroundColor: 'var(--bg-primary)',
-          borderColor: 'var(--border-primary)',
-        }}
-      >
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-blue-600/10 border border-blue-600/20 flex items-center justify-center text-blue-600">
-            <Target className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-                Peer Benchmark & Gap Studio
-              </h2>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                AI Gap Engine
-              </span>
-            </div>
-            <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Compare your real code-verified AST skills against Senior & Staff engineering benchmarks.
-            </p>
-          </div>
-        </div>
-
-        {/* Peer Selection Controls */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+      <WorkspacePageHeader page="benchmark" eyebrow="LEARN FROM THE NEXT LEVEL" title="A clearer view of what comes next." description="Compare your strengths with a target peer and turn the gaps into a practical growth plan." actions={<div className="ws-heading-controls">
           <select
-            value={selectedPeerId}
+            aria-label="Benchmark peer" disabled={!peers.length} value={selectedPeerId}
             onChange={(e) => setSelectedPeerId(e.target.value)}
             className="input-base text-xs font-semibold py-2 px-3 rounded-xl max-w-xs cursor-pointer"
             style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
           >
+            {!peers.length && <option value="">Add your first benchmark peer</option>}
             {peers.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.role} @ {p.company})
@@ -200,8 +176,8 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
 
           <button
             onClick={() => runComparison(selectedPeerId)}
-            disabled={comparing}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer"
+            disabled={comparing || !selectedPeerId}
+            className="dashboard-button "
             style={{
               backgroundColor: 'var(--bg-secondary)',
               color: 'var(--text-primary)',
@@ -215,20 +191,19 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
 
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all cursor-pointer"
+            className="dashboard-button dashboard-button-primary"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Target Peer</span>
+            <span>Add a peer</span>
           </button>
-        </div>
-      </div>
+        </div>} />
 
       {/* Main Analysis Body */}
       {loading || comparing ? (
         <div className="p-16 text-center space-y-4 rounded-2xl border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
           <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
           <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-            Synthesizing Multi-Tenant AST Skill Graph Delta…
+            Comparing your experience and strengths…
           </h4>
           <p className="text-xs max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
             Comparing AST-verified skills, repository complexity, and architecture depth against benchmark profile.
@@ -253,7 +228,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
-                      Your Profile (Candidate)
+                      Your profile
                     </span>
                     <h3 className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>
                       {comparison.candidate.name}
@@ -318,7 +293,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   )}
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600">
-                      Target Benchmark Peer
+                      Your benchmark peer
                     </span>
                     <h3 className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>
                       {comparison.peer.name}
@@ -375,7 +350,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
               <Sparkles className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-blue-500">
-                  Principal Engineer Assessment & Verdict
+                  Your comparison insights
                 </h4>
                 <p className="text-xs leading-relaxed font-medium" style={{ color: 'var(--text-primary)' }}>
                   "{comparison.ai_analysis.hiring_manager_verdict}"
@@ -399,7 +374,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-blue-600" />
                 <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                  AST Code-Verified Skill Topology Matrix
+                  Your skills, side by side
                 </h3>
               </div>
               <span className="text-xs font-mono font-medium" style={{ color: 'var(--text-secondary)' }}>
@@ -505,7 +480,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
             <div className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-blue-600" />
               <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
-                Actionable Gap Closing Roadmap & Proof-of-Work Projects
+                A practical plan to close the gaps
               </h3>
             </div>
 
@@ -596,19 +571,12 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
           </div>
         </div>
       ) : (
-        <div className="p-12 text-center rounded-2xl border" style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--border-primary)' }}>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            No comparison data available. Click "Add Target Peer" to benchmark.
-          </p>
-        </div>
+        <WorkspaceEmptyState icon={Target} title="Choose a person you can learn from" description="Add a target peer to compare shared skills, discover your own advantages, and find the next capabilities to develop."><button className="dashboard-button dashboard-button-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={16} />Add your first peer</button></WorkspaceEmptyState>
       )}
 
       {/* Add Peer Modal */}
       {isAddModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-        >
+        <DialogFrame label="Add a benchmark peer" onClose={() => setIsAddModalOpen(false)} busy={addingPeer}>
           <div
             className="w-full max-w-lg p-6 rounded-2xl border shadow-xl space-y-5"
             style={{
@@ -638,7 +606,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   GitHub Username (Auto-scans repositories & skills):
                 </label>
                 <div className="relative">
-                  <input
+                  <input aria-label="e.g. torvalds or target-peer-username"
                     type="text"
                     value={newPeerGithub}
                     onChange={(e) => setNewPeerGithub(e.target.value)}
@@ -654,7 +622,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Display Name:
                   </label>
-                  <input
+                  <input aria-label="Display Name:"
                     type="text"
                     value={newPeerName}
                     onChange={(e) => setNewPeerName(e.target.value)}
@@ -666,7 +634,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Target Role / Title:
                   </label>
-                  <input
+                  <input aria-label="Target Role / Title:"
                     type="text"
                     value={newPeerRole}
                     onChange={(e) => setNewPeerRole(e.target.value)}
@@ -681,7 +649,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Target Company:
                   </label>
-                  <input
+                  <input aria-label="Target Company:"
                     type="text"
                     value={newPeerCompany}
                     onChange={(e) => setNewPeerCompany(e.target.value)}
@@ -693,7 +661,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
                     Custom Skills (comma-separated):
                   </label>
-                  <input
+                  <input aria-label="Custom Skills (comma-separated):"
                     type="text"
                     value={newPeerSkills}
                     onChange={(e) => setNewPeerSkills(e.target.value)}
@@ -704,7 +672,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t" style={{ borderColor: 'var(--border-primary)' }}>
-                <button
+                <button disabled={addingPeer}
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
                   className="px-4 py-2 text-xs font-medium rounded-xl transition-colors cursor-pointer"
@@ -732,8 +700,9 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </DialogFrame>
       )}
     </div>
   );
 };
+

@@ -1,3 +1,4 @@
+import { DialogFrame } from './DialogFrame';
 import React, { useState, useEffect } from 'react';
 import { 
   Github, 
@@ -150,7 +151,7 @@ export const SyncGitHubModal: React.FC<SyncGitHubModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <DialogFrame label="Connect GitHub" onClose={onClose} busy={isSyncing}>
       <div 
         className={`relative w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden transition-all duration-200 ${
           isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
@@ -169,7 +170,7 @@ export const SyncGitHubModal: React.FC<SyncGitHubModalProps> = ({
               </p>
             </div>
           </div>
-          <button
+          <button aria-label="Close dialog"
             onClick={onClose}
             disabled={isSyncing}
             className={`p-1.5 rounded-lg transition-colors ${
@@ -225,7 +226,7 @@ export const SyncGitHubModal: React.FC<SyncGitHubModalProps> = ({
               <div className="pt-2">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={onClose} disabled={isSyncing}
                   className="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all"
                 >
                   View in Knowledge Graph &rarr;
@@ -464,7 +465,7 @@ export const SyncGitHubModal: React.FC<SyncGitHubModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </DialogFrame>
   );
 };
 

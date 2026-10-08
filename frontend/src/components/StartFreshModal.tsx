@@ -1,3 +1,4 @@
+import { DialogFrame } from './DialogFrame';
 import React, { useState } from 'react';
 import { Trash2, AlertTriangle, RefreshCw, Upload, Github, CheckCircle2 } from 'lucide-react';
 import { apiService } from '../services/api';
@@ -54,10 +55,7 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}
-    >
+    <DialogFrame label="Reset your personal graph" onClose={onClose} busy={loading}>
       <div
         className="relative w-full max-w-lg p-6 rounded-xl shadow-modal overflow-hidden"
         style={{
@@ -131,7 +129,7 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
             <div className="flex items-center justify-end gap-3 pt-4" style={{ borderTop: '1px solid var(--border-primary)' }}>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={onClose} disabled={loading}
                 className="px-4 py-2 text-xs font-medium transition-colors"
                 style={{ color: 'var(--text-secondary)' }}
               >
@@ -186,6 +184,6 @@ export const StartFreshModal: React.FC<StartFreshModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </DialogFrame>
   );
 };

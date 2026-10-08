@@ -1,3 +1,4 @@
+import { DialogFrame } from './DialogFrame';
 import React, { useState } from 'react';
 import { 
   Download, 
@@ -43,7 +44,7 @@ export const ExtensionDownloadModal: React.FC<ExtensionDownloadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <DialogFrame label="Get the CareerOS extension" onClose={onClose} busy={false}>
       <div 
         className="relative w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-scale-up"
         style={{
@@ -77,8 +78,8 @@ export const ExtensionDownloadModal: React.FC<ExtensionDownloadModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
+          <button aria-label="Close dialog"
+            onClick={onClose} disabled={false}
             className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             style={{ color: 'var(--text-tertiary)' }}
           >
@@ -248,7 +249,7 @@ export const ExtensionDownloadModal: React.FC<ExtensionDownloadModalProps> = ({
             Official Chrome Web Store release coming soon.
           </span>
           <button
-            onClick={onClose}
+            onClick={onClose} disabled={false}
             className="px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
             style={{ color: 'var(--text-primary)' }}
           >
@@ -257,6 +258,6 @@ export const ExtensionDownloadModal: React.FC<ExtensionDownloadModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </DialogFrame>
   );
 };

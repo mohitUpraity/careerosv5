@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import './dashboard.css';
+import './workspace-pages.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
+import { DashboardHome } from './components/DashboardHome';
 import { Sidebar, ActiveTab } from './components/Sidebar';
 import { KnowledgeGraph } from './components/KnowledgeGraph/KnowledgeGraph';
 import { OpportunitiesRadar } from './components/OpportunitiesRadar/OpportunitiesRadar';
@@ -23,7 +26,17 @@ import { GraphData } from './types';
 
 const MainLayout: React.FC = () => {
   const { getAuthHeaders, activeProfile } = useAuth();
-  const [activeTab, setActiveTab] = useState<ActiveTab>('graph');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  const previousTab = useRef(activeTab);
+  useEffect(() => {
+    if (previousTab.current === activeTab) return;
+    previousTab.current = activeTab;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    const frame = requestAnimationFrame(() => document.getElementById('dashboard-content')?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isSyncGitHubModalOpen, setIsSyncGitHubModalOpen] = useState(false);
@@ -103,10 +116,12 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+    <div className="dashboard-shell min-h-screen flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+      <a className="dashboard-skip-link" href="#dashboard-content">Skip to content</a>
       {/* Top Navigation */}
       <Navbar
-        analysis={analysis}
+        activeTab={activeTab}
+        onNavigate={setActiveTab}
         onOpenResetModal={() => setIsResetModalOpen(true)}
         onOpenSyncGitHub={() => setIsSyncGitHubModalOpen(true)}
         onOpenSyncResume={() => setIsSyncResumeModalOpen(true)}
@@ -114,13 +129,16 @@ const MainLayout: React.FC = () => {
         onOpenExtensionModal={() => setIsExtensionModalOpen(true)}
         onRefreshData={loadProfileData}
         loading={loading}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(open => !open)}
       />
 
       {/* Main Content Area: Sidebar + Active View */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <div className="dashboard-workspace flex-1 flex flex-col lg:flex-row">
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} open={sidebarOpen} onClose={closeSidebar} />
 
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto min-h-[calc(100vh-57px)]">
+        <main id="dashboard-content" tabIndex={-1} data-view={activeTab} className="dashboard-main flex-1">
+          {activeTab === 'overview' && <DashboardHome analysis={analysis} graphData={graphData} loading={loading} onNavigate={setActiveTab} onSyncGitHub={() => setIsSyncGitHubModalOpen(true)} onSyncResume={() => setIsSyncResumeModalOpen(true)} onSyncLinkedIn={() => setIsSyncLinkedInModalOpen(true)} />}
           {activeTab === 'profile' && (
             <ProfilePreferences
               onSuccessToast={(msg) => {
@@ -211,6 +229,7 @@ const MainLayout: React.FC = () => {
 
           <div className={activeTab === 'brain' ? 'block' : 'hidden'}>
             <BrainChat
+              analysis={analysis}
               onNavigateToTab={(tab: string) => setActiveTab(tab as ActiveTab)}
               onNavigateToGraphQuery={(query: string) => {
                 setGraphFilterQuery(query);

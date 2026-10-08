@@ -1,3 +1,4 @@
+import { WorkspacePageHeader, WorkspaceMetrics, WorkspaceSectionHeading, WorkspaceEmptyState } from '../WorkspaceUI';
 import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, 
@@ -110,12 +111,12 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
     }
   };
 
-  const inProgressSkills = profile?.preferences.in_progress_skills || [];
+  const inProgressSkills = profile?.preferences?.in_progress_skills || [];
   const userSkills = profile?.skills || [];
-  const targetRole = profile?.preferences.primary_role || 'Backend Engineer';
-  const targetDomain = profile?.preferences.priority_domain || 'Distributed Systems & Cloud';
+  const targetRole = profile?.preferences?.primary_role || 'your target role';
+  const targetDomain = profile?.preferences?.priority_domain || 'your preferred domain';
 
-  const unlocksList = marketIntel?.market_summary.high_roi_unlocks || [];
+  const unlocksList = marketIntel?.market_summary?.high_roi_unlocks || [];
   const activeSprintsList = unlocksList.filter(item => 
     inProgressSkills.some(s => s.toLowerCase().includes(item.skill.split(' ')[0].toLowerCase()))
   );
@@ -130,125 +131,53 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
         <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
         <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-          Analyzing Live Job Market Graph & Computing High-ROI Skill Unlocks...
+          Finding the most useful skills for your next role…
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-7xl mx-auto animate-in fade-in duration-300">
+    <div className="dashboard-view ws-page dashboard-view--growth space-y-6 pb-20 max-w-7xl mx-auto animate-in fade-in duration-300">
       {/* Top Hero Banner */}
-      <div 
-        className="p-6 sm:p-8 rounded-3xl border shadow-xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white border-blue-500/30 relative overflow-hidden"
-      >
-        <div className="absolute -right-10 -top-10 w-96 h-96 bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute right-1/3 bottom-0 w-64 h-64 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2.5 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-bold backdrop-blur-sm">
-              <Rocket className="w-3.5 h-3.5 text-blue-400" />
-              <span>Career Growth & Skill Bridging Engine</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-              Skill Gap Intelligence & High-ROI Project Bridges
-            </h1>
-
-            <p className="text-xs sm:text-sm text-blue-100/80 leading-relaxed">
-              Targeting <strong>{targetRole}</strong> in <strong>{targetDomain}</strong>. CareerOS continuously aggregates real live job postings across Devfolio, Unstop, and global remote feeds to identify which missing skills will unlock the highest volume of high-paying jobs.
-            </p>
-
-            {/* Target Milestone Pill */}
-            {profile?.preferences.career_goals?.target_milestone && (
-              <div className="flex items-center gap-2 pt-1 text-xs text-purple-200">
-                <Target className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                <span>Goal: <strong>{profile.preferences.career_goals.target_milestone}</strong> ({profile.preferences.career_goals.target_timeline || 'Next 90 Days'})</span>
-              </div>
-            )}
-          </div>
-
-          {/* Right Gauge & Quick Action */}
-          <div className="flex sm:flex-row items-center gap-4 bg-white/10 backdrop-blur-md p-4 px-6 rounded-2xl border border-white/15 shrink-0">
-            <div className="text-center">
-              <span className="block text-3xl sm:text-4xl font-black text-emerald-400 font-mono tracking-tight">
-                {marketIntel?.user_readiness_score || 82}%
-              </span>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-blue-200">
-                Market Readiness
-              </span>
-            </div>
-
-            <div className="h-10 w-[1px] bg-white/20" />
-
-            <div className="space-y-1.5">
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                <span>{refreshing ? 'Rescanning...' : 'Rescan Market'}</span>
-              </button>
-              <span className="block text-[10px] text-blue-200 text-center font-medium">
-                {marketIntel?.analyzed_jobs_count || '40+'} live jobs analyzed
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Sub Navigation Tabs */}
-        <div className="flex flex-wrap items-center gap-2 pt-6 border-t border-white/10 mt-6 text-xs">
+      <WorkspacePageHeader page="growth" eyebrow="GROW WITH INTENTION" title="Build the skills for your next chapter." description="Turn market demand into practical projects and manageable learning sprints, shaped around your career goals." actions={<button className="dashboard-button dashboard-button-primary" onClick={handleRefresh} disabled={refreshing}><RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />{refreshing ? 'Rescanning…' : 'Rescan market'}</button>} />
+      <WorkspaceMetrics items={[{label:"Market readiness",value:marketIntel?.user_readiness_score != null ? marketIntel.user_readiness_score + "%" : "—",detail:marketIntel ? "Based on your latest market analysis" : "Run an analysis to see your readiness",icon:BarChart3},{label:"Skill opportunities",value:unlocksList.length,detail:"Capabilities with a project to build",icon:Zap,tone:"amber"},{label:"Active sprints",value:activeSprintsList.length,detail:"Skills you are currently developing",icon:Clock,tone:"violet"},{label:"Roles analysed",value:marketIntel?.analyzed_jobs_count ?? "—",detail:"Job requirements behind your insights",icon:Building2,tone:"teal"}]} />
+      <div className="ws-context-strip"><span>Target role <strong>{targetRole}</strong></span><span>Domain <strong>{targetDomain}</strong></span>{profile?.preferences.career_goals?.target_milestone && <span>Goal <strong>{profile.preferences.career_goals.target_milestone}</strong></span>}</div>
+      <div className="ws-tabbar">
           <button
-            onClick={() => setActiveSubTab('unlocks')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
-              activeSubTab === 'unlocks'
-                ? 'bg-blue-500 text-white shadow-lg scale-102'
-                : 'bg-white/10 text-blue-200 hover:bg-white/20'
-            }`}
+            aria-pressed={activeSubTab === 'unlocks'} onClick={() => setActiveSubTab('unlocks')}
+            className=""
           >
             <Zap className="w-3.5 h-3.5 text-amber-300" />
-            <span>High-ROI Skill Unlockers ({unlocksList.length})</span>
+            <span>Skill opportunities ({unlocksList.length})</span>
           </button>
 
           <button
-            onClick={() => setActiveSubTab('sprints')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
-              activeSubTab === 'sprints'
-                ? 'bg-blue-500 text-white shadow-lg scale-102'
-                : 'bg-white/10 text-blue-200 hover:bg-white/20'
-            }`}
+            aria-pressed={activeSubTab === 'sprints'} onClick={() => setActiveSubTab('sprints')}
+            className=""
           >
             <Clock className="w-3.5 h-3.5 text-purple-300" />
-            <span>Active Learning Sprints ({activeSprintsList.length})</span>
+            <span>My learning sprints ({activeSprintsList.length})</span>
           </button>
 
           <button
-            onClick={() => setActiveSubTab('demands')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
-              activeSubTab === 'demands'
-                ? 'bg-blue-500 text-white shadow-lg scale-102'
-                : 'bg-white/10 text-blue-200 hover:bg-white/20'
-            }`}
+            aria-pressed={activeSubTab === 'demands'} onClick={() => setActiveSubTab('demands')}
+            className=""
           >
             <TrendingUp className="w-3.5 h-3.5 text-emerald-300" />
-            <span>Live Skill Demand Meter</span>
+            <span>Market demand</span>
           </button>
 
           <button
-            onClick={() => setActiveSubTab('boom')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
-              activeSubTab === 'boom'
-                ? 'bg-blue-500 text-white shadow-lg scale-102'
-                : 'bg-white/10 text-blue-200 hover:bg-white/20'
-            }`}
+            aria-pressed={activeSubTab === 'boom'} onClick={() => setActiveSubTab('boom')}
+            className=""
           >
             <Flame className="w-3.5 h-3.5 text-orange-400" />
-            <span>2025/2026 Tech Boom Radar</span>
+            <span>Emerging skills</span>
           </button>
         </div>
-      </div>
+
+      {!marketIntel && <section className="dashboard-data-empty" role="status"><span className="dashboard-soft-icon is-blue"><TrendingUp size={21} /></span><div><h2>Your growth plan starts with market insight</h2><p>Rescan the market to find skill gaps and learning sprints for your career goals.</p></div><button className="dashboard-button" onClick={handleRefresh} disabled={refreshing}><RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />{refreshing ? 'Rescanning…' : 'Rescan market'}</button></section>}
 
       {/* VIEW 1: High-ROI Skill Unlockers */}
       {activeSubTab === 'unlocks' && (
@@ -257,10 +186,10 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-                Targeted Proof-of-Work Project Blueprints
+                Projects that move you forward
               </h2>
               <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                Recruiters value deployed proof-of-work over certificates. Build these micro-systems to bridge your gap.
+                Choose a focused project to practise a skill and create evidence for your next application.
               </p>
             </div>
 
@@ -364,7 +293,7 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
                     >
                       <div className="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400">
                         <Code2 className="w-4 h-4" />
-                        <span>Hands-On Proof-of-Work Micro-Project</span>
+                        <span>A project to build</span>
                       </div>
 
                       <h4 className="text-xs sm:text-sm font-bold leading-snug" style={{ color: 'var(--text-primary)' }}>
@@ -619,12 +548,12 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
               </p>
             </div>
             <span className="text-xs font-semibold text-gray-400">
-              {marketIntel?.market_summary.top_demanded_skills.length || 0} Key Skills Tracked
+              {marketIntel?.market_summary?.top_demanded_skills?.length || 0} Key Skills Tracked
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(marketIntel?.market_summary.top_demanded_skills || []).map((sk, idx) => (
+            {(marketIntel?.market_summary?.top_demanded_skills || []).map((sk, idx) => (
               <div
                 key={idx}
                 className="p-4 rounded-2xl border flex flex-col justify-between gap-3 text-xs transition-all hover:border-blue-400"
@@ -688,7 +617,7 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {(marketIntel?.market_summary.emerging_boom_technologies || []).map((boom, idx) => (
+            {(marketIntel?.market_summary?.emerging_boom_technologies || []).map((boom, idx) => (
               <div
                 key={idx}
                 className="p-6 rounded-3xl border space-y-3.5 bg-gradient-to-br from-gray-50 to-indigo-50/30 dark:from-gray-900/40 dark:to-indigo-950/20 shadow-sm"
@@ -729,3 +658,4 @@ export const CareerGrowthHub: React.FC<CareerGrowthHubProps> = ({
     </div>
   );
 };
+
