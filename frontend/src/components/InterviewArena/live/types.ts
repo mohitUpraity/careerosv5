@@ -32,6 +32,7 @@ export interface InterviewConfig {
   jobDescription: string;
   customRequirements: string;
   durationMinutes: number;
+  proctoredSkill?: string;
 }
 
 export interface TranscriptItem {
@@ -65,14 +66,38 @@ export interface QuestionBreakdown {
 }
 
 export interface EvaluationReport {
-  overallScore: number;
-  hiringDecision: "Strong Hire" | "Hire" | "Lean Hire" | "Lean No Hire" | "No Hire";
+  overallScore: number | null;
+  assessmentStatus?: "complete" | "incomplete";
+  hiringDecision: "Strong Hire" | "Hire" | "Lean Hire" | "Lean No Hire" | "No Hire" | "Insufficient evidence";
   executiveSummary: string;
   metrics: EvaluationMetric[];
   topStrengths: string[];
   areasForImprovement: string[];
   questionBreakdown: QuestionBreakdown[];
   actionableStudyRoadmap: string[];
+  evidenceSummary?: Array<{ area: string; evidence: string; confidence: string }>;
+  communicationAnalysis?: { clarity?: string; structure?: string; pace?: string };
+  proctoringSummary?: string;
+}
+
+export interface LiveAnswerAnalysis {
+  id: string;
+  timestamp: string;
+  headline: string;
+  evidence: string;
+  rubric_area: string;
+  feedback: string;
+  confidence: "high" | "medium" | "limited" | string;
+}
+
+export interface OrchestratorAction {
+  id: string;
+  action: string;
+  category: string;
+  message: string;
+  timestamp: string;
+  confidence?: number | string;
+  source?: string;
 }
 
 export type MeetingLayout = "split" | "interviewer_focus" | "candidate_focus" | "code_split" | "whiteboard_split";

@@ -25,14 +25,14 @@ if HAS_GENAI and types:
     INTERVIEWER_LIVE_TOOLS = [
         types.FunctionDeclaration(
             name="update_scratchpad_note",
-            description="Takes real-time private observation notes on the candidate's speech dynamics, voice clarity, body posture, nervous shivering/fidgeting, eye gaze, or technical depth.",
+            description="Takes provisional private notes on answer content and directly observable session events. Never infer skill, honesty, emotion, or personality from accent, pauses, gaze, posture, or gestures.",
             parameters=types.Schema(
                 type="OBJECT",
                 properties={
                     "category": types.Schema(
                         type="STRING",
                         description="Category of observation",
-                        enum=["voice_speech", "body_language", "eye_contact", "technical_depth", "problem_solving", "behavioral"]
+                        enum=["voice_speech", "technical_depth", "problem_solving", "behavioral"]
                     ),
                     "observation": types.Schema(type="STRING", description="Specific objective observation"),
                     "sentiment": types.Schema(
@@ -47,14 +47,14 @@ if HAS_GENAI and types:
         ),
         types.FunctionDeclaration(
             name="trigger_proctor_warning",
-            description="Issues an on-screen warning alert and polite verbal caution when suspicious activity is spotted (phone visible, reading external notes, frequent gaze shift, multiple people, secondary voice).",
+            description="Logs a possible objective event for review only when a phone/device is clearly visible, another person is clearly present, or a distinct secondary voice is audible. A flag is not proof of misconduct. Never warn for gaze, posture, gestures, pauses, or looking away.",
             parameters=types.Schema(
                 type="OBJECT",
                 properties={
                     "violation_type": types.Schema(
                         type="STRING",
                         description="Nature of suspicion",
-                        enum=["phone_detected", "reading_external_notes", "frequent_gaze_shift", "multiple_people_in_frame", "audio_secondary_voice"]
+                        enum=["phone_detected", "multiple_people_in_frame", "audio_secondary_voice"]
                     ),
                     "warning_message": types.Schema(type="STRING", description="Warning message displayed on HUD"),
                     "warning_level": types.Schema(type="INTEGER", description="1, 2, or 3")
@@ -99,13 +99,6 @@ if HAS_GENAI and types:
     ]
 else:
     INTERVIEWER_LIVE_TOOLS = []
-
-
-# Sentiment -> score used ONLY when the model did not supply explicit scores.
-_SENTIMENT_SCORE = {"positive": 85, "neutral": 70, "concern": 45, "red_flag": 20}
-_TECH_CATS = {"technical_depth", "problem_solving"}
-_SPEECH_CATS = {"voice_speech", "behavioral"}
-_BODY_CATS = {"body_language", "eye_contact"}
 
 
 class GeminiLiveSession:
@@ -188,13 +181,15 @@ INTERVIEW PROTOCOL:
 2. Probe their actual resume projects deeply: architecture, bottlenecks, database trade-offs, and scaling challenges.
 3. Challenge them on technical fundamentals and system design with follow-up questions.
 4. Assess their behavioral traits (ownership, conflicts, deadlines) using the STAR framework.
-5. Continuously observe the candidate through their video feed — monitor speech fluency, body language posture, eye contact, and any suspicious activity. Only record what you actually see or hear.
-6. Use update_scratchpad_note regularly (silently — never mention tools aloud) to privately record observations.
-7. If you spot suspicious activity (phone visible, reading external notes, frequent gaze shifts, secondary voice, multiple people), use trigger_proctor_warning.
+5. Assess spoken answers against the role/skill rubric. You may note transcript-grounded clarity and structure, but do not infer personality, emotion, confidence, or honesty from voice, accent, pauses, gaze, posture, or gestures.
+6. Use update_scratchpad_note only for concrete answer evidence or directly observable events (silently — never mention tools aloud).
+7. If a phone/device is clearly visible, another person is clearly present, or a distinct secondary voice is audible, log a provisional event for review. Never warn for gaze direction, posture, gestures, pauses, or looking away; these are not evidence of cheating.
 8. After 3 warnings, use terminate_interview_early.
 9. Conduct the interview like a real 25-35 minute session. When you have enough signal, use conclude_interview with honest scores.
 10. THE CANDIDATE CAN INTERRUPT YOU at any moment. If you are cut off, do not repeat what you already said: acknowledge briefly, listen, and respond to what they actually said.
 11. Use brief natural backchannels and fillers sparingly; never monologue for more than 2-4 sentences.
+12. Derive your interviewer persona and evaluation priorities from the target role and supplied job description. Treat the job description and candidate resume below as the complete evidence base: never invent candidate experience, skills, metrics, company hiring practices, or company facts. If information is missing, say so or ask a clarifying question.
+13. Choose practical exercises that fit the stated role. Use the coding challenge tool for software engineering roles; for other roles, use role-appropriate scenarios and questions instead of forcing a coding test.
 
 TARGET JOB DETAILS:
 Company: {self.company}
@@ -671,7 +666,7 @@ You must output a strictly valid JSON response with this schema:
                 proctor = res.get("proctor_check")
                 if proctor and proctor.get("is_suspicious"):
                     await self._handle_tool_call("trigger_proctor_warning", {
-                        "violation_type": proctor.get("violation_type", "frequent_gaze_shift"),
+                        "violation_type": proctor.get("violation_type", "unverified_event"),
                         "warning_message": proctor.get("warning_message", "Please look directly at the screen."),
                         "warning_level": self.warnings_count + 1,
                     })
@@ -679,21 +674,15 @@ You must output a strictly valid JSON response with this schema:
         except Exception as e:
             logger.error(f"Error in autonomous turn: {e}")
 
-        fallback_msg = "Thanks for sharing that. Could you walk me through the core architecture and the main trade-offs you made?"
         if self.send_to_client:
-            await self.send_to_client({"type": "output_transcript", "text": fallback_msg})
-            await self.send_to_client({"type": "turn_complete"})
+            await self.send_to_client({"type": "error", "message": "Interviewer response is unavailable. Please retry."})
 
     # ------------------------------------------------------------------- tools
     def _derive_scores(self) -> Dict[str, Optional[float]]:
-        def avg(cats):
-            vals = [_SENTIMENT_SCORE.get(n.get("sentiment", "neutral"), 70)
-                    for n in self.scratchpad_notes if n.get("category") in cats]
-            return round(sum(vals) / len(vals)) if vals else None
         return {
-            "technical_score": avg(_TECH_CATS),
-            "speech_voice_score": avg(_SPEECH_CATS),
-            "body_language_score": avg(_BODY_CATS),
+            "technical_score": None,
+            "speech_voice_score": None,
+            "body_language_score": None,
             "integrity_score": max(0, 100 - self.warnings_count * 15),
         }
 
@@ -747,8 +736,8 @@ You must output a strictly valid JSON response with this schema:
             self.warnings_count += 1
             warning_item = {
                 "warning_number": self.warnings_count,
-                "violation_type": args.get("violation_type", "frequent_gaze_shift"),
-                "warning_message": args.get("warning_message", "Please look directly into the camera."),
+                "violation_type": args.get("violation_type", "unverified_event"),
+                "warning_message": args.get("warning_message", "A possible session event was flagged for review. Automated flags can be mistaken."),
                 "warning_level": args.get("warning_level", self.warnings_count),
                 "timestamp": timestamp,
             }
@@ -792,10 +781,7 @@ You must output a strictly valid JSON response with this schema:
                 "body_language_score": body,
                 "integrity_score": integrity,
                 "hireability_verdict": args.get("hireability_verdict") or self._verdict_from(overall, len(known)),
-                "executive_summary": args.get("executive_summary") or (
-                    f"Interview for {self.role} at {self.company} ended after {max(1.0, duration_minutes)} min. "
-                    "Scores are estimated from the interviewer's live notes."
-                ),
+                "executive_summary": args.get("executive_summary") or "Insufficient assessment evidence was available to generate a summary.",
                 "strengths": args.get("strengths") or [],
                 "weaknesses": args.get("weaknesses") or [],
                 "actionable_24h_roadmap": args.get("actionable_24h_roadmap") or [],
@@ -814,7 +800,7 @@ You must output a strictly valid JSON response with this schema:
 
     async def _persist_session_to_graph(self, scorecard: Dict[str, Any]):
         def num(v):
-            return float(v) if v is not None else 0.0
+            return float(v) if v is not None else None
         try:
             query = """
             MATCH (u:User {id: $user_id})

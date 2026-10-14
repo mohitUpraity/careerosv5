@@ -30,7 +30,7 @@ interface MeetingControlsProps {
   isScreenSharing: boolean;
   captionsEnabled: boolean;
   activeLayout: MeetingLayout;
-  activeSideTab: "people" | "chat" | "rubric" | "notes" | "proctor" | null;
+  activeSideTab: "people" | "chat" | "rubric" | "notes" | "proctor" | "analysis" | null;
   isHandRaised: boolean;
   userVolume: number;
   isFullscreen?: boolean;
@@ -42,7 +42,7 @@ interface MeetingControlsProps {
   onToggleHandRaise: () => void;
   onToggleFullscreen?: () => void;
   onSelectLayout: (layout: MeetingLayout) => void;
-  onToggleSideTab: (tab: "people" | "chat" | "rubric" | "notes" | "proctor") => void;
+  onToggleSideTab: (tab: "people" | "chat" | "rubric" | "notes" | "proctor" | "analysis") => void;
   onTriggerReaction: (emoji: string) => void;
   onEndCall: () => void;
 }
@@ -257,8 +257,13 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         </button>
       </div>
 
-      {/* Right Side Drawer Toggles */}
-      <div className="hidden lg:flex items-center space-x-1">
+        {/* Right Side Drawer Toggles */}
+        <div className="hidden lg:flex items-center space-x-1">
+        <button
+          onClick={() => onToggleSideTab("analysis")}
+          className={`relative p-2.5 rounded-full transition-colors ${activeSideTab === "analysis" ? "bg-purple-500/20 text-purple-300" : "text-gray-300 hover:bg-[#3c4043] hover:text-white"}`}
+          title="Live answer analysis and evidence"
+        ><Info className="w-5 h-5" /></button>
         <button
           onClick={() => onToggleSideTab("proctor")}
           className={`relative p-2.5 rounded-full transition-colors ${
@@ -266,7 +271,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
               ? "bg-[#8ab4f8]/20 text-[#8ab4f8]"
               : "text-gray-300 hover:bg-[#3c4043] hover:text-white"
           }`}
-          title="Proctored Mode & Noticing Radar"
+          title="Proctoring and session events"
         >
           {warningCount > 0 ? (
             <ShieldCheck className="w-5 h-5 text-amber-400" />

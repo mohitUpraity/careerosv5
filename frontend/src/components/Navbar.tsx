@@ -36,7 +36,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = (props) => {
-  const { user, activeProfile, logout, switchProfile } = useAuth();
+  const { user, activeProfile, logout } = useAuth();
   const [openMenu, setOpenMenu] = useState<'account' | 'sync' | null>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const syncRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
   const currentPage = workspacePages.find((page) => page.id === props.activeTab) || workspacePages[0];
   const PageIcon = currentPage.icon;
   const profileName = activeProfile.name || user?.displayName || 'Your workspace';
-  const profileImage = activeProfile.type === 'coworker' ? activeProfile.avatar : user?.photoURL;
+  const profileImage = user?.photoURL;
   const initials = profileName
     .trim()
     .split(/\s+/)
@@ -237,7 +237,7 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
             </span>
             <span className="dashboard-account-summary">
               <strong title={profileName}>{profileName}</strong>
-              <small>{activeProfile.type === 'coworker' ? 'Benchmark profile' : 'Personal workspace'}</small>
+              <small>Personal workspace</small>
             </span>
             <ChevronDown size={14} />
           </button>
@@ -251,23 +251,6 @@ export const Navbar: React.FC<NavbarProps> = (props) => {
                 <UserCheck size={16} />
                 Profile & preferences
               </button>
-              <div className="dashboard-account-modes">
-                <span>Profile mode</span>
-                <button
-                  onClick={() => runAction(() => switchProfile('candidate'))}
-                  aria-pressed={activeProfile.type === 'candidate'}
-                >
-                  <UserCheck size={16} />
-                  Candidate
-                </button>
-                <button
-                  onClick={() => runAction(() => switchProfile('coworker'))}
-                  aria-pressed={activeProfile.type === 'coworker'}
-                >
-                  <ShieldCheck size={16} />
-                  Benchmark
-                </button>
-              </div>
               <div className="dashboard-account-divider" />
               <button disabled={props.loading} onClick={() => runAction(props.onRefreshData)}>
                 <RefreshCw size={16} className={props.loading ? 'animate-spin' : ''} />

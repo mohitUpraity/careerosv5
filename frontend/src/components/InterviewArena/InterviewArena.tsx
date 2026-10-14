@@ -43,6 +43,7 @@ import {
 
 interface InterviewArenaProps {
   initialJob?: { company: string; role: string; jd: string };
+  verificationSkill?: string | null;
   onTailorResume?: (role: string, company: string, jd: string) => void;
   onNavigateToTab?: (tab: string) => void;
   onErrorToast?: (msg: string) => void;
@@ -53,6 +54,7 @@ type ArenaTab = 'live' | 'arena' | 'intelligence';
 
 export const InterviewArena: React.FC<InterviewArenaProps> = ({
   initialJob,
+  verificationSkill,
   onTailorResume,
   onNavigateToTab,
   onErrorToast,
@@ -61,8 +63,8 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
   const { getAuthHeaders, activeProfile } = useAuth();
   
   const [currentTab, setCurrentTab] = useState<ArenaTab>('live');
-  const [targetCompany, setTargetCompany] = useState<string>(initialJob?.company || 'Apponward Technologies');
-  const [targetRole, setTargetRole] = useState<string>(initialJob?.role || 'Senior Backend Engineer');
+  const [targetCompany, setTargetCompany] = useState<string>(initialJob?.company || '');
+  const [targetRole, setTargetRole] = useState<string>(initialJob?.role || '');
   const [targetJd, setTargetJd] = useState<string>(initialJob?.jd || '');
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   const [draftTarget, setDraftTarget] = useState({ company: targetCompany, role: targetRole });
@@ -97,6 +99,64 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
       setTargetJd(initialJob.jd || '');
     }
   }, [initialJob]);
+
+  useEffect(() => {
+    if (!verificationSkill) return;
+    setTargetCompany('CareerOS Skill Assessment');
+    setTargetRole(`${verificationSkill} Specialist`);
+    setTargetJd(`Conduct a rigorous, skill-specific assessment of the candidate's claimed ${verificationSkill} ability. Ask practical, increasingly difficult questions that require precise explanations, tradeoffs, debugging, and applied examples. Probe vague answers with follow-ups. Do not give hints. Evaluate only demonstrated ${verificationSkill} knowledge.`);
+    setRoundType('tech');
+    setDifficulty('hard');
+    setCurrentTab('live');
+  }, [verificationSkill]);
+
+  const handleProctoredSkillResult = async (result: {
+    report: import('./live/types').EvaluationReport;
+    warnings: number;
+    disqualified: boolean;
+    candidateTurns: number;
+    codeArtifact: string;
+  }) => {
+    if (!verificationSkill) return;
+    const codingSkill = /python|javascript|typescript|java|c\+\+|c#|sql|programming|coding|react|node|fastapi|go\b|rust|ruby|php|kotlin|swift/i.test(verificationSkill);
+    const score = result.report.overallScore;
+    if (score === null || result.report.assessmentStatus === 'incomplete') {
+      onSuccessToast?.(`${verificationSkill} remains claimed. The interview did not capture enough evidence to issue a verification score.`);
+      return;
+    }
+    const passed = score >= 75
+      && result.candidateTurns >= 5
+      && result.warnings === 0
+      && !result.disqualified
+      && (!codingSkill || result.codeArtifact.trim().length >= 30);
+    if (!passed) {
+      onSuccessToast?.(`${verificationSkill} remains claimed. Verification requires 75/100, five demonstrated answers, zero proctor warnings${codingSkill ? ', and a submitted code solution' : ''}.`);
+      return;
+    }
+    try {
+      const metricScore = (fragment: string) => {
+        const item = result.report.metrics.find(metric => metric.category.toLowerCase().includes(fragment));
+        return Math.round(item?.score ?? score);
+      };
+      await apiService.recordSkillVerification({
+        skill_name: verificationSkill,
+        difficulty_tier: 'L3',
+        verification_score: Math.round(score),
+        proctoring_score: 100,
+        radar_scores: {
+          system_architecture: metricScore('architecture'),
+          code_efficiency: metricScore('technical'),
+          debugging_speed: metricScore('problem'),
+          communication: metricScore('communication'),
+          problem_solving: metricScore('problem'),
+        },
+        feedback_summary: `Passed a live, camera-and-microphone proctored ${verificationSkill} assessment. ${result.report.executiveSummary}`,
+      }, getAuthHeaders());
+      onSuccessToast?.(`${verificationSkill} verified with a live proctored score of ${Math.round(score)}.`);
+    } catch (error: any) {
+      onErrorToast?.(error.message || `Could not save ${verificationSkill} verification.`);
+    }
+  };
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -176,6 +236,12 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
     }
   };
 
+  // Selecting an opportunity and opening Interview should immediately prepare its dossier.
+  useEffect(() => {
+    if (verificationSkill || !targetCompany.trim() || !targetRole.trim()) return;
+    void handleFetchJobIntel();
+  }, [targetCompany, targetRole, targetJd]);
+
   // 3. Start Mock Interview Session
   const handleStartSession = async () => {
     if (!targetCompany.trim()) {
@@ -238,6 +304,7 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
           step: session.current_step,
           total_steps: session.total_steps,
           history: session.history,
+          job_description: targetJd,
         },
         headers
       );
@@ -342,7 +409,7 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
             </button>
           </div>} />
         
-        <div className="ws-tabbar" style={{ borderColor: 'var(--border-primary)' }}>
+        <div className={`ws-tabbar ${verificationSkill ? 'hidden' : ''}`} style={{ borderColor: 'var(--border-primary)' }}>
           <button
             aria-pressed={currentTab === 'live'}
             onClick={() => setCurrentTab('live')}
@@ -399,6 +466,8 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
           jobDescription={targetJd}
           onBack={() => setCurrentTab('arena')}
           onTailorResume={onTailorResume}
+          skillAssessment={verificationSkill || undefined}
+          onSkillAssessmentResult={handleProctoredSkillResult}
         />
       )}
 

@@ -5,28 +5,10 @@ export interface ProfileMode {
   id: string;
   name: string;
   role: string;
-  type: 'candidate' | 'coworker';
+  type: 'candidate';
   avatar: string;
   githubUser: string;
 }
-
-const DEFAULT_CANDIDATE: ProfileMode = {
-  id: '',
-  name: 'Candidate',
-  role: 'Software Engineer',
-  type: 'candidate',
-  avatar: '',
-  githubUser: ''
-};
-
-const COWORKER_BENCHMARK: ProfileMode = {
-  id: 'coworker-benchmark-0000-0000-000000000002',
-  name: 'Coworker (Benchmark Peer)',
-  role: 'Staff ML Engineer',
-  type: 'coworker',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  githubUser: 'coworker-benchmark'
-};
 
 interface AuthContextType {
   user: User | null;
@@ -36,7 +18,6 @@ interface AuthContextType {
   authLoading: boolean;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
-  switchProfile: (profileType: 'candidate' | 'coworker') => void;
   updateActiveProfile: (updates: Partial<ProfileMode>) => void;
   getAuthHeaders: () => Record<string, string>;
 }
@@ -45,8 +26,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ANONYMOUS_PROFILE: ProfileMode = {
   id: '',
-  name: 'Candidate',
-  role: 'Software Engineer',
+  name: '',
+  role: '',
   type: 'candidate',
   avatar: '',
   githubUser: ''
@@ -67,8 +48,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIdToken(token);
           const profile: ProfileMode = {
             id: firebaseUser.uid,
-            name: firebaseUser.displayName || 'Candidate',
-            role: 'Software Engineer',
+            name: firebaseUser.displayName || '',
+            role: '',
             type: 'candidate' as const,
             avatar: firebaseUser.photoURL || '',
             githubUser: ''
@@ -110,8 +91,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIdToken(token);
       setActiveProfile({
         id: result.user.uid,
-        name: result.user.displayName || 'Candidate',
-        role: 'Software Engineer',
+        name: result.user.displayName || '',
+        role: '',
         type: 'candidate',
         avatar: result.user.photoURL || '',
         githubUser: ''
@@ -127,25 +108,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setIdToken(null);
     setActiveProfile(ANONYMOUS_PROFILE);
-  };
-
-  const switchProfile = (profileType: 'candidate' | 'coworker') => {
-    if (profileType === 'candidate') {
-      if (user) {
-        setActiveProfile({
-          id: user.uid,
-          name: user.displayName || 'Candidate',
-          role: 'Software Engineer',
-          type: 'candidate',
-          avatar: user.photoURL || '',
-          githubUser: ''
-        });
-      } else {
-        setActiveProfile(ANONYMOUS_PROFILE);
-      }
-    } else {
-      setActiveProfile(COWORKER_BENCHMARK);
-    }
   };
 
   const updateActiveProfile = (updates: Partial<ProfileMode>) => {
@@ -176,7 +138,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authLoading,
         loginWithGoogle,
         logout,
-        switchProfile,
         updateActiveProfile,
         getAuthHeaders,
       }}

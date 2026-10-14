@@ -260,8 +260,8 @@ class ClaimUsernameRequest(BaseModel):
 class VerifySkillRequest(BaseModel):
     skill_name: str = Field(..., description="Name of the skill to verify")
     difficulty_tier: Optional[str] = Field("L2", description="L1, L2, or L3")
-    verification_score: Optional[int] = Field(90, description="Verification test score 0-100")
-    proctoring_score: Optional[int] = Field(100, description="Proctoring integrity score 0-100")
+    verification_score: Optional[int] = Field(None, description="Verification test score 0-100")
+    proctoring_score: Optional[int] = Field(None, description="Proctoring integrity score 0-100")
     audio_proof_url: Optional[str] = Field(None, description="URL or key to audio highlight snippet")
     radar_scores: Optional[Dict[str, int]] = Field(None, description="Radar chart rubrics")
     feedback_summary: Optional[str] = Field(None, description="AI feedback summary of round")
@@ -323,12 +323,14 @@ async def verify_skill_record(
     Stores audio proof, proctoring score, difficulty tier, and radar rubric breakdown.
     """
     user_id = current_user["id"]
+    if payload.verification_score is None or payload.proctoring_score is None or payload.radar_scores is None:
+        raise HTTPException(status_code=400, detail="Verified assessment scores and rubric evidence are required.")
     res = await profile_service.record_skill_verification(
         user_id=user_id,
         skill_name=payload.skill_name,
         difficulty_tier=payload.difficulty_tier or "L2",
-        verification_score=payload.verification_score or 90,
-        proctoring_score=payload.proctoring_score or 100,
+        verification_score=payload.verification_score,
+        proctoring_score=payload.proctoring_score,
         audio_proof_url=payload.audio_proof_url,
         radar_scores=payload.radar_scores,
         feedback_summary=payload.feedback_summary

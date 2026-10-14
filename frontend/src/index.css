@@ -285,6 +285,26 @@
    Print Styles for Resume Studio
    ────────────────────────────────────────────── */
 @media print {
+  /* Print only the resume canvas. The studio is embedded in the dashboard,
+     so hiding just its controls still leaves the surrounding app in the PDF. */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .dashboard-resume-canvas-layout,
+  .dashboard-resume-canvas-layout * {
+    visibility: visible !important;
+  }
+
+  .dashboard-resume-canvas-layout {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   body {
     background: #ffffff !important;
     color: #000000 !important;
@@ -301,6 +321,8 @@
   }
 
   .resume-paper {
+    position: relative !important;
+    width: 100% !important;
     border: none !important;
     box-shadow: none !important;
     margin: 0 !important;

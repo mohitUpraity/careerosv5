@@ -15,6 +15,7 @@ import { ProfilePreferences } from './components/ProfilePreferences/ProfilePrefe
 import { CareerGrowthHub } from './components/CareerGrowth/CareerGrowthHub';
 import { InterviewArena } from './components/InterviewArena';
 import { BrainChat } from './components/BrainChat/BrainChat';
+import { SkillProof } from './components/SkillProof/SkillProof';
 import { StartFreshModal } from './components/StartFreshModal';
 import { SyncGitHubModal } from './components/SyncGitHubModal';
 import { SyncResumeModal } from './components/SyncResumeModal';
@@ -51,15 +52,16 @@ const MainLayout: React.FC = () => {
 
   // Cross-component parameters
   const [resumeParams, setResumeParams] = useState<{ role: string; company: string; jd: string }>({
-    role: 'Senior Backend / Full Stack Engineer',
-    company: 'Apponward Technologies',
+    role: '',
+    company: '',
     jd: '',
   });
   const [interviewParams, setInterviewParams] = useState<{ role: string; company: string; jd: string }>({
-    role: 'Senior Backend Engineer',
-    company: 'Apponward Technologies',
+    role: '',
+    company: '',
     jd: '',
   });
+  const [verificationSkill, setVerificationSkill] = useState<string | null>(null);
   const [referralCompanyFilter, setReferralCompanyFilter] = useState<string>('');
   const [graphFilterQuery, setGraphFilterQuery] = useState<string>('');
 
@@ -95,7 +97,7 @@ const MainLayout: React.FC = () => {
     }
   };
 
-  // Reload when profile changes (Candidate vs Coworker Benchmark)
+  // Reload when the authenticated profile changes.
   useEffect(() => {
     loadProfileData();
   }, [activeProfile.id]);
@@ -106,7 +108,18 @@ const MainLayout: React.FC = () => {
   };
 
   const handleNavigateToInterview = (role: string, company: string, jd: string) => {
+    setVerificationSkill(null);
     setInterviewParams({ role, company, jd });
+    setActiveTab('interview');
+  };
+
+  const handleVerifySkill = (skill: string) => {
+    setVerificationSkill(skill);
+    setInterviewParams({
+      role: `${skill} Specialist`,
+      company: 'CareerOS Skill Assessment',
+      jd: `Conduct a rigorous, skill-specific assessment of the candidate's claimed ${skill} ability. Ask practical, increasingly difficult questions that require precise explanations, tradeoffs, debugging, and applied examples. Probe vague answers with follow-ups. Do not give hints. Evaluate only demonstrated ${skill} knowledge.`,
+    });
     setActiveTab('interview');
   };
 
@@ -152,6 +165,9 @@ const MainLayout: React.FC = () => {
               onOpenSyncLinkedIn={() => setIsSyncLinkedInModalOpen(true)}
             />
           )}
+          {activeTab === 'skill-proof' && (
+            <SkillProof onStartAssessment={handleVerifySkill} onError={msg => addToast('error', msg)} />
+          )}
 
           {activeTab === 'growth' && (
             <CareerGrowthHub
@@ -164,6 +180,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'interview' && (
             <InterviewArena
               initialJob={interviewParams}
+              verificationSkill={verificationSkill}
               onTailorResume={handleSelectTailorResume}
               onNavigateToTab={(tab: string) => setActiveTab(tab as ActiveTab)}
               onErrorToast={(msg) => addToast('error', msg)}

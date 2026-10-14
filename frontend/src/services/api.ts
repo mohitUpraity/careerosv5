@@ -22,8 +22,8 @@ export const apiService = {
       if (!res.ok) throw new Error(`Failed to load graph (${res.status})`);
       return await res.json();
     } catch (err) {
-      console.warn("Graph fetch failed or timed out, returning fallback graph:", err);
-      return { nodes: [], links: [] };
+      console.warn("Graph fetch failed or timed out:", err);
+      throw err;
     }
   },
 
@@ -44,14 +44,8 @@ export const apiService = {
         ...data
       };
     } catch (err) {
-      console.warn("Analysis fetch failed or timed out, returning fallback:", err);
-      return {
-        repos_count: 0,
-        connections_count: 0,
-        alumni_count: 0,
-        top_skills: [],
-        graph_nodes_count: 0,
-      };
+      console.warn("Analysis fetch failed or timed out:", err);
+      throw err;
     }
   },
 
@@ -711,6 +705,7 @@ export const apiService = {
       step: number;
       total_steps: number;
       history?: any[];
+      job_description?: string;
     },
     headers: Record<string, string>
   ): Promise<{

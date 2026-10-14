@@ -82,104 +82,49 @@ type SectionTab =
   | 'honors';
 
 const DEFAULT_PREFERENCES: UserPreferences = {
-  primary_role: 'Backend Engineer',
-  priority_domain: 'Distributed Systems & Cloud',
-  target_country: 'India',
-  preferred_cities: ['Bengaluru', 'Noida / Delhi NCR', 'Hyderabad', 'Pune', 'Mumbai', 'Remote India'],
-  work_modes: ['Remote', 'Hybrid', 'Onsite'],
-  preferred_roles: ['Backend Engineer', 'Full Stack Developer', 'Software Engineer', 'AI/ML Engineer'],
-  opportunity_types: ['jobs', 'internships', 'hackathons', 'opensource'],
-  experience_level: 'Fresher / 0-3 yrs',
-  min_salary: '₹8-18 LPA / $30k+ Remote',
-  priority_factor: 'best_fit',
-  dream_companies: ['Google', 'Razorpay', 'CRED', 'Stripe', 'Zepto'],
+  primary_role: '',
+  priority_domain: '',
+  target_country: '',
+  preferred_cities: [],
+  work_modes: [],
+  preferred_roles: [],
+  opportunity_types: [],
+  experience_level: '',
+  min_salary: '',
+  priority_factor: '',
+  dream_companies: [],
   blocked_companies: [],
-  notice_period: 'Immediate (0-15 days)',
-  work_authorization: 'Authorized in India & Remote Worldwide',
-  spoken_languages: ['English (Professional)', 'Hindi (Native)'],
+  notice_period: '',
+  work_authorization: '',
+  spoken_languages: [],
   career_goals: {
-    target_milestone: 'Targeting SDE-1 / SDE-2 High-Growth Role',
-    target_timeline: 'Next 30-90 Days',
-    target_ctc: '₹15-28 LPA',
-    focus_areas: ['Distributed Systems', 'Graph Databases', 'Agentic AI', 'High-Throughput APIs']
+    target_milestone: '',
+    target_timeline: '',
+    target_ctc: '',
+    focus_areas: []
   },
-  in_progress_skills: ['Kafka', 'Kubernetes', 'Vector Databases'],
+  in_progress_skills: [],
   custom_locations: []
 };
 
 const DEFAULT_PROFILE: UserProfileDetails = {
-  full_name: 'Candidate',
-  is_public: true,
+  full_name: '',
+  is_public: false,
   email: '',
   phone: '',
-  headline: 'Software Engineer | Python, FastAPI, React & Graph Systems',
-  location: 'Bengaluru, India',
-  bio: 'Software engineer passionate about building high-throughput backends, graph algorithms, and AI-powered developer workflows.',
+  headline: '',
+  location: '',
+  bio: '',
   github_username: '',
   github_url: '',
   linkedin_url: '',
   portfolio_url: '',
-  education: [
-    {
-      university: 'Anand Engineering College',
-      degree: 'B.Tech in Computer Science & Engineering',
-      field_of_study: 'Computer Science',
-      start_date: '2021',
-      end_date: '2025',
-      gpa: '8.5'
-    }
-  ],
-  experience: [
-    {
-      company: 'DRDO ADRDE',
-      role: 'Cybersecurity & Software Engineering Intern',
-      location: 'Agra, India',
-      start_date: 'Jun 2024',
-      end_date: 'Aug 2024',
-      is_current: false,
-      description: 'Engineered real-time anomalous network socket detection and automated packet analysis pipelines using Python and C++.'
-    }
-  ],
-  projects: [
-    {
-      name: 'CareerOS Navigation Engine',
-      description: 'Autonomous GraphRAG career copilot with Neo4j AST project verification and ATS scoring.',
-      repo_url: 'https://github.com/mohitupraity/careerosv5',
-      live_url: '',
-      primary_language: 'Python',
-      tech_stack: ['Python', 'FastAPI', 'Neo4j', 'React', 'TypeScript', 'Docker'],
-      stars: 4
-    },
-    {
-      name: 'RecoverIQ Incident Platform',
-      description: 'Automated cybersecurity threat intelligence and network socket analysis system.',
-      repo_url: '',
-      live_url: '',
-      primary_language: 'Python',
-      tech_stack: ['Python', 'C++', 'Docker', 'PostgreSQL'],
-      stars: 2
-    }
-  ],
-  certifications: [
-    {
-      name: 'Neo4j Certified Professional',
-      issuer: 'Neo4j GraphAcademy',
-      date: '2024',
-      url: ''
-    }
-  ],
-  achievements: [
-    {
-      title: 'Smart India Hackathon Finalist',
-      organization: 'AICTE & Ministry of Education',
-      date: '2024',
-      description: 'Built distributed intelligence solution selected among top national teams.'
-    }
-  ],
-  skills: [
-    'Python', 'FastAPI', 'Neo4j', 'React', 'Docker', 'PostgreSQL', 
-    'TypeScript', 'Redis', 'Git', 'REST APIs', 'System Design', 'GraphRAG'
-  ],
+  education: [],
+  experience: [],
+  projects: [],
+  certifications: [],
+  achievements: [],
+  skills: [],
   preferences: DEFAULT_PREFERENCES
 };
 
@@ -345,7 +290,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
         });
       }
     } catch (err: any) {
-      console.warn('Could not load profile from backend, using defaults:', err);
+      console.warn('Could not load profile from backend:', err);
     } finally {
       setLoading(false);
     }
@@ -366,8 +311,8 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
       }
       // Update AuthContext active profile display
       updateActiveProfile({
-        name: profile.full_name || 'Candidate',
-        role: profile.headline || profile.preferences.primary_role || 'Software Engineer',
+        name: profile.full_name || '',
+        role: profile.headline || profile.preferences.primary_role || '',
         githubUser: profile.github_username || ''
       });
       setHasUnsavedChanges(false);
@@ -1299,9 +1244,9 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
 
               {/* Add Custom Dream Company */}
               <div className="flex items-center gap-2">
-                <input aria-label="Type company name (e.g. Google, Stripe, CRED)..."
+                <input aria-label="Type a company name..."
                   type="text"
-                  placeholder="Type company name (e.g. Google, Stripe, CRED)..."
+                  placeholder="Type a company name..."
                   value={newDreamCompanyInput}
                   onChange={(e) => setNewDreamCompanyInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -1676,11 +1621,23 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                 <span><strong className="block text-xs" style={{ color: 'var(--text-primary)' }}>Public profile</strong><span className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{profile.is_public === false ? 'Only you can access this profile link.' : 'Anyone with your link can view your public profile.'}</span></span>
                 <input type="checkbox" checked={profile.is_public !== false} onChange={(event) => { setProfile(prev => ({ ...prev, is_public: event.target.checked })); setHasUnsavedChanges(true); }} aria-label="Make profile public" className="h-4 w-4 accent-blue-500" />
               </label>
-              <div className="grid sm:grid-cols-2 gap-3 border-t pt-3 text-[11px]" style={{ borderColor: 'var(--border-primary)' }}>
-                <div><strong className="text-emerald-700 dark:text-emerald-300">Shown publicly</strong><p className="mt-1" style={{ color: 'var(--text-secondary)' }}>Name, headline, bio, location, linked social URLs, skills, verified badges, projects, experience, education, certifications, achievements and completed interviews.</p></div>
-                <div><strong style={{ color: 'var(--text-primary)' }}>Kept private</strong><p className="mt-1" style={{ color: 'var(--text-secondary)' }}>Email, phone number, career preferences and private workspace data. LinkedIn post text is not currently stored as a public feed.</p></div>
+              <div className="border-t pt-3 space-y-2" style={{ borderColor: 'var(--border-primary)' }}>
+                <strong className="text-xs" style={{ color: 'var(--text-primary)' }}>Choose what appears on your public profile</strong>
+                <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2 pt-1">
+                  {([
+                    ['bio', 'About and bio'], ['location', 'Location'], ['links', 'Social links'], ['skills', 'Skills and verification'], ['projects', 'Projects and repository stats'], ['experience', 'Work experience'], ['education', 'Education'], ['credentials', 'Certifications and achievements'], ['activity', 'Interview activity and stats']
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex items-center justify-between gap-2 text-[11px] cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                      <span>{label}</span>
+                      <input type="checkbox" checked={profile.preferences.profile_visibility?.[key] !== false} onChange={event => {
+                        setProfile(prev => ({ ...prev, preferences: { ...prev.preferences, profile_visibility: { ...prev.preferences.profile_visibility, [key]: event.target.checked } } }));
+                        setHasUnsavedChanges(true);
+                      }} aria-label={`Show ${label} publicly`} className="h-3.5 w-3.5 accent-blue-500" />
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>Email, phone, career preferences and workspace data stay private. Save profile to publish your choices.</p>
               </div>
-              <p className="text-[10px] text-amber-700 dark:text-amber-300">Save profile to apply visibility changes. This switch controls the whole public profile; per-field visibility controls are not available yet.</p>
             </div>
           </div>
 
@@ -2012,6 +1969,14 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                       </h4>
                     </div>
 
+                    <label className="inline-flex items-center gap-1.5 text-[10px] cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                      <input type="checkbox" checked={proj.is_public !== false} onChange={event => {
+                        setProfile(prev => ({ ...prev, projects: (prev.projects || []).map((project, projectIndex) => projectIndex === idx ? { ...project, is_public: event.target.checked } : project) }));
+                        setHasUnsavedChanges(true);
+                      }} aria-label={`Show ${proj.name} project publicly`} className="h-3.5 w-3.5 accent-blue-500" />
+                      Public
+                    </label>
+
                     <button
                       type="button"
                       onClick={() => removeProj(idx)}
@@ -2260,7 +2225,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   <label className="block font-semibold mb-1">University / College Name *</label>
                   <input aria-label="University / College Name *"
                     type="text"
-                    placeholder="e.g. Anand Engineering College"
+                    placeholder="University or college name"
                     value={newEdu.university}
                     onChange={(e) => setNewEdu(prev => ({ ...prev, university: e.target.value }))}
                     className="input-base w-full text-xs"
@@ -2418,7 +2383,7 @@ export const ProfilePreferences: React.FC<ProfilePreferencesProps> = ({
                   <label className="block font-semibold mb-1">Company / Organization *</label>
                   <input aria-label="Company / Organization *"
                     type="text"
-                    placeholder="e.g. Google, DRDO ADRDE, Razorpay"
+                    placeholder="Company names"
                     value={newExp.company}
                     onChange={(e) => setNewExp(prev => ({ ...prev, company: e.target.value }))}
                     className="input-base w-full text-xs"

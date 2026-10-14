@@ -36,9 +36,10 @@ class RespondSessionRequest(BaseModel):
     step: int = 1
     total_steps: int = 5
     history: Optional[List[Dict[str, Any]]] = None
+    job_description: Optional[str] = ""
 
 class LiveRespondRequest(BaseModel):
-    company: Optional[str] = "Google"
+    company: Optional[str] = None
     role: Optional[str] = "Senior Software Engineer"
     candidate_answer: str
     current_question: Optional[str] = ""
@@ -141,7 +142,8 @@ async def respond_interview_session(
             candidate_answer=req.candidate_answer,
             step=req.step,
             total_steps=req.total_steps,
-            history=req.history
+            history=req.history,
+            job_description=req.job_description or ""
         )
         return {
             "status": "success",
@@ -161,8 +163,8 @@ async def live_interview_turn(
     """
     try:
         from app.services.llm_service import llm_service
-        company = req.company or "Google"
-        role = req.role or "Senior Software Engineer"
+        company = req.company or ""
+        role = req.role or ""
         jd = req.job_description or ""
         resume = req.resume_context or ""
 
@@ -188,12 +190,8 @@ PROTOCOL:
             "interviewer_reaction": "Insightful technical explanation."
         }
     except Exception as e:
-        logger.error(f"Live respond fallback notice: {e}")
-        return {
-            "status": "success",
-            "next_question": f"Thanks for that explanation. At {req.company or 'our team'}, how would you monitor latency spikes and maintain data consistency across distributed nodes?",
-            "interviewer_reaction": "Clear explanation."
-        }
+        logger.error(f"Live response generation failed: {e}")
+        raise HTTPException(status_code=503, detail="Live interview response is unavailable. Please retry.")
 
 @router.post("/session/finish", response_model=Dict[str, Any])
 async def finish_interview_session(
@@ -252,7 +250,7 @@ async def get_interview_history(
         }
     except Exception as e:
         logger.warning(f"Could not load interview history from Neo4j: {e}")
-        return {"status": "success", "history": []}
+        raise HTTPException(status_code=503, detail="Interview history is unavailable.") from e
 
 
 @router.post("/run-code", response_model=Dict[str, Any])
@@ -286,23 +284,141 @@ async def run_code_simulation(
         }
 
 
+@router.post("/analyze-live-turn", response_model=Dict[str, Any])
+async def analyze_live_turn(req: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a provisional, evidence-linked observation for one completed answer."""
+    answer = str(req.get("answer", "")).strip()
+    if not answer:
+        raise HTTPException(status_code=400, detail="Answer text is required.")
+    skill = str(req.get("skillAssessment") or "")
+    role = str(req.get("role") or "")
+    job_description = str(req.get("jobDescription") or "")[:1800]
+    question = str(req.get("question") or "")[:700]
+    prompt = f"""Analyze this completed interview answer for immediate candidate feedback. Assessment target: {skill or role or 'general interview'}.
+Job description / rubric context: {job_description or 'Use only general interview communication criteria.'}
+Question: {question or 'Not provided'}
+Answer: {answer[:5000]}
+Return JSON only with keys: {{"headline": "short neutral observation", "evidence": "brief exact paraphrase or quote from this answer", "rubric_area": "skill/rubric area tested", "feedback": "one actionable suggestion", "confidence": "high|medium|limited"}}.
+Ground every claim in this answer. Do not infer personality, honesty, emotion, intelligence, or competence from voice, accent, pauses, gaze, posture, or gestures. If evidence is insufficient, say so. This is provisional feedback, not a final score."""
+    try:
+        from app.services.llm_service import llm_service
+        result = await asyncio.wait_for(
+            llm_service.chat_json(system_prompt="You provide careful, candidate-facing interview feedback.", user_prompt=prompt),
+            timeout=8.0,
+        )
+        if isinstance(result, dict) and result.get("headline"):
+            return result
+    except Exception as exc:
+        logger.info("Live answer analysis unavailable: %s", exc)
+    return {
+        "headline": "Answer captured for the final skill review",
+        "evidence": answer[:240],
+        "rubric_area": skill or role or "Interview response",
+        "feedback": "The detailed analysis will appear in your final report.",
+        "confidence": "limited",
+    }
+
+
 @router.post("/evaluate-interview", response_model=Dict[str, Any])
 async def evaluate_interview_full(
-    req: Dict[str, Any]
+    req: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Generates the comprehensive 360-degree interview evaluation report and scorecard.
     """
     transcript = req.get("transcript", [])
-    role = req.get("role", "Senior Software Engineer")
-    seniority = req.get("seniority", "Senior")
+    role = req.get("role", "")
+    seniority = req.get("seniority", "")
     code_snippet = req.get("codeSnippet", "")
     notes = req.get("notes", "")
+    skill_assessment = req.get("skillAssessment")
+    interview_format = str(req.get("format", ""))
+    job_description = req.get("jobDescription", "")
+    # Count distinct canonical candidate utterances. The browser previously mixed
+    # Gemini transcripts with Web Speech captions, which could duplicate evidence.
+    candidate_answers = []
+    seen_answers = set()
+    for item in transcript if isinstance(transcript, list) else []:
+        if str(item.get("speaker", "")).lower() not in {"user", "candidate", "candidate (text)"}:
+            continue
+        text = str(item.get("text", "")).strip()
+        normalized = " ".join(text.lower().split())
+        if len(normalized.split()) >= 3 and normalized not in seen_answers:
+            seen_answers.add(normalized)
+            candidate_answers.append(text)
+    answer_word_count = sum(len(answer.split()) for answer in candidate_answers)
+    candidate_turns = len(candidate_answers)
+    live_analysis = req.get("liveAnalysis", [])
+    session_observations = req.get("sessionObservations", [])
+    orchestrator_actions = req.get("orchestratorActions", [])
+    ui_events = req.get("uiEvents", [])
+    proctor_events = req.get("proctorEvents", [])
+    disqualified = bool(req.get("disqualified", False))
+    termination_reason = str(req.get("terminationReason", ""))[:500]
+    warnings_issued = max(int(req.get("warningsIssued", 0) or 0), len(proctor_events))
+
+    if disqualified:
+        return {
+            "assessmentStatus": "incomplete",
+            "overallScore": None,
+            "hiringDecision": "Interview ended after proctor escalation",
+            "executiveSummary": (
+                "The interview ended after the proctoring escalation limit was reached. "
+                "This is a session-integrity outcome, not an assessment of the candidate's skill."
+            ),
+            "metrics": [],
+            "topStrengths": [],
+            "areasForImprovement": [],
+            "actionableStudyRoadmap": ["If you believe the automated flags were mistaken, review the recorded session events with the assessment administrator."],
+            "evidenceSummary": [{
+                "area": "Session integrity",
+                "evidence": termination_reason or f"{len(proctor_events)} proctor event(s) were recorded before the interview ended.",
+                "confidence": "review required",
+            }],
+            "communicationAnalysis": {"clarity": "Not scored", "structure": "Not scored", "pace": "Not scored"},
+            "proctoringSummary": "Interview ended after proctor escalation. Recorded events are reviewable and are not skill evidence.",
+            "integrityReport": {"status": "TERMINATED_FOR_REVIEW", "warningsIssued": warnings_issued, "events": proctor_events},
+        }
+
+    coding_format = "coding" in interview_format.lower() or "program" in str(skill_assessment or "").lower()
+    insufficient_evidence = candidate_turns < 3 or answer_word_count < 60 or (coding_format and not code_snippet.strip())
+    if insufficient_evidence:
+        reasons = []
+        if candidate_turns < 3 or answer_word_count < 60:
+            reasons.append("too few substantive candidate answers were captured")
+        if coding_format and not code_snippet.strip():
+            reasons.append("no code artifact was submitted for the coding portion")
+        report = {
+            "assessmentStatus": "incomplete",
+            "overallScore": None,
+            "hiringDecision": "Insufficient evidence",
+            "executiveSummary": (
+                "This session does not support a reliable skill score or hiring verdict because "
+                + " and ".join(reasons)
+                + ". The available answers below are preliminary evidence only; this is not a finding that the candidate lacks the skill."
+            ),
+            "metrics": [],
+            "topStrengths": [],
+            "areasForImprovement": ["Complete the missing interview evidence before interpreting performance."],
+            "questionBreakdown": [],
+            "actionableStudyRoadmap": ["Retake or resume the interview and complete the required role-specific questions and practical exercise."],
+            "evidenceSummary": [
+                {"area": "Session completeness", "evidence": f"Captured {candidate_turns} distinct substantive answers ({answer_word_count} words).", "confidence": "high"}
+            ],
+            "communicationAnalysis": {"clarity": "Not enough recorded speech to assess reliably.", "structure": "Not enough recorded speech to assess reliably.", "pace": "Insufficient audio transcript evidence."},
+            "proctoringSummary": "Logged events are shown separately and do not establish skill or intent.",
+        }
+        return report
 
     transcript_text = "\n".join([f"{item.get('speakerName', item.get('speaker', 'Speaker'))}: {item.get('text', '')}" for item in transcript])
 
     system_prompt = f"""You are a Principal Engineering Hiring Lead conducting a comprehensive post-interview evaluation.
 Target Role: {role} ({seniority})
+Interview format: {interview_format}
+Job requirements: {job_description[:5000] or 'No job description supplied.'}
+Assess only areas the interview actually tested. Cite specific answers or submitted work for every positive or negative claim. Distinguish “not demonstrated in this session” from “does not have the skill”; an unasked question or missing opportunity is not proof of weakness. Proctor events must never change skill scores or hiring verdicts.
+User interface events are operational context only and must never count as skill evidence or change scores.
 
 Evaluate the candidate based on their transcript and code:
 Transcript:
@@ -313,78 +429,75 @@ Candidate Code / System Design:
 
 Return STRICTLY a JSON object with this schema:
 {{
-  "overallScore": 85,
-  "hiringDecision": "Strong Hire / Hire / Lean Hire / No Hire",
-  "executiveSummary": "2-3 sentences summarizing performance",
+  "overallScore": null,
+  "assessmentStatus": "complete / incomplete",
+  "hiringDecision": "",
+  "executiveSummary": "",
   "metrics": [
-    {{ "category": "Technical Competence & Knowledge", "score": 88, "feedback": "Detailed feedback" }},
-    {{ "category": "Problem Solving & Algorithmic Thinking", "score": 85, "feedback": "Detailed feedback" }},
-    {{ "category": "System Design & Scalability", "score": 82, "feedback": "Detailed feedback" }},
-    {{ "category": "Code Quality & Edge Case Handling", "score": 80, "feedback": "Detailed feedback" }},
-    {{ "category": "Communication, Clarity & Collaboration", "score": 90, "feedback": "Detailed feedback" }}
+    {{ "category": "rubric area", "score": null, "feedback": "" }}
   ],
-  "topStrengths": ["Strength 1", "Strength 2"],
-  "areasForImprovement": ["Area 1", "Area 2"],
+  "topStrengths": [],
+  "areasForImprovement": [],
   "questionBreakdown": [
     {{
-      "topic": "System Design & Concurrency",
-      "candidateResponseQuality": "Solid",
-      "interviewerNotes": "Good understanding of caching layers and database trade-offs"
+      "topic": "tested topic",
+      "candidateResponseQuality": "",
+      "interviewerNotes": ""
     }}
   ],
-  "actionableStudyRoadmap": ["Step 1", "Step 2", "Step 3"]
+  "actionableStudyRoadmap": ["Step 1", "Step 2", "Step 3"],
+  "evidenceSummary": [{{"area": "rubric area", "evidence": "specific transcript/code evidence", "confidence": "high / medium / limited"}}],
+  "communicationAnalysis": {{"clarity": "evidence-based observation", "structure": "evidence-based observation", "pace": "transcript-based estimate or insufficient data"}},
+  "proctoringSummary": "Summarize logged objective events only; do not infer intent from gaze, posture, gestures, or pauses."
 }}"""
+
+    if skill_assessment:
+        system_prompt = f"""You are an independent expert assessor for a high-stakes live skill assessment.
+Assess only demonstrated skill: {skill_assessment}. Use this skill-specific interview plan and rubric: {job_description[:3000]}
+Do not reward unsupported claims, resume history, generic confidence, or interviewer hints. Judge the actual spoken answers and submitted work. For programming skills, inspect the code for correctness, edge cases, clarity, and trade-offs. For leadership, communication, and product skills, judge concrete case decisions, ownership, listening, prioritization, and clarity. Missing evidence scores low. Never invent evidence.
+Distinguish “not demonstrated in this session” from “does not have the skill.” Score only competencies that were actually tested; if too little evidence exists to assess fairly, return assessmentStatus=incomplete, overallScore=null, and hiringDecision="Insufficient evidence". Proctor events must never change skill scores or the hiring decision.
+User interface events are operational context only and must never count as skill evidence or change scores.
+Candidate answer turns: {candidate_turns}
+Interview format: {interview_format}
+Transcript:\n{transcript_text[:9000]}
+        Candidate code/work artifact:\n{code_snippet or notes or 'No separate artifact submitted.'}
+Live turn-by-turn evidence notes (verify against the complete transcript; these are provisional):
+{json.dumps(live_analysis, ensure_ascii=False)[:5000]}
+Private interviewer/session observations (treat as unverified context and cite only if supported by transcript or an objective event):
+{json.dumps(session_observations, ensure_ascii=False)[:4000]}
+
+Return STRICTLY JSON: {{"overallScore": integer 0-100 or null, "assessmentStatus": "complete" or "incomplete", "hiringDecision": "Strong Hire / Hire / Lean Hire / No Hire / Insufficient evidence", "executiveSummary": "Evidence-based assessment and limits", "metrics": [{{"category": "skill-specific rubric area", "score": integer 0-100 or null, "feedback": "cite concrete evidence"}}], "topStrengths": ["evidence-backed strength"], "areasForImprovement": ["specific gap"], "questionBreakdown": [{{"topic": "tested area", "candidateResponseQuality": "Exceptional / Solid / Adequate / Needs Improvement", "interviewerNotes": "specific evidence"}}], "actionableStudyRoadmap": ["specific next step"], "evidenceSummary": [{{"area": "rubric area", "evidence": "specific transcript/code evidence", "confidence": "high / medium / limited"}}], "communicationAnalysis": {{"clarity": "evidence-based observation", "structure": "evidence-based observation", "pace": "transcript-based estimate or insufficient data"}}, "proctoringSummary": "Summarize logged objective events only; do not infer intent from gaze, posture, gestures, or pauses."}}"""
 
     report = None
     try:
         from app.services.llm_service import llm_service
-        report = await llm_service.chat_json(system_prompt=system_prompt, user_prompt="Generate evaluation report.")
+        report = await llm_service.chat_json(
+            system_prompt=system_prompt,
+            user_prompt=("Generate a full-session report. Review provisional live notes against the complete transcript and submitted artifact. "
+                         "Use only the objective proctor events below; they are session context, not proof of misconduct. "
+                         "Do not score accent, inferred emotion, gaze, posture, or gesture quality.\n"
+                         f"Provisional live answer analysis: {json.dumps(live_analysis, ensure_ascii=False)[:5000]}\n"
+                         f"Session observations (unverified; use only if supported by transcript/objective event): {json.dumps(session_observations, ensure_ascii=False)[:4000]}\n"
+                         f"Orchestrator actions routed during the session: {json.dumps(orchestrator_actions, ensure_ascii=False)[:3000]}\n"
+                         f"Candidate interface actions (operational context only): {json.dumps(ui_events, ensure_ascii=False)[:3000]}\n"
+                         f"Objective proctor events: {json.dumps(proctor_events, ensure_ascii=False)[:3000]}"),
+        )
     except Exception as e:
         logger.error(f"Error generating full evaluation: {e}")
 
-    if not (report and isinstance(report, dict) and report.get("overallScore")):
-        report = {
-            "overallScore": 84,
-            "hiringDecision": "Hire",
-            "executiveSummary": f"The candidate demonstrated strong foundational knowledge, clear communication, and solid technical articulation for the {role} position.",
-            "metrics": [
-                { "category": "Technical Competence & Knowledge", "score": 86, "feedback": "Strong command of core frameworks and data structures." },
-                { "category": "Problem Solving & Algorithmic Thinking", "score": 84, "feedback": "Systematic approach to breaking down requirements." },
-                { "category": "System Design & Scalability", "score": 82, "feedback": "Good understanding of distributed caching and microservices." },
-                { "category": "Code Quality & Edge Case Handling", "score": 80, "feedback": "Clean structure with opportunities to handle edge cases." },
-                { "category": "Communication, Clarity & Collaboration", "score": 88, "feedback": "Confident, articulate, and receptive to interviewer prompts." }
-            ],
-            "topStrengths": [
-                "Clear articulation of system components and trade-offs",
-                "Structured problem-solving mindset"
-            ],
-            "areasForImprovement": [
-                "Incorporate more quantitative metrics when discussing project impact",
-                "Deep dive into race conditions and transaction isolation levels"
-            ],
-            "questionBreakdown": [
-                {
-                    "topic": "Architecture & Project Defense",
-                    "candidateResponseQuality": "Solid",
-                    "interviewerNotes": "Demonstrated hands-on experience with production systems."
-                }
-            ],
-            "actionableStudyRoadmap": [
-                "Review database index concurrency mechanics",
-                "Practice structuring system design explanations with the STAR method",
-                "Rehearse explaining project bottlenecks in under 2 minutes"
-            ]
-        }
+    if not (report and isinstance(report, dict) and "overallScore" in report):
+        raise HTTPException(status_code=503, detail="Interview evaluation is unavailable. No score or verification was issued; please retry later.")
+    report.setdefault("assessmentStatus", "complete")
 
     # Persist session to Neo4j for Mock Interview History tracking
     try:
         from app.services.neo4j_service import neo4j_service
         import uuid
-        company = req.get("company", "Google")
-        user_id = req.get("userId") or "candidate_1"
+        company = req.get("company") or ""
+        user_id = current_user["id"]
         session_id = f"eval_{uuid.uuid4().hex[:8]}"
 
-        m_dict = {m.get("category", ""): m.get("score", 80) for m in report.get("metrics", [])}
+        m_dict = {m.get("category", ""): m.get("score") for m in report.get("metrics", [])}
         query = """
         MERGE (u:User {id: $user_id})
         CREATE (s:InterviewSession {
@@ -392,13 +505,9 @@ Return STRICTLY a JSON object with this schema:
             company: $company,
             role: $role,
             technical_score: $tech_score,
-            speech_voice_score: $voice_score,
-            body_language_score: $body_score,
-            integrity_score: $integrity_score,
             verdict: $verdict,
             summary: $summary,
-            completed_at: datetime(),
-            duration_minutes: 25.0
+            completed_at: datetime()
         })
         CREATE (u)-[:ATTENDED_INTERVIEW]->(s)
         RETURN s.id
@@ -409,12 +518,9 @@ Return STRICTLY a JSON object with this schema:
             session_id=session_id,
             company=company,
             role=role,
-            tech_score=float(m_dict.get("Technical Competence & Knowledge", report.get("overallScore", 85))),
-            voice_score=float(m_dict.get("Communication, Clarity & Collaboration", 88)),
-            body_score=float(m_dict.get("Problem Solving & Algorithmic Thinking", 84)),
-            integrity_score=95.0,
-            verdict=report.get("hiringDecision", "Hire"),
-            summary=report.get("executiveSummary", "Completed live technical interview."),
+            tech_score=m_dict.get("Technical Competence & Knowledge"),
+            verdict=report.get("hiringDecision"),
+            summary=report.get("executiveSummary"),
         )
         logger.info(f"Persisted evaluation report {session_id} to Neo4j")
     except Exception as ne:
@@ -439,9 +545,9 @@ FRAME_VIDEO = 0x02
 @router.websocket("/live-ws")
 async def live_interview_websocket(
     websocket: WebSocket,
-    user_id: str = "candidate_1",
-    company: str = "Apponward Technologies",
-    role: str = "Senior Backend Engineer",
+    user_id: str = "",
+    company: str = "",
+    role: str = "",
     job_description: str = "",
     voice: str = "Zephyr",
     round_type: str = "mixed",
@@ -458,9 +564,9 @@ async def live_interview_websocket(
     await websocket.accept()
 
     q = websocket.query_params
-    u_id = str(q.get("user_id", user_id if not hasattr(user_id, "default") else "candidate_1"))
-    comp = str(q.get("company", company if not hasattr(company, "default") else "Apponward Technologies"))
-    rl = str(q.get("role", role if not hasattr(role, "default") else "Senior Backend Engineer"))
+    u_id = str(q.get("user_id", user_id))
+    comp = str(q.get("company", company))
+    rl = str(q.get("role", role))
     vc = str(q.get("voice", voice if not hasattr(voice, "default") else "Zephyr"))
     jd = str(q.get("job_description", job_description if not hasattr(job_description, "default") else ""))
     rnd = str(q.get("round_type", round_type if not hasattr(round_type, "default") else "mixed"))
@@ -624,4 +730,3 @@ async def live_interview_websocket(
         closed = True
         connect_task.cancel()
         await session.close()
-

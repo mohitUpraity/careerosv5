@@ -1,12 +1,13 @@
-import { LayoutDashboard, Network, Target, Send, FileText, GitCompare, Compass, UserCog, Sparkles, TrendingUp, Swords } from 'lucide-react';
+import { LayoutDashboard, Network, Target, Send, FileText, GitCompare, Compass, UserCog, Sparkles, TrendingUp, Swords, BadgeCheck } from 'lucide-react';
 
-export type ActiveTab = 'overview' | 'graph' | 'opportunities' | 'growth' | 'interview' | 'matcher' | 'benchmark' | 'referrals' | 'resume' | 'profile' | 'brain';
+export type ActiveTab = 'overview' | 'graph' | 'opportunities' | 'growth' | 'interview' | 'matcher' | 'benchmark' | 'referrals' | 'resume' | 'profile' | 'brain' | 'skill-proof';
 
 export const workspaceGroups = [
   { label: 'Workspace', items: [
     { id: 'overview', label: 'Overview', description: 'Your career at a glance', icon: LayoutDashboard },
     { id: 'graph', label: 'Knowledge Graph', description: 'Explore your skills and connections', icon: Network },
     { id: 'profile', label: 'Profile & Preferences', description: 'Your experience, goals, and preferences', icon: UserCog },
+    { id: 'skill-proof', label: 'Skill Proof', description: 'Prove claimed skills in a rigorous interview', icon: BadgeCheck },
   ] },
   { label: 'Discover', items: [
     { id: 'opportunities', label: 'Opportunities Radar', description: 'Find jobs, internships, and challenges', icon: Compass },

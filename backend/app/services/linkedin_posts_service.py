@@ -129,8 +129,7 @@ class LinkedInPostsService:
         # Ensure user anchor node exists
         user_init_query = """
         MERGE (u:User {id: $user_id})
-        ON CREATE SET u.full_name = 'Candidate',
-                      u.created_at = datetime()
+        ON CREATE SET u.created_at = datetime()
         RETURN u.id;
         """
         await neo4j_client.execute_query(user_init_query, {"user_id": user_id})

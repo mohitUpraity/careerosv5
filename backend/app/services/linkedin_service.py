@@ -118,8 +118,6 @@ class LinkedInService:
                 if any(uk in parts[1].lower() for uk in cls.UNIVERSITY_KEYWORDS):
                     extracted_university = cls.clean_entity_name(parts[1])
                     extracted_role = parts[0].strip() or "Student"
-            elif is_alumni:
-                extracted_university = "Anand Engineering College"
 
         # 3. Check for Company (if not purely university)
         if raw_company and not is_edu and raw_company.lower() != "industry network":

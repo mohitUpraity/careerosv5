@@ -121,11 +121,14 @@ app.include_router(live_router, prefix="/api/v1")
 @app.websocket("/api/live")
 async def live_websocket_alias(
     websocket: WebSocket,
-    user_id: str = "candidate_1",
-    company: str = "Google",
-    role: str = "Senior Backend Engineer",
-    candidate_name: str = "Candidate",
-    voice: str = "Zephyr"
+    user_id: str = "",
+    company: str = "",
+    role: str = "",
+    candidate_name: str = "",
+    voice: str = "Kore",
+    job_description: str = "",
+    round_type: str = "mixed",
+    difficulty: str = "medium",
 ):
     from app.gemini_live.router import gemini_live_websocket
     await gemini_live_websocket(
@@ -135,6 +138,9 @@ async def live_websocket_alias(
         role=role,
         candidate_name=candidate_name,
         voice=voice,
+        job_description=job_description,
+        round_type=round_type,
+        difficulty=difficulty,
     )
 
 @app.post("/api/evaluate-interview")
@@ -166,5 +172,3 @@ async def live_test_page():
 async def root():
     # If browser visits /, redirect to dashboard
     return RedirectResponse(url="/dashboard/")
-
-

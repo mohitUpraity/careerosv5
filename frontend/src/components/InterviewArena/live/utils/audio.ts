@@ -22,36 +22,7 @@ export class AudioStreamingManager {
   private isMuted: boolean = false;
   private isRunning: boolean = false;
   private animationFrameId: number | null = null;
-
-  private static readonly WORKLET_SOURCE = `
-    class PcmCaptureProcessor extends AudioWorkletProcessor {
-      constructor() { super(); this.frames = []; this.frameCount = 0; }
-      process(inputs, outputs) {
-        const input = inputs[0] && inputs[0][0];
-        const output = outputs[0] && outputs[0][0];
-        if (output) output.fill(0);
-        if (input) {
-          let offset = 0;
-          while (offset < input.length) {
-            const size = Math.min(2048 - this.frameCount, input.length - offset);
-            this.frames.push(input.slice(offset, offset + size));
-            this.frameCount += size;
-            offset += size;
-            if (this.frameCount === 2048) {
-              const chunk = new Float32Array(2048);
-              let position = 0;
-              for (const frame of this.frames) { chunk.set(frame, position); position += frame.length; }
-              this.port.postMessage(chunk, [chunk.buffer]);
-              this.frames = [];
-              this.frameCount = 0;
-            }
-          }
-        }
-        return true;
-      }
-    }
-    registerProcessor('pcm-capture-processor', PcmCaptureProcessor);
-  `;
+  private lastSpeechAt = 0;
 
   constructor() {
     // Lazy initialize when user starts session
@@ -81,14 +52,22 @@ export class AudioStreamingManager {
   }
 
   public async startAudioCapture(stream: MediaStream): Promise<void> {
+    // A reconnect or React effect cleanup can race an async AudioWorklet module load.
+    // Tear down any prior graph before creating a fresh one.
+    this.cleanup();
     this.mediaStream = stream;
 
     // Create 16kHz audio context for microphone capture
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    this.inputAudioCtx = new AudioContextClass({ sampleRate: 16000 });
+    if (!AudioContextClass) throw new Error("This browser does not support microphone audio capture.");
+    // Let the browser open the hardware's native rate. Requesting 16 kHz can
+    // break the macOS WebAudio renderer; PCM is resampled before transmission.
+    const inputContext: AudioContext = new AudioContextClass();
+    this.inputAudioCtx = inputContext;
     
-    // Create 24kHz audio context for Gemini output playback
-    this.outputAudioCtx = new AudioContextClass({ sampleRate: 24000 });
+    // One audio device context is more reliable than opening separate input and
+    // output contexts. Web Audio resamples the 24 kHz playback buffers as needed.
+    this.outputAudioCtx = inputContext;
 
     const tryResume = () => {
       if (this.inputAudioCtx && this.inputAudioCtx.state === "suspended") {
@@ -109,7 +88,7 @@ export class AudioStreamingManager {
     window.addEventListener("touchstart", this.unlockHandler, { passive: true });
 
     // Input Analyzer for UI visualizer
-    this.inputAnalyser = this.inputAudioCtx.createAnalyser();
+    this.inputAnalyser = inputContext.createAnalyser();
     this.inputAnalyser.fftSize = 64;
     this.inputAnalyser.smoothingTimeConstant = 0.5;
 
@@ -117,12 +96,13 @@ export class AudioStreamingManager {
     this.outputAnalyser = this.outputAudioCtx.createAnalyser();
     this.outputAnalyser.fftSize = 64;
     this.outputAnalyser.smoothingTimeConstant = 0.5;
+    this.outputAnalyser.connect(this.outputAudioCtx.destination);
 
     if (stream.getAudioTracks().length === 0) {
       try {
-        const osc = this.inputAudioCtx.createOscillator();
-        const dst = this.inputAudioCtx.createMediaStreamDestination();
-        const gain = this.inputAudioCtx.createGain();
+        const osc = inputContext.createOscillator();
+        const dst = inputContext.createMediaStreamDestination();
+        const gain = inputContext.createGain();
         gain.gain.value = 0;
         osc.connect(gain);
         gain.connect(dst);
@@ -134,38 +114,40 @@ export class AudioStreamingManager {
       }
     }
 
-    this.inputSourceNode = this.inputAudioCtx.createMediaStreamSource(stream);
+    this.inputSourceNode = inputContext.createMediaStreamSource(stream);
     this.inputSourceNode.connect(this.inputAnalyser);
 
-    // AudioWorklet keeps microphone capture off the main thread. ScriptProcessor is
-    // retained only for older browsers that do not implement AudioWorklet.
-    const silentGain = this.inputAudioCtx.createGain();
+    const silentGain = inputContext.createGain();
     silentGain.gain.value = 0;
+    if (inputContext.state === "closed" || this.inputAudioCtx !== inputContext) return;
+    const contextWasReplacedOrClosed = () => this.inputAudioCtx !== inputContext || inputContext.state === "closed";
     try {
-      if (!this.inputAudioCtx.audioWorklet || typeof AudioWorkletNode === "undefined") {
-        throw new Error("AudioWorklet unavailable");
+      if (!inputContext.audioWorklet || typeof AudioWorkletNode === "undefined") {
+        throw new Error("AudioWorklet is unavailable in this browser context.");
       }
-      const sourceBlob = new Blob([AudioStreamingManager.WORKLET_SOURCE], { type: "application/javascript" });
-      const sourceUrl = URL.createObjectURL(sourceBlob);
-      try {
-        await this.inputAudioCtx.audioWorklet.addModule(sourceUrl);
-      } finally {
-        URL.revokeObjectURL(sourceUrl);
-      }
-      this.workletNode = new AudioWorkletNode(this.inputAudioCtx, "pcm-capture-processor");
+      const workletUrl = new URL("./audio-capture-worklet.js", import.meta.url);
+      await inputContext.audioWorklet.addModule(workletUrl);
+      if (contextWasReplacedOrClosed()) return;
+      this.workletNode = new AudioWorkletNode(inputContext, "interview-capture-processor", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
       this.workletNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
         this.processInputChunk(event.data);
       };
-      this.inputAnalyser.connect(this.workletNode);
+      this.inputSourceNode.connect(this.workletNode);
       this.workletNode.connect(silentGain);
+      silentGain.connect(inputContext.destination);
     } catch (error) {
-      console.warn("AudioWorklet unavailable; using legacy microphone capture:", error);
-      this.processorNode = this.inputAudioCtx.createScriptProcessor(2048, 1, 1);
+      console.warn("AudioWorklet unavailable; using compatibility microphone capture:", error);
+      if (contextWasReplacedOrClosed()) return;
+      this.processorNode = inputContext.createScriptProcessor(2048, 1, 1);
       this.processorNode.onaudioprocess = (event) => this.processInputChunk(event.inputBuffer.getChannelData(0));
-      this.inputAnalyser.connect(this.processorNode);
+      this.inputSourceNode.connect(this.processorNode);
       this.processorNode.connect(silentGain);
+      silentGain.connect(inputContext.destination);
     }
-    silentGain.connect(this.inputAudioCtx.destination);
 
     this.isRunning = true;
     this.startVolumeMonitoring();
@@ -176,6 +158,7 @@ export class AudioStreamingManager {
     let sumSquares = 0;
     for (let i = 0; i < channelData.length; i++) sumSquares += channelData[i] * channelData[i];
     const rms = Math.sqrt(sumSquares / channelData.length);
+    if (rms >= 0.002) this.lastSpeechAt = Date.now();
     const nativeRate = this.inputAudioCtx ? this.inputAudioCtx.sampleRate : 16000;
     const resampled = this.downsampleTo16k(channelData, nativeRate);
     if (rms < 0.001) resampled.fill(0);
@@ -188,6 +171,10 @@ export class AudioStreamingManager {
 
   public getIsMuted(): boolean {
     return this.isMuted;
+  }
+
+  public hasRecentSpeech(windowMs = 5000): boolean {
+    return Date.now() - this.lastSpeechAt < windowMs;
   }
 
   /**
@@ -251,8 +238,8 @@ export class AudioStreamingManager {
   /**
    * Queue & schedule gapless 24kHz audio playback received from Gemini Live
    */
-  public playAudioChunk(base64Pcm: string) {
-    if (!this.outputAudioCtx || this.outputAudioCtx.state === "closed") return;
+  public playAudioChunk(base64Pcm: string): boolean {
+    if (!this.outputAudioCtx || this.outputAudioCtx.state === "closed") return false;
 
     if (this.outputAudioCtx.state === "suspended") {
       this.outputAudioCtx.resume().catch((err) => {
@@ -287,7 +274,6 @@ export class AudioStreamingManager {
       // Route through output analyzer so AI avatar pulses with voice
       if (this.outputAnalyser) {
         sourceNode.connect(this.outputAnalyser);
-        this.outputAnalyser.connect(this.outputAudioCtx.destination);
       } else {
         sourceNode.connect(this.outputAudioCtx.destination);
       }
@@ -309,13 +295,19 @@ export class AudioStreamingManager {
           this.scheduledSources.splice(idx, 1);
         }
       };
+      return true;
     } catch (err) {
       console.error("Error playing audio chunk:", err);
+      return false;
     }
   }
 
   public isAiAudioPlaying(): boolean {
     return this.scheduledSources.length > 0;
+  }
+
+  public isOutputContextRunning(): boolean {
+    return this.outputAudioCtx?.state === "running";
   }
 
   /**
@@ -375,6 +367,7 @@ export class AudioStreamingManager {
 
   public cleanup() {
     this.isRunning = false;
+    this.lastSpeechAt = 0;
     if (this.unlockHandler) {
       window.removeEventListener("click", this.unlockHandler);
       window.removeEventListener("keydown", this.unlockHandler);
@@ -400,13 +393,13 @@ export class AudioStreamingManager {
       this.inputSourceNode.disconnect();
       this.inputSourceNode = null;
     }
-    if (this.inputAudioCtx && this.inputAudioCtx.state !== "closed") {
-      this.inputAudioCtx.close();
-      this.inputAudioCtx = null;
-    }
-    if (this.outputAudioCtx && this.outputAudioCtx.state !== "closed") {
-      this.outputAudioCtx.close();
-      this.outputAudioCtx = null;
+    const inputContext = this.inputAudioCtx;
+    const outputContext = this.outputAudioCtx;
+    this.inputAudioCtx = null;
+    this.outputAudioCtx = null;
+    if (inputContext && inputContext.state !== "closed") void inputContext.close().catch(() => {});
+    if (outputContext && outputContext !== inputContext && outputContext.state !== "closed") {
+      void outputContext.close().catch(() => {});
     }
   }
 }

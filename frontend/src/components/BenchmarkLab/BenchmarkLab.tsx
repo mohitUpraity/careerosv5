@@ -666,7 +666,7 @@ export const BenchmarkLab: React.FC<BenchmarkLabProps> = ({
                     type="text"
                     value={newPeerCompany}
                     onChange={(e) => setNewPeerCompany(e.target.value)}
-                    placeholder="e.g. OpenAI / Google"
+                    placeholder="Company name"
                     className="input-base w-full"
                   />
                 </div>

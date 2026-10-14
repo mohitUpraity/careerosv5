@@ -9,7 +9,7 @@ router = APIRouter(tags=["System"])
 
 @router.get("/health")
 async def health_check():
-    neo4j_status = "connected" if neo4j_client.driver else "disconnected"
+    neo4j_status = "connected" if neo4j_client.driver and neo4j_client.is_connected else "disconnected"
     return {
         "status": "online",
         "service": "CareerOS-v5 API Engine",
@@ -30,4 +30,3 @@ async def wipe_database(
     """
     user_id = current_user["id"]
     return await profile_service.reset_user_profile_data(user_id=user_id)
-

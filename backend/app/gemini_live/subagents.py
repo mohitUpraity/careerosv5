@@ -11,14 +11,19 @@ logger = logging.getLogger("gemini_live.subagents")
 
 class ProctorGuardianSubAgent:
     """
-    Autonomous Anti-Cheating & Proctoring Sub-Agent.
-    Continuously monitors webcam frames for:
-    - Eye aversion, looking away downward at hidden notes/phones, or excessive eye rolling
-    - Mobile phone, tablet, or secondary electronic gadget usage
-    - Multiple people in frame or unauthorized assistance
-    - Suspicious movement or disappearing from frame
+    ULTRA-STRICT proctoring subagent for live proctored assessments.
+    Samples webcam frames at high frequency for real-time cheating detection.
 
-    Enforces 3-strike policy:
+    Detection targets:
+    - Phone/device visible or being used
+    - Eyes looking away from screen (off-camera gaze)
+    - Additional person in frame
+    - Face not visible / camera obstructed
+    - Notes/cheat sheets visible
+    - Earpiece/earbud detected
+    - Screen/monitor reading (secondary display)
+
+    Enforces 3-strike policy with ultra-low latency:
     - Warning 1: Screen banner (1/3) + ⚠️ Reaction + Scratchpad note + Spoken reminder
     - Warning 2: Screen banner (2/3) + ⚠️ Reaction + Scratchpad note + Spoken firm warning
     - Warning 3 / Critical Malpractice: Interview Disqualification & Instant Termination
@@ -31,7 +36,7 @@ class ProctorGuardianSubAgent:
         emit_json: Callable[[Dict[str, Any]], Awaitable[None]],
         send_interviewer_prompt: Callable[[str], Awaitable[None]],
         on_terminate: Callable[[str], Awaitable[None]],
-        add_scratchpad_note: Callable[[str, str, str, int], None],
+        add_scratchpad_note: Callable[..., None],
     ):
         self.api_key = api_key
         self.candidate_name = candidate_name
@@ -51,18 +56,65 @@ class ProctorGuardianSubAgent:
         self.violations_history: List[Dict[str, Any]] = []
         self.last_warning_timestamp = 0.0
         self.consecutive_suspicious_frames = 0
-        self.warning_cooldown_seconds = 14.0  # Fair grace period between sequential warnings
+        self.warning_cooldown_seconds = 25.0  # Give candidate time to respond before next warning
+        self.warmup_grace_seconds = 30.0  # No formal warnings in first 30s — verbal only
+        self.last_visual_note_key = ""
+        self.last_visual_note_at = 0.0
+        self.specialist_note_keys: Dict[str, str] = {}
+        self.specialist_note_times: Dict[str, float] = {}
+
+        # Ultra-strict tracking counters
+        self.consecutive_off_camera_frames = 0
+        self.gaze_check_prompted = False
+        self.consecutive_phone_attention_frames = 0
+        self.phone_attention_prompted = False
+        self.consecutive_obscured_face_frames = 0
+        self.camera_adjustment_prompted = False
+        self.camera_visibility_deadline = 0.0
+        self.camera_visibility_warning_sent = False
+
+        # NEW: Additional strict tracking
+        self.consecutive_phone_visible_frames = 0
+        self.phone_visible_warned = False
+        self.total_off_camera_detections = 0
+        self.total_phone_detections = 0
+        self.session_start_time = time.time()
+
+        # Camera-off / missing-frame heartbeat tracking
+        self.camera_active = True
+        self.last_frame_time = time.time()
+
+        # Evaluation rate tracking
+        self._eval_in_progress = False
+        self._eval_count = 0
+        self._eval_error_count = 0
+        self._last_eval_log_time = time.time()
+        self.camera_off_warned = False
+        self.camera_off_warning_count = 0
 
     def update_frame(self, frame_bytes: bytes):
         """Update latest webcam frame buffer for proctor analysis."""
         self.latest_frame = frame_bytes
         self._frame_sequence += 1
+        self.last_frame_time = time.time()
+
+    def set_camera_active(self, active: bool):
+        """Called by router when frontend sends camera_state message."""
+        was_active = self.camera_active
+        self.camera_active = active
+        if active and not was_active:
+            # Camera restored
+            self.camera_off_warned = False
+            logger.info("🛡️ ProctorGuardian: Camera feed restored by candidate.")
+        elif not active and was_active:
+            logger.warning("🛡️ ProctorGuardian: Camera feed DISABLED by candidate.")
 
     async def start(self):
         """Start the background vision monitoring worker."""
         self.is_running = True
+        self.session_start_time = time.time()
         self._worker_task = asyncio.create_task(self._proctor_vision_worker())
-        logger.info("🛡️ ProctorGuardianSubAgent started vision surveillance loop.")
+        logger.info("🛡️ ProctorGuardianSubAgent started ULTRA-STRICT vision surveillance loop.")
 
     async def stop(self):
         """Stop surveillance loop."""
@@ -72,89 +124,97 @@ class ProctorGuardianSubAgent:
         logger.info("🛡️ ProctorGuardianSubAgent stopped.")
 
     async def _proctor_vision_worker(self):
-        """Inspect fresh webcam frames promptly without repeatedly scoring one frame."""
-        # Initial 5s grace period for candidate to settle in
-        await asyncio.sleep(5.0)
+        """Periodic proctor check: injects vision-check prompts into the Live session
+        so the Gemini Live model (which already receives video at 1 FPS) actively
+        monitors for cheating. Also handles camera-off heartbeat detection."""
+        # Wait for the warmup grace period before starting proctor checks
+        await asyncio.sleep(self.warmup_grace_seconds)
+        logger.info("🛡️ ProctorGuardian: Warmup grace period complete. Active monitoring begins.")
+
+        proctor_check_interval = 15  # seconds between proctor vision checks
+        last_proctor_check = 0.0
 
         while self.is_running:
             try:
-                if self.latest_frame is not None and self._frame_sequence != self._last_evaluated_sequence:
-                    frame_bytes = self.latest_frame
-                    self._last_evaluated_sequence = self._frame_sequence
+                now = time.time()
+                seconds_since_last_frame = now - self.last_frame_time
+                time_since_start = now - self.session_start_time
 
-                    await self._evaluate_frame(frame_bytes)
+                # === HEARTBEAT: Detect camera-off or missing frames ===
+                if not self.camera_active or seconds_since_last_frame > 5.0:
+                    if not self.camera_off_warned:
+                        self.camera_off_warned = True
+                        self.camera_off_warning_count += 1
+                        reason = (
+                            "Camera feed disabled or not transmitting."
+                            if not self.camera_active
+                            else f"No webcam frames received for {seconds_since_last_frame:.1f} seconds — camera may be covered or obstructed."
+                        )
+                        logger.warning(f"🛡️ HEARTBEAT: {reason}")
 
-                # Proctoring remains live, while avoiding a separate vision API
-                # request for every webcam frame competing with the voice session.
-                await asyncio.sleep(3.0)
+                        await self.emit_json({"type": "camera_visibility_check", "data": {
+                            "message": "⚠️ Your camera feed is not active. Your face MUST be visible at all times during this proctored assessment. Restore your camera immediately.",
+                            "confidence": 1.0,
+                            "score_impact": 0,
+                            "countdown_seconds": 10,
+                        }})
+
+                        await self.send_interviewer_prompt(
+                            "[STRICT PROCTOR ALERT: The candidate's camera feed has gone dark — either disabled, covered, or disconnected. "
+                            "Tell them FIRMLY that their camera MUST be active and their face clearly visible at ALL times. "
+                            "They have 10 seconds to restore it or a formal warning will be issued. This is non-negotiable.]"
+                        )
+
+                    elif self.camera_off_warned and seconds_since_last_frame > 20.0 and not self.camera_active:
+                        self.camera_off_warned = False
+                        await self.trigger_warning(
+                            "camera_visibility",
+                            f"Camera feed remained disabled for {seconds_since_last_frame:.0f} seconds. "
+                            "Assessment integrity cannot be verified without an active camera feed.",
+                        )
+                elif self.camera_active and seconds_since_last_frame < 2.0:
+                    if self.camera_off_warned:
+                        self.camera_off_warned = False
+                        await self.emit_json({"type": "camera_visibility_restored", "data": {
+                            "message": "Camera view restored. The interview continues.",
+                            "score_impact": 0,
+                        }})
+
+                # === PERIODIC PROCTOR VISION CHECK ===
+                # Inject a silent system prompt that tells the Live model to examine
+                # the current video feed for violations. The model already sees frames
+                # at 1 FPS, so it just needs a nudge to actively scan.
+                if now - last_proctor_check >= proctor_check_interval and self.camera_active:
+                    last_proctor_check = now
+                    check_number = int((time_since_start - self.warmup_grace_seconds) / proctor_check_interval) + 1
+                    
+                    await self.send_interviewer_prompt(
+                        "[PROCTOR VISION CHECK #" + str(check_number) + ": MANDATORY — Before continuing the conversation, "
+                        "carefully examine the CURRENT video frame you are receiving from the candidate's webcam. "
+                        "Check for ALL of these IN ORDER:\n"
+                        "1. FACE: Is the candidate's face clearly visible? If not → call issue_proctor_warning with violation_type='face_not_visible'\n"
+                        "2. GAZE: Are they looking at the camera/screen or looking away/down? If looking away → call issue_proctor_warning with violation_type='gaze_away_from_screen'\n"
+                        "3. PHONE/DEVICE: Is ANY phone, tablet, or secondary device visible ANYWHERE in the frame, even on the desk? If yes → call issue_proctor_warning with violation_type='mobile_phone_detected'\n"
+                        "4. ANOTHER PERSON: Is anyone else visible or partially visible? If yes → call issue_proctor_warning with violation_type='multiple_persons_detected'\n"
+                        "5. NOTES/PAPERS: Are any papers, sticky notes, or written materials visible? If yes → call issue_proctor_warning with violation_type='notes_detected'\n"
+                        "6. EARPIECE: Is the candidate wearing earbuds or bluetooth headset? If yes → call issue_proctor_warning with violation_type='earpiece_detected'\n\n"
+                        "If you detect a violation, call issue_proctor_warning with the violation_type and a specific warning_reason describing what you see. "
+                        "Then address the candidate firmly about it. "
+                        "If everything looks clean, continue the interview normally without mentioning this check. "
+                        "DO NOT tell the candidate you are performing a proctor check — just act on what you see.]"
+                    )
+                    logger.info(
+                        "🛡️ Proctor check #%d injected. Warnings: %d/3, frame_seq: %d",
+                        check_number, self.warning_count, self._frame_sequence
+                    )
+
+                # Poll every 1 second
+                await asyncio.sleep(1.0)
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug(f"Proctor vision cycle notice: {e}")
-                await asyncio.sleep(4.0)
-
-    async def _evaluate_frame(self, frame_bytes: bytes):
-        """Analyze a single video frame for malpractice indicators."""
-        prompt = (
-            "You are a strict, authoritative Anti-Cheating AI Proctor analyzing this webcam frame for a high-stakes technical interview.\n"
-            f"Candidate Name: {self.candidate_name}\n\n"
-            "Examine the frame with high scrutiny for integrity violations:\n"
-            "1. 'mobile_phone_detected': Candidate is holding, checking, touching, or has a visible smartphone/mobile phone/tablet in hand or on desk. ZERO TOLERANCE: Having or holding a phone on camera is a strict violation.\n"
-            "2. 'looking_away': Candidate eyes or head are diverted downward or sideways (e.g. reading off-screen notes, looking down at lap/phone, or second monitor). Normal upward thinking gaze is ok, but looking downward/sideways is a violation.\n"
-            "3. 'multiple_persons_detected': Another person visible in the frame, leaning in, or whispering.\n"
-            "4. 'unusual_posture_or_gesture': Candidate face obscured, leaving the chair, or suspicious leaning.\n"
-            "5. 'none': Normal candidate behavior (facing screen, speaking, gesturing naturally with no devices).\n\n"
-            "Output strictly valid JSON with this format:\n"
-            "{\n"
-            '  "is_violation": true/false,\n'
-            '  "violation_type": "none" | "looking_away" | "mobile_phone_detected" | "multiple_persons_detected" | "unusual_posture_or_gesture",\n'
-            '  "confidence": 0.0 to 1.0,\n'
-            '  "reason": "Clear 1-sentence description of what is seen"\n'
-            "}"
-        )
-
-        try:
-            part = types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg")
-            res = await self.client.aio.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=[part, prompt],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1,
-                )
-            )
-
-            if not res or not res.text:
-                return
-
-            data = json.loads(res.text)
-            is_violation = data.get("is_violation", False)
-            violation_type = data.get("violation_type", "none")
-            confidence = float(data.get("confidence", 0.0))
-            reason = data.get("reason", "Suspicious behavioral pattern detected.")
-
-            if is_violation and violation_type != "none" and confidence >= 0.60:
-                self.consecutive_suspicious_frames += 1
-                logger.info(
-                    f"⚠️ Proctor notice: detected {violation_type} (conf={confidence:.2f}, count={self.consecutive_suspicious_frames}): {reason}"
-                )
-
-                # A second person is an immediate warning, but not critical malpractice.
-                # Keep critical escalation for clear, high-confidence device use.
-                is_immediate_critical = violation_type == "mobile_phone_detected" and confidence >= 0.85
-
-                if is_immediate_critical or self.consecutive_suspicious_frames >= 2:
-                    now = time.time()
-                    if (now - self.last_warning_timestamp) >= self.warning_cooldown_seconds or is_immediate_critical:
-                        self.consecutive_suspicious_frames = 0
-                        await self.trigger_warning(violation_type, reason, is_immediate_critical)
-            else:
-                # Candidate resumed normal posture
-                if self.consecutive_suspicious_frames > 0:
-                    self.consecutive_suspicious_frames -= 1
-
-        except Exception as e:
-            logger.warning(f"Frame proctor evaluation error: {e}")
+                logger.warning(f"🛡️ Proctor vision cycle ERROR: {e}", exc_info=True)
+                await asyncio.sleep(2.0)
 
     async def analyze_visual_question(self, candidate_question: str):
         """Analyze the newest frame immediately when the candidate asks about something visible."""
@@ -212,7 +272,35 @@ class ProctorGuardianSubAgent:
     async def trigger_warning(self, violation_type: str, reason: str, is_critical: bool = False):
         """Execute warning escalation or terminate interview if 3rd strike reached."""
         now = time.time()
-        if self.warning_count and (now - self.last_warning_timestamp) < self.warning_cooldown_seconds:
+        time_since_start = now - self.session_start_time
+
+        # ── WARMUP GRACE PERIOD ──
+        # During the first 30 seconds, issue verbal-only warnings (no formal strikes)
+        # This gives the candidate time to settle in, adjust camera, put phone away, etc.
+        if time_since_start < self.warmup_grace_seconds and not is_critical:
+            logger.info(
+                "🛡️ Warmup grace period (%.0fs < %.0fs): verbal-only warning for %s: %s",
+                time_since_start, self.warmup_grace_seconds, violation_type, reason
+            )
+            # Log to scratchpad but don't increment warning counter
+            self.add_scratchpad_note(
+                category="integrity_and_proctoring",
+                observation=f"[Grace period] Detected {violation_type}: {reason}",
+                sentiment="neutral",
+                score_delta=0,
+            )
+            # Tell the interviewer to issue a verbal reminder (not a formal warning)
+            await self.send_interviewer_prompt(
+                f"[PROCTOR NOTICE — GRACE PERIOD: A {violation_type} was detected ({reason}). "
+                "The session is still in the initial setup window. Give the candidate a firm but friendly "
+                "reminder about the proctoring rules — camera on, phone away, eyes on screen — without "
+                "issuing a formal warning count. Say something like: 'Before we get started, make sure "
+                "your phone is completely out of reach and your camera is positioned so I can see you clearly.']"
+            )
+            return
+
+        # Critical violations bypass cooldown entirely
+        if self.warning_count and not is_critical and (now - self.last_warning_timestamp) < self.warning_cooldown_seconds:
             logger.info("Suppressing duplicate proctor warning within cooldown: %s", violation_type)
             return
         self.last_warning_timestamp = now
@@ -237,39 +325,91 @@ class ProctorGuardianSubAgent:
             # 2. Emit floating warning emoji micro-interaction
             await self.emit_json({
                 "type": "interviewer_reaction",
-                "data": {"emoji": "⚠️", "reaction_reason": f"Proctor Warning {self.warning_count}/3: {reason}"},
+                "data": {"emoji": "⚠️", "reaction_reason": f"⚠️ STRICT Proctor Warning {self.warning_count}/3: {reason}"},
             })
 
             # 3. Log to confidential candidate scratchpad
             self.add_scratchpad_note(
                 category="integrity_and_proctoring",
-                observation=f"Proctor Warning #{self.warning_count}: {reason} ({violation_type})",
+                observation=f"STRICT Proctor Warning #{self.warning_count}: {reason} ({violation_type})",
                 sentiment="concern",
-                score_delta=-10 * self.warning_count,
+                score_delta=0,
             )
+            await self.emit_json({"type": "scratchpad_updated", "data": {
+                "id": f"proctor_note_{self.warning_count}_{int(time.time() * 1000)}",
+                "category": "integrity_and_proctoring",
+                "note": f"⚠️ FORMAL WARNING #{self.warning_count}: {reason} ({violation_type})",
+                "observation_type": "concern",
+                "score_delta": 0,
+                "timestamp": timestamp_str,
+                "source": "Ultra-strict proctor system",
+            }})
 
-            # 4. Inject prompt to live AI interviewer to politely verbally address the warning
-            if violation_type == "multiple_persons_detected":
+            # 4. Inject STRICT prompt to live AI interviewer
+            if violation_type == "camera_visibility":
                 interviewer_cue = (
-                    f"[PROCTOR ALERT: Another person is visible in the room. Calmly ask {self.candidate_name} to have them step out, "
-                    "then say you will wait and continue the interview once they are alone. Keep this to one natural spoken sentence.]"
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: The candidate's face is NOT visible on camera. "
+                    f"State FIRMLY that this is a proctored assessment and their face MUST be visible at ALL times. "
+                    f"This is formal warning {self.warning_count} of 3. One more will terminate the assessment immediately. "
+                    "Pause the interview until they restore camera visibility.]"
+                )
+            elif violation_type == "multiple_persons_detected":
+                interviewer_cue = (
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: Another person is detected in the frame. "
+                    f"Tell {self.candidate_name} FIRMLY that this is a proctored assessment and they MUST be completely alone. "
+                    f"The other person must leave the room immediately. This is warning {self.warning_count} of 3. "
+                    "Do NOT continue until the other person has left.]"
                 )
             elif violation_type == "mobile_phone_detected":
                 interviewer_cue = (
-                    f"[PROCTOR ALERT: A phone/device was detected: {reason}. Ask {self.candidate_name} to put it away and continue hands-free. "
-                    "Keep this to one natural spoken sentence.]"
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: A phone or secondary device has been detected. "
+                    f"Evidence: {reason}. Tell {self.candidate_name} FIRMLY: 'This is a proctored assessment. "
+                    "ALL phones and secondary devices must be completely out of sight and out of reach — not on the desk, "
+                    "not in your hands, not anywhere visible. Put it away NOW.' "
+                    f"This is warning {self.warning_count} of 3. One more infraction will END this assessment immediately.]"
+                )
+            elif violation_type == "gaze_away_from_screen":
+                interviewer_cue = (
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: The candidate has been repeatedly looking away from the screen. "
+                    f"Evidence: {reason}. Tell {self.candidate_name} FIRMLY: 'I need you to keep your eyes on the screen at all times. "
+                    "This is a proctored assessment and looking away repeatedly is a formal violation. "
+                    f"This is warning {self.warning_count} of 3. If this continues, the assessment will be terminated immediately.']"
+                )
+            elif violation_type == "notes_detected":
+                interviewer_cue = (
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: Notes, papers, or written materials have been detected visible in the frame. "
+                    f"Tell {self.candidate_name} FIRMLY: 'No external notes, papers, or reference materials are allowed during a proctored assessment. "
+                    "Remove ALL written materials from your workspace immediately.' "
+                    f"This is warning {self.warning_count} of 3.]"
+                )
+            elif violation_type == "earpiece_detected":
+                interviewer_cue = (
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: An earpiece, earbud, or bluetooth headset has been detected. "
+                    f"Tell {self.candidate_name} FIRMLY: 'External audio devices that could relay answers are not permitted. "
+                    "Remove the earpiece immediately.' "
+                    f"This is warning {self.warning_count} of 3.]"
+                )
+            elif violation_type == "screen_reading":
+                interviewer_cue = (
+                    f"[STRICT PROCTOR WARNING {self.warning_count}/3: Signs of reading from a secondary screen or monitor detected. "
+                    f"Tell {self.candidate_name} FIRMLY: 'Only this assessment screen should be in use. "
+                    "Close any other monitors or screens.' "
+                    f"This is warning {self.warning_count} of 3.]"
                 )
             elif self.warning_count == 1:
                 interviewer_cue = (
-                    f"[PROCTOR ALERT: You observed {self.candidate_name} {reason.lower()}. "
-                    f"Warning 1 of 3 has been visually displayed on their screen. In your next spoken sentence, "
-                    f"politely ask them to keep their eyes on the camera and avoid looking at secondary notes/devices.]"
+                    f"[STRICT PROCTOR WARNING 1/3: Violation detected — {reason}. "
+                    f"Tell {self.candidate_name} FIRMLY that this is their first formal warning. "
+                    "This is a proctored assessment with zero tolerance. Two more infractions will immediately "
+                    "terminate and disqualify them from this assessment.]"
                 )
             else:
                 interviewer_cue = (
-                    f"[PROCTOR ALERT: Second warning (2 of 3) issued for {reason.lower()}. "
-                    f"Firmly inform the candidate verbally that this is their second warning, "
-                    f"and one more infraction will immediately terminate the interview.]"
+                    f"[STRICT PROCTOR WARNING 2/3 — FINAL WARNING: {reason}. "
+                    f"Tell {self.candidate_name} with absolute firmness: 'This is your SECOND and FINAL warning. "
+                    "ONE MORE violation of ANY kind — looking away, phone visible, another person, notes — "
+                    "will IMMEDIATELY terminate this assessment and result in disqualification. "
+                    "There will be no further chances.']"
                 )
             await self.send_interviewer_prompt(interviewer_cue)
 
@@ -298,6 +438,7 @@ class ProctorGuardianSubAgent:
             await self.emit_json({
                 "type": "interview_terminated",
                 "reason": disqualification_reason,
+                "warningsIssued": self.warning_count,
             })
 
             # 4. Terminate session

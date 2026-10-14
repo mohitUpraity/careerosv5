@@ -39,14 +39,14 @@ export const ReferralHub: React.FC<ReferralHubProps> = ({
 
   // Pitch generation state
   const [pitchType, setPitchType] = useState<'linkedin' | 'inmail' | 'email'>('linkedin');
-  const [targetRole, setTargetRole] = useState('Senior Backend / Full Stack Engineer');
+  const [targetRole, setTargetRole] = useState('');
   const [pitchResult, setPitchResult] = useState<PitchResponse | null>(null);
   const [generatingPitch, setGeneratingPitch] = useState(false);
   const [copied, setCopied] = useState(false);
   const pitchRequest = useRef(0);
 
   // Quick company filters
-  const quickCompanies = ['All', 'Apponward', 'DRDO', 'Google', 'Microsoft', 'HCST', 'Amazon'];
+  const quickCompanies = ['All', ...Array.from(new Set(contacts.map((contact) => contact.company).filter((company): company is string => Boolean(company))))];
 
   useEffect(() => {
     pitchRequest.current += 1;

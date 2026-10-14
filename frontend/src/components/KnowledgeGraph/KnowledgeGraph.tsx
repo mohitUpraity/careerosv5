@@ -1096,7 +1096,7 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
                 }
               }}
               aria-label="Search your knowledge graph"
-              placeholder="Search your graph in plain English (e.g. 'Show DRDO firewall stack & python', 'Alumni at Google', 'SIH hackathons')..."
+              placeholder="Search your graph in plain English (for example, show projects related to a skill)..."
               className={`w-full pl-10 pr-28 py-2 text-xs sm:text-sm rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 ${
                 isDark
                   ? 'bg-slate-800/90 border-slate-700 text-slate-100 placeholder:text-slate-500'
@@ -1138,12 +1138,11 @@ export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({
               Quick Lenses:
             </span>
             {[
-              { label: '🛡️ DRDO Stack', query: 'DRDO Next Gen Firewall packet inspection Python C++' },
-              { label: '🎓 College Alumni', query: 'Anand Engineering College SGI alumni referral connections' },
-              { label: '🏆 SIH Wins', query: 'Smart India Hackathon SIH 2024 awards achievements' },
-              { label: '🐍 Python & AI Core', query: 'Python FastAPI Neo4j GraphRAG Gemini AI Engine' },
-              { label: '⚛️ React & Frontend', query: 'React TypeScript TailwindCSS full stack repositories' },
-              { label: '🤝 Warm Bridges', query: 'All LinkedIn contacts and connected company employees' },
+              { label: 'Projects & skills', query: 'Show my projects and the skills connected to them' },
+              { label: 'Verified skills', query: 'Show my verified skills and their evidence' },
+              { label: 'Work history', query: 'Show my work experience and related companies' },
+              { label: 'Education', query: 'Show my education and alumni connections' },
+              { label: 'Professional network', query: 'Show my connections and referral paths' },
             ].map((preset) => (
               <button
                 key={preset.label}

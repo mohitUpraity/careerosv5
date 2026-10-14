@@ -3,6 +3,8 @@ import { InterviewConfig } from './live/types';
 import { Lobby } from './live/components/Lobby';
 import { MeetingRoom } from './live/components/MeetingRoom';
 import { useAuth } from '../../context/AuthContext';
+import { apiService } from '../../services/api';
+import { EvaluationReport } from './live/types';
 
 export interface LiveMultimodalArenaProps {
   company: string;
@@ -11,6 +13,8 @@ export interface LiveMultimodalArenaProps {
   onConclude?: () => void;
   onBack?: () => void;
   onTailorResume?: (role: string, company: string, jd: string) => void;
+  skillAssessment?: string;
+  onSkillAssessmentResult?: (result: { report: EvaluationReport; warnings: number; disqualified: boolean; candidateTurns: number; codeArtifact: string }) => void;
 }
 
 export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
@@ -20,8 +24,11 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
   onConclude,
   onBack,
   onTailorResume,
+  skillAssessment,
+  onSkillAssessmentResult,
 }) => {
-  const { activeProfile } = useAuth();
+  const { activeProfile, getAuthHeaders } = useAuth();
+  const [resumeContext, setResumeContext] = useState('');
   const [meetingConfig, setMeetingConfig] = useState<InterviewConfig | null>(null);
   const [userStream, setUserStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -33,6 +40,26 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
   const animFrameRef = useRef<number | null>(null);
 
   const [permissionError, setPermissionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiService.getMasterResume(getAuthHeaders()).then(({ blueprint }) => {
+      if (!cancelled && blueprint) {
+        const resumeEvidence = {
+          name: blueprint.contact?.full_name,
+          summary: blueprint.summary,
+          experience: blueprint.experience,
+          projects: blueprint.projects,
+          education: blueprint.education,
+          skills: blueprint.skills,
+          certifications: blueprint.certifications,
+          achievements: blueprint.achievements,
+        };
+        setResumeContext(JSON.stringify(resumeEvidence).slice(0, 12000));
+      }
+    }).catch((error) => console.warn('Could not load the master resume for interview context:', error));
+    return () => { cancelled = true; };
+  }, [activeProfile?.id]);
 
   const setupAudioAnalyzer = (stream: MediaStream) => {
     try {
@@ -72,6 +99,10 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
   };
 
   const acquireMediaStream = async (): Promise<MediaStream> => {
+    if (skillAssessment) {
+      // Skill proof must use actual devices; never substitute synthetic tracks.
+      return navigator.mediaDevices.getUserMedia({ audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } });
+    }
     // Stage 1: Try HD echo-cancelled audio + HD video
     try {
       return await navigator.mediaDevices.getUserMedia({
@@ -323,6 +354,11 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
       }
     }
 
+    if (skillAssessment && (!stream?.getVideoTracks().some(track => track.readyState === 'live' && track.enabled) || !stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled))) {
+      setPermissionError('A live camera and microphone are required for this proctored skill assessment.');
+      return;
+    }
+
     setMeetingConfig(config);
   };
 
@@ -349,6 +385,10 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
           onToggleMic={handleToggleMic}
           onToggleVideo={handleToggleVideo}
           onLeaveMeeting={handleLeaveMeeting}
+          proctoredAssessment={true}
+          onAssessmentResult={result => {
+            if (result) onSkillAssessmentResult?.(result);
+          }}
         />
       </div>
     );
@@ -369,8 +409,10 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
         initialCompany={company}
         initialRole={role}
         initialJobDescription={jobDescription}
-        initialCandidateName={activeProfile?.name || 'Candidate'}
+        initialCandidateName={activeProfile?.name || ''}
+        initialResumeText={resumeContext}
         onBack={onBack}
+        skillAssessment={skillAssessment}
       />
     </div>
   );

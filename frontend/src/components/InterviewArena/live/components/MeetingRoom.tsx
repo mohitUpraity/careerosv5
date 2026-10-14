@@ -9,6 +9,8 @@ import {
   EvaluationReport,
   ProctorWarning,
   ScratchpadNote,
+  LiveAnswerAnalysis,
+  OrchestratorAction,
 } from "../types";
 import { INITIAL_RUBRIC_STAGES } from "../data/interviewProfiles";
 import { AudioStreamingManager } from "../utils/audio";
@@ -22,6 +24,7 @@ import { CaptionsOverlay } from "./CaptionsOverlay";
 import { FloatingReactions, FloatingReactionItem } from "./FloatingReactions";
 import { EvaluationModal } from "./EvaluationModal";
 import { API_BASE } from "../../../../services/api";
+import { useAuth } from "../../../../context/AuthContext";
 import { Sparkles, Radio, Maximize2, Minimize2, ShieldCheck, AlertTriangle, Eye, X } from "lucide-react";
 
 interface MeetingRoomProps {
@@ -32,6 +35,8 @@ interface MeetingRoomProps {
   onToggleMic: () => void;
   onToggleVideo: () => void;
   onLeaveMeeting: () => void;
+  proctoredAssessment?: boolean;
+  onAssessmentResult?: (result: { report: EvaluationReport; warnings: number; disqualified: boolean; candidateTurns: number; codeArtifact: string } | null) => void;
 }
 
 export const MeetingRoom: React.FC<MeetingRoomProps> = ({
@@ -42,9 +47,12 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   onToggleMic,
   onToggleVideo,
   onLeaveMeeting,
+  proctoredAssessment = true,
+  onAssessmentResult,
 }) => {
+  const { getAuthHeaders } = useAuth();
   const [activeLayout, setActiveLayout] = useState<MeetingLayout>("split");
-  const [activeSideTab, setActiveSideTab] = useState<"people" | "chat" | "rubric" | "notes" | "proctor" | null>(null);
+  const [activeSideTab, setActiveSideTab] = useState<"people" | "chat" | "rubric" | "notes" | "proctor" | "analysis" | null>(null);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -53,6 +61,12 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   // Proctoring & Noticing Radar states
   const [proctorWarnings, setProctorWarnings] = useState<ProctorWarning[]>([]);
   const [scratchpadNotes, setScratchpadNotes] = useState<ScratchpadNote[]>([]);
+  const [liveAnalysis, setLiveAnalysis] = useState<LiveAnswerAnalysis[]>([]);
+  const [isAnalyzingAnswer, setIsAnalyzingAnswer] = useState(false);
+  const [orchestratorActions, setOrchestratorActions] = useState<OrchestratorAction[]>([]);
+  const [orchestratorNotice, setOrchestratorNotice] = useState<OrchestratorAction | null>(null);
+  const [cameraVisibilityMessage, setCameraVisibilityMessage] = useState<string | null>(null);
+  const [cameraVisibilityCountdown, setCameraVisibilityCountdown] = useState<number | null>(null);
   const [activeWarningBanner, setActiveWarningBanner] = useState<ProctorWarning | null>(null);
   const [pushedChallenge, setPushedChallenge] = useState<{
     challenge_title?: string;
@@ -61,6 +75,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     problem_description?: string;
   } | null>(null);
   const [disqualificationReason, setDisqualificationReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cameraVisibilityCountdown === null || cameraVisibilityCountdown <= 0) return;
+    const timer = window.setTimeout(() => {
+      setCameraVisibilityCountdown((seconds) => seconds === null ? null : Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [cameraVisibilityCountdown]);
 
   // Live Speech & Audio states
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -77,6 +99,30 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     speakerName: "",
     text: "",
   });
+  const captionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentUserTurnTextRef = useRef("");
+  const userTurnCompleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastGeminiInputTranscriptTimeRef = useRef<number>(0);
+
+  // Helper: display sliding window for captions so long turns remain concise and legible
+  const formatCaptionWindow = useCallback((fullText: string, maxWords = 22): string => {
+    if (!fullText) return "";
+    const words = fullText.trim().split(/\s+/);
+    if (words.length <= maxWords) return fullText.trim();
+    return "… " + words.slice(-maxWords).join(" ");
+  }, []);
+
+  // Helper: set caption with auto-clear after delay (like real closed captions)
+  const setCaptionWithAutoClear = useCallback((caption: { speaker: "ai" | "user" | "none"; speakerName: string; text: string }, clearDelayMs = 4000) => {
+    if (captionTimerRef.current) clearTimeout(captionTimerRef.current);
+    setCurrentCaption(caption);
+    if (caption.speaker !== "none" && clearDelayMs > 0) {
+      captionTimerRef.current = setTimeout(() => {
+        setCurrentCaption({ speaker: "none", speakerName: "", text: "" });
+        captionTimerRef.current = null;
+      }, clearDelayMs);
+    }
+  }, []);
 
   // Data collections
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
@@ -97,10 +143,40 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [lastCodeWritten, setLastCodeWritten] = useState<string>("");
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const localViolationCountRef = useRef(0);
+  const liveAnalysisRef = useRef<LiveAnswerAnalysis[]>([]);
+  const transcriptsRef = useRef(transcripts);
+  const scratchpadNotesRef = useRef(scratchpadNotes);
+  const proctorWarningsRef = useRef(proctorWarnings);
+  const lastCodeWrittenRef = useRef(lastCodeWritten);
+  const orchestratorActionsRef = useRef(orchestratorActions);
+  const uiEventsRef = useRef<Array<{ event: string; detail: string; timestamp: string }>>([]);
+  transcriptsRef.current = transcripts;
+  scratchpadNotesRef.current = scratchpadNotes;
+  proctorWarningsRef.current = proctorWarnings;
+  lastCodeWrittenRef.current = lastCodeWritten;
+  orchestratorActionsRef.current = orchestratorActions;
+  const isDisqualifiedRef = useRef(false);
+  const endCallStartedRef = useRef(false);
+  const terminationReasonRef = useRef("");
+  const proctorWarningCountRef = useRef(0);
+  const lastLocalWarningAtRef = useRef(0);
 
   // Refs
   const audioManagerRef = useRef<AudioStreamingManager | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const devStrictModeProbeSkippedRef = useRef(false);
+  const emitUiEvent = (name: string, detail = "") => {
+    uiEventsRef.current = [...uiEventsRef.current, {
+      event: name,
+      detail,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    }].slice(-40);
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "ui_event", name, details: { detail } }));
+    }
+  };
   const frameIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const hiddenCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoFeedRef = useRef<HTMLVideoElement | null>(null);
@@ -112,9 +188,17 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   // When true, discard incoming audio chunks (user interrupted the AI)
   const discardAudioRef = useRef(false);
   const discardAudioTimerRef = useRef<any>(null);
-  const isAutonomousModeRef = useRef(false);
-  const autonomousTurnRef = useRef(0);
-  const hasReceivedAiMessageRef = useRef(false);
+
+  // Sync state refs for speech recognition and callback closures
+  const isMutedRef = useRef(isMuted);
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  const isAiSpeakingRef = useRef(isAiSpeaking);
+  useEffect(() => {
+    isAiSpeakingRef.current = isAiSpeaking;
+  }, [isAiSpeaking]);
 
   // Unlock AudioContext on any user click
   const handleUnlockAudio = useCallback(() => {
@@ -130,6 +214,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text.trim());
     utterance.lang = /[\u0900-\u097f]/.test(text) ? "hi-IN" : "en-IN";
+    utterance.rate = 0.94;
+    utterance.pitch = 0.9;
     window.speechSynthesis.speak(utterance);
   }, []);
 
@@ -142,11 +228,51 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   const reconnectAttemptsRef = useRef(0);
   const isCallEndedRef = useRef(false);
 
+  const analyzeCompletedAnswer = useCallback(async (answer: string) => {
+    if (!answer.trim()) return;
+    setIsAnalyzingAnswer(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/interview/analyze-live-turn`, {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answer,
+          skillAssessment: config.proctoredSkill || null,
+          role: config.role,
+          jobDescription: config.jobDescription,
+        }),
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      const item: LiveAnswerAnalysis = {
+        id: `analysis-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        headline: result.headline || "Answer reviewed",
+        evidence: result.evidence || answer.slice(0, 220),
+        rubric_area: result.rubric_area || config.proctoredSkill || config.role || "Interview response",
+        feedback: result.feedback || "See the final report for full-session feedback.",
+        confidence: result.confidence || "limited",
+      };
+      liveAnalysisRef.current = [item, ...liveAnalysisRef.current].slice(0, 8);
+      setLiveAnalysis(liveAnalysisRef.current);
+    } catch (error) {
+      console.info("Live answer analysis could not be reached; final evaluation remains available.", error);
+    } finally {
+      setIsAnalyzingAnswer(false);
+    }
+  }, [config.proctoredSkill, config.role, config.jobDescription]);
+
   // Stable key so the WebSocket connection lifecycle is not re-triggered by cosmetic parent re-renders
-  const connectionKey = `${config.role}_${config.interviewerProfile?.company || "Google"}_${config.interviewerProfile?.name || "Interviewer"}_${config.interviewerProfile?.voice || "Zephyr"}_${config.candidateName}`;
+    const connectionKey = `${config.role}_${config.interviewerProfile?.company || ""}_${config.interviewerProfile?.name || "Interviewer"}_${config.interviewerProfile?.voice || "Kore"}_${config.candidateName}`;
 
   // Initialize Audio & WebSocket Connection
   useEffect(() => {
+    // React.StrictMode runs an extra mount/cleanup cycle in development. Skip
+    // that probe so it cannot open a backend session that is closed immediately.
+    if ((import.meta as any).env?.DEV && !devStrictModeProbeSkippedRef.current) {
+      devStrictModeProbeSkippedRef.current = true;
+      return;
+    }
     const audioManager = new AudioStreamingManager();
     audioManagerRef.current = audioManager;
 
@@ -193,142 +319,15 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     }
 
     const params = new URLSearchParams({
-      role: config.role || "Senior Backend Engineer",
-      company: config.interviewerProfile?.company || "Google",
-      candidate_name: config.candidateName || "Candidate",
-      voice: config.interviewerProfile?.voice || "Zephyr",
+      role: config.role || "",
+      company: config.company || config.interviewerProfile?.company || "",
+      candidate_name: config.candidateName || "",
+      voice: config.interviewerProfile?.voice || "Kore",
+      job_description: config.jobDescription || "",
+      round_type: config.format || "mixed",
+      difficulty: config.seniority || "medium",
     });
     wsUrl = `${wsUrl}?${params.toString()}`;
-
-    // In-Browser fallback for a WebSocket connection that fails after startup.
-    const startAutonomousInterview = () => {
-      // Never run if live WebSocket is already connected or active
-      if (
-        ws?.readyState === WebSocket.OPEN ||
-        socketRef.current?.readyState === WebSocket.OPEN ||
-        socketRef.current?.readyState === WebSocket.CONNECTING ||
-        hasReceivedAiMessageRef.current ||
-        isAutonomousModeRef.current
-      ) {
-        return;
-      }
-      isAutonomousModeRef.current = true;
-      hasReceivedAiMessageRef.current = true;
-      setIsConnecting(false);
-      discardAudioRef.current = false;
-
-      const welcome = `Hello ${config.candidateName ? config.candidateName : ""}! Welcome to your technical interview for the ${config.role} position at ${config.interviewerProfile.company || "our company"}. I'm ${config.interviewerProfile.name}, and I'll be conducting your interview today. To kick off, could you give a brief introduction of yourself and tell me about the most complex technical project you've built?`;
-
-      setCurrentCaption({
-        speaker: "ai",
-        speakerName: config.interviewerProfile.name,
-        text: welcome,
-      });
-
-      setTranscripts((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          speaker: "ai",
-          speakerName: config.interviewerProfile.name,
-          text: welcome,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          isFinal: true,
-        },
-      ]);
-
-      speakAiText(welcome);
-
-      setScratchpadNotes([
-        {
-          id: "1",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-          category: "technical_depth",
-          observation: "Candidate connected to arena. Analyzing communication cadence and project architecture.",
-          sentiment: "neutral",
-          confidence_score: 9.0,
-        },
-      ]);
-    };
-
-    const switchToAutonomousFallback = () => {
-      if (isAutonomousModeRef.current) return;
-      const failedSocket = ws;
-      audioManager.stopPlayback();
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-      ws = null;
-      socketRef.current = null;
-      hasReceivedAiMessageRef.current = false;
-      isAutonomousModeRef.current = false;
-      if (failedSocket) {
-        failedSocket.onclose = null;
-        failedSocket.onmessage = null;
-        failedSocket.onerror = null;
-        try { failedSocket.close(1000, "switching to local interview fallback"); } catch (_) {}
-      }
-      startAutonomousInterview();
-    };
-
-    const handleAutonomousUserTurn = (userAnswer: string) => {
-      // Strictly prevent autonomous script turns if live WebSocket is active
-      if (ws?.readyState === WebSocket.OPEN || !isAutonomousModeRef.current) return;
-      autonomousTurnRef.current += 1;
-      const turn = autonomousTurnRef.current;
-
-      const questions = [
-        `That's a very clear overview. Walk me through the core architecture of that system. When a high-volume request comes in, how does it traverse your services, caching layer, and data storage?`,
-        `Understood. Now imagine your traffic spikes 50x during a peak event. Where is the first bottleneck in this design, and how would you resolve it?`,
-        `Great point on scaling. Under high concurrency, how do you handle data consistency and race conditions across distributed instances?`,
-        `Looking back at that project, what was the most difficult technical trade-off you had to make, and what would you redesign with what you know today?`,
-        `Excellent technical depth. We've covered the core system design questions. Do you have any questions for me about engineering culture or our infrastructure?`
-      ];
-
-      const nextQuestion = questions[Math.min(turn - 1, questions.length - 1)];
-
-      const noteCategories: Array<"technical_depth" | "problem_solving" | "voice_speech"> = [
-        "technical_depth",
-        "problem_solving",
-        "voice_speech",
-      ];
-      const category = noteCategories[turn % noteCategories.length];
-      const newNote = {
-        id: String(Date.now()),
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-        category,
-        observation: `Candidate articulated technical response (${userAnswer.slice(0, 50)}...). Demonstrated sound architectural reasoning.`,
-        sentiment: "positive" as const,
-        confidence_score: Math.min(9.8, 8.4 + turn * 0.3),
-      };
-
-      setScratchpadNotes((prev) => [newNote, ...prev]);
-
-      setTimeout(() => {
-        setCurrentCaption({
-          speaker: "ai",
-          speakerName: config.interviewerProfile.name,
-          text: nextQuestion,
-        });
-
-        setTranscripts((prev) => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            speaker: "ai",
-            speakerName: config.interviewerProfile.name,
-            text: nextQuestion,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            isFinal: true,
-          },
-        ]);
-
-        speakAiText(nextQuestion);
-
-        setAnalytics((prev) => ({
-          ...prev,
-          turnCount: prev.turnCount + 1,
-        }));
-      }, 1000);
-    };
 
     // Close any previous lingering socket before creating a new connection
     if (socketRef.current) {
@@ -347,8 +346,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       ws = new WebSocket(wsUrl);
       socketRef.current = ws;
     } catch (e) {
-      console.warn("Failed to instantiate WebSocket, falling back to autonomous recruiter:", e);
-      startAutonomousInterview();
+      console.warn("Failed to instantiate interview WebSocket:", e);
+      setIsConnecting(false);
+      setCurrentCaption({ speaker: "ai", speakerName: "System", text: "Live interview connection is unavailable. Please retry." });
     }
 
     // Failsafe timer: unblock 'Connecting...' spinner after 5s if still loading
@@ -362,7 +362,6 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         if ("speechSynthesis" in window) {
           window.speechSynthesis.cancel();
         }
-        isAutonomousModeRef.current = false;
         reconnectAttemptsRef.current = 0;
         console.log("WebSocket connected to", wsUrl);
         setIsConnecting(false);
@@ -423,32 +422,47 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           if ("speechSynthesis" in window) {
             window.speechSynthesis.cancel();
           }
-          isAutonomousModeRef.current = false;
-          hasReceivedAiMessageRef.current = true;
-          console.log("[Live] ✓ Session ready — AI interviewer connected");
+            console.log("[Live] ✓ Session ready — AI interviewer connected");
           discardAudioRef.current = false;
           setIsConnecting(false);
         } else if (msg.type === "audio") {
-          hasReceivedAiMessageRef.current = true;
           // Skip audio chunks from an interrupted AI turn
           if (discardAudioRef.current) return;
-          hasPcmAudioRef.current = true;
-          audioManager.playAudioChunk(msg.data);
+          hasPcmAudioRef.current = audioManager.playAudioChunk(msg.data) || hasPcmAudioRef.current;
           setIsInterrupted(false);
         } else if (msg.type === "output_transcript") {
-          hasReceivedAiMessageRef.current = true;
           // Fresh speech arrived: ensure audio playback is unblocked
           discardAudioRef.current = false;
           if (discardAudioTimerRef.current) {
             clearTimeout(discardAudioTimerRef.current);
             discardAudioTimerRef.current = null;
           }
-          // Closed captions for AI
+          // If candidate was speaking when AI speech started, finalize candidate turn
+          if (currentUserTurnTextRef.current.trim()) {
+            const completedAnswer = currentUserTurnTextRef.current.trim();
+            currentUserTurnTextRef.current = "";
+            if (userTurnCompleteTimeoutRef.current) {
+              clearTimeout(userTurnCompleteTimeoutRef.current);
+              userTurnCompleteTimeoutRef.current = null;
+            }
+            void analyzeCompletedAnswer(completedAnswer);
+            setTranscripts((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.speaker === "user" && !last.isFinal) {
+                return [...prev.slice(0, -1), { ...last, isFinal: true }];
+              }
+              return prev;
+            });
+          }
+
+          // Closed captions for AI — show accumulated sliding window
           currentAiTurnTextRef.current += (currentAiTurnTextRef.current ? " " : "") + msg.text;
+          // Cancel any pending auto-clear since AI is still speaking
+          if (captionTimerRef.current) { clearTimeout(captionTimerRef.current); captionTimerRef.current = null; }
           setCurrentCaption({
             speaker: "ai",
             speakerName: config.interviewerProfile.name,
-            text: msg.text,
+            text: formatCaptionWindow(currentAiTurnTextRef.current, 22),
           });
           // Append to transcripts
           setTranscripts((prev) => {
@@ -472,32 +486,105 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             ];
           });
         } else if (msg.type === "input_transcript") {
-          // Closed captions for User
+          lastGeminiInputTranscriptTimeRef.current = Date.now();
+          const cleanChunk = (msg.text || "").trim();
+          if (!cleanChunk) return;
+
+          // Accumulate candidate turn text
+          currentUserTurnTextRef.current += (currentUserTurnTextRef.current ? " " : "") + cleanChunk;
+
+          // Display candidate's speech in closed captions
+          if (captionTimerRef.current) {
+            clearTimeout(captionTimerRef.current);
+            captionTimerRef.current = null;
+          }
           setCurrentCaption({
             speaker: "user",
             speakerName: config.candidateName || "You",
-            text: msg.text,
+            text: formatCaptionWindow(currentUserTurnTextRef.current, 22),
           });
-          setTranscripts((prev) => [
-            ...prev,
-            {
-              id: `user-${Date.now()}`,
-              speaker: "user",
-              speakerName: config.candidateName || "You",
-              text: msg.text,
-              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              isFinal: true,
-            },
-          ]);
+
+          // Append to transcripts list
+          setTranscripts((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.speaker === "user" && !last.isFinal) {
+              return [
+                ...prev.slice(0, -1),
+                { ...last, text: last.text + " " + cleanChunk },
+              ];
+            }
+            return [
+              ...prev,
+              {
+                id: `user-${Date.now()}`,
+                speaker: "user",
+                speakerName: config.candidateName || "You",
+                text: cleanChunk,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                isFinal: false,
+              },
+            ];
+          });
+
+          // Debounce user turn completion (after 2s of silence, finalize turn and analyze)
+          if (userTurnCompleteTimeoutRef.current) {
+            clearTimeout(userTurnCompleteTimeoutRef.current);
+          }
+          userTurnCompleteTimeoutRef.current = setTimeout(() => {
+            if (currentUserTurnTextRef.current.trim()) {
+              const fullAnswer = currentUserTurnTextRef.current.trim();
+              currentUserTurnTextRef.current = "";
+              void analyzeCompletedAnswer(fullAnswer);
+              setTranscripts((prev) => {
+                const last = prev[prev.length - 1];
+                if (last && last.speaker === "user" && !last.isFinal) {
+                  return [...prev.slice(0, -1), { ...last, isFinal: true }];
+                }
+                return prev;
+              });
+            }
+            if (captionTimerRef.current) clearTimeout(captionTimerRef.current);
+            captionTimerRef.current = setTimeout(() => {
+              setCurrentCaption((prev) => prev.speaker === "user" ? { speaker: "none", speakerName: "", text: "" } : prev);
+              captionTimerRef.current = null;
+            }, 3500);
+            userTurnCompleteTimeoutRef.current = null;
+          }, 2000);
         } else if (msg.type === "visual_observation") {
           const observation = msg.data?.description;
           if (observation) {
-            setCurrentCaption({
+            const item: ScratchpadNote = {
+              id: `visual-${Date.now()}`,
+              category: "visual_observation",
+              observation,
+              sentiment: "neutral",
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            };
+            setScratchpadNotes((prev) => [item, ...prev]);
+            setCaptionWithAutoClear({
               speaker: "ai",
               speakerName: config.interviewerProfile.name,
               text: observation,
-            });
+            }, 5000);
           }
+        } else if (msg.type === "camera_visibility_check") {
+          setCameraVisibilityMessage(msg.data?.message || "Please return to the camera view.");
+          setCameraVisibilityCountdown(Number(msg.data?.countdown_seconds || 10));
+        } else if (msg.type === "camera_visibility_warning") {
+          setCameraVisibilityMessage(msg.data?.message || "The interview is paused until the camera view is restored.");
+          setCameraVisibilityCountdown(0);
+        } else if (msg.type === "camera_attention_check") {
+          setCameraVisibilityMessage(msg.data?.message || "The camera review noticed repeated off-camera gaze. Please explain if you are checking something or need a moment.");
+          setCameraVisibilityCountdown(null);
+          window.setTimeout(() => setCameraVisibilityMessage(null), 7000);
+        } else if (msg.type === "device_attention_check") {
+          setCameraVisibilityMessage(msg.data?.message || "A phone is visible while the camera review sees repeated off-camera attention. Please clarify whether you are using it.");
+          setCameraVisibilityCountdown(null);
+          window.setTimeout(() => setCameraVisibilityMessage(null), 9000);
+        } else if (msg.type === "camera_visibility_restored") {
+          setCameraVisibilityMessage(msg.data?.message || "Camera view restored. The interview can continue.");
+          setCameraVisibilityCountdown(null);
+          window.setTimeout(() => setCameraVisibilityMessage(null), 3500);
         } else if (msg.type === "interrupted") {
           // Candidate interrupted the AI — discard in-flight stale audio from previous turn
           console.log("[Live] ⚡ Interrupted — discarding in-flight audio");
@@ -506,6 +593,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           if ("speechSynthesis" in window) window.speechSynthesis.cancel();
           setIsAiSpeaking(false);
           setIsInterrupted(true);
+          // Clear stale AI captions on interruption
+          if (captionTimerRef.current) { clearTimeout(captionTimerRef.current); captionTimerRef.current = null; }
+          setCurrentCaption({ speaker: "none", speakerName: "", text: "" });
           setAnalytics((prev) => ({
             ...prev,
             interruptionCount: prev.interruptionCount + 1,
@@ -525,7 +615,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             clearTimeout(discardAudioTimerRef.current);
             discardAudioTimerRef.current = null;
           }
-          if (!hasPcmAudioRef.current && currentAiTurnTextRef.current.trim()) {
+          if ((!hasPcmAudioRef.current || !audioManager.isOutputContextRunning()) && currentAiTurnTextRef.current.trim()) {
             speakAiTextRef.current(currentAiTurnTextRef.current);
           }
           // Mark last AI transcript item as final
@@ -538,6 +628,12 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           });
           hasPcmAudioRef.current = false;
           currentAiTurnTextRef.current = "";
+          // Auto-clear AI caption after turn ends (brief delay so user can read last words)
+          if (captionTimerRef.current) clearTimeout(captionTimerRef.current);
+          captionTimerRef.current = setTimeout(() => {
+            setCurrentCaption((prev) => prev.speaker === "ai" ? { speaker: "none", speakerName: "", text: "" } : prev);
+            captionTimerRef.current = null;
+          }, 3500);
 
           setAnalytics((prev) => ({
             ...prev,
@@ -545,17 +641,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           }));
         } else if (msg.type === "interviewer_reaction") {
           if (msg.data?.emoji) {
-            handleTriggerReaction(msg.data.emoji);
+            handleTriggerReaction(msg.data.emoji, true);
           }
         } else if (msg.type === "conduct_warning" || msg.type === "proctor_warning") {
           const warningData = msg.data || msg.warning || {};
           const warningItem: ProctorWarning = {
             warning_number: warningData.warning_number || warningData.warning_level || (proctorWarnings.length + 1),
-            warning_message: warningData.warning_reason || warningData.warning_message || "Integrity alert: Please maintain eye contact with the camera.",
-            violation_type: warningData.violation_type || "suspicious_movement",
+            warning_message: warningData.warning_reason || warningData.warning_message || "A session event was flagged for review. Please continue; automated flags can be mistaken.",
+            violation_type: warningData.violation_type || "unverified_event",
             timestamp: warningData.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           };
           setProctorWarnings((prev) => [...prev, warningItem]);
+          proctorWarningCountRef.current = Math.max(proctorWarningCountRef.current, warningItem.warning_number);
           setActiveWarningBanner(warningItem);
           setTimeout(() => setActiveWarningBanner(null), 7000);
         } else if (msg.type === "interviewer_observation" || msg.type === "scratchpad_updated") {
@@ -566,46 +663,65 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             observation: noteData.note || noteData.observation || "",
             sentiment: noteData.observation_type || noteData.sentiment || "neutral",
             timestamp: noteData.timestamp || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            confidence_score: noteData.score_delta || noteData.confidence_score,
+            confidence_score: noteData.confidence_score ?? noteData.confidence,
           };
           setScratchpadNotes((prev) => [noteItem, ...prev]);
+        } else if (msg.type === "orchestrator_action") {
+          const action = msg.data as OrchestratorAction;
+          const nextActions = [action, ...orchestratorActionsRef.current].slice(0, 12);
+          orchestratorActionsRef.current = nextActions;
+          setOrchestratorActions(nextActions);
+          setOrchestratorNotice(action);
+          window.setTimeout(() => setOrchestratorNotice((current) => current?.id === action.id ? null : current), 8000);
         } else if (msg.type === "push_coding_challenge") {
           const challenge = msg.data || {};
           setPushedChallenge(challenge);
           setActiveLayout("code_split");
         } else if (msg.type === "update_whiteboard") {
           setActiveLayout("whiteboard_split");
+        } else if (msg.type === "ui_action") {
+          const action = msg.data?.action;
+          if (action === "open_coding_playground") setActiveLayout("code_split");
+          else if (action === "open_whiteboard") setActiveLayout("whiteboard_split");
+          else if (action === "set_layout" && ["split", "interviewer_focus", "candidate_focus", "code_split", "whiteboard_split"].includes(msg.data?.layout)) {
+            setActiveLayout(msg.data.layout as MeetingLayout);
+          } else if (action === "open_panel" && ["people", "chat", "rubric", "notes", "proctor", "analysis"].includes(msg.data?.panel)) {
+            setActiveSideTab(msg.data.panel);
+          } else if (action === "close_panel") setActiveSideTab(null);
+          else if (action === "set_captions") setCaptionsEnabled(Boolean(msg.data?.enabled));
+          else if (action === "trigger_reaction" && msg.data?.emoji) handleTriggerReaction(msg.data.emoji, true);
         } else if (msg.type === "conclude_interview" || msg.type === "interview_terminated") {
           if (msg.type === "interview_terminated") {
-            setDisqualificationReason(msg.reason || "Disqualified for multiple proctoring/integrity violations.");
+            isDisqualifiedRef.current = true;
+            terminationReasonRef.current = msg.reason || "The interview ended after the proctoring escalation limit was reached.";
+            proctorWarningCountRef.current = Math.max(proctorWarningCountRef.current, Number(msg.warningsIssued || 0));
+            setDisqualificationReason(terminationReasonRef.current);
           }
           handleEndCall();
         } else if (msg.type === "status") {
           // Model fallback progress updates from server
           console.log("[Live Status]", msg.message);
-          setCurrentCaption({
+          setCaptionWithAutoClear({
             speaker: "ai",
             speakerName: "System",
             text: msg.message || "Connecting...",
-          });
+          }, 6000);
         } else if (msg.type === "error") {
           console.error("[Live Error]", msg.message);
-          setCurrentCaption({
+          setIsConnecting(false);
+          setCaptionWithAutoClear({
             speaker: "ai",
             speakerName: "System",
-            text: `⚠️ ${msg.message || "Connection error"} — switching to backup engine...`,
-          });
-          if (msg.message && (msg.message.includes("1011") || msg.message.includes("1006") || msg.message.includes("closed") || msg.message.includes("abnormal"))) {
-            switchToAutonomousFallback();
-          }
+            text: msg.message || "Live interview response is unavailable. Please retry.",
+          }, 8000);
         } else if (msg.type === "session_closed") {
           console.warn("[Live] Session closed by server");
-          setIsConnecting(true);
-          setCurrentCaption({
+          setIsConnecting(false);
+          setCaptionWithAutoClear({
             speaker: "ai",
             speakerName: "System",
             text: "Session ended. Refresh to start a new interview.",
-          });
+          }, 0); // Don't auto-clear — persistent message
         }
       } catch (err) {
         console.error("Error processing WS message:", err);
@@ -624,14 +740,18 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
 
     // Start Audio Capture with user's stream
     if (userStream) {
-      audioManager.startAudioCapture(userStream);
+      void audioManager.startAudioCapture(userStream).catch((error) => {
+        console.error("Could not start live microphone streaming:", error);
+        setCaptionWithAutoClear({
+          speaker: "ai",
+          speakerName: "System",
+          text: "I can’t hear you yet. Please check microphone permission and reload the interview if needed.",
+        }, 8000);
+      });
     }
 
-    // Candidate Speech Recognition Listener (Web Speech API)
-    // IMPORTANT: Used ONLY for local captions and interruption detection.
-    // Audio is already streamed to Gemini via AudioStreamingManager as raw PCM.
-    // Do NOT send recognized text to the WebSocket — that would duplicate the input
-    // and confuse Gemini's turn-taking model, causing it to never respond.
+    // Browser speech recognition is caption-only. Gemini Live's input transcript
+    // is the canonical record; keeping both created duplicate evidence in reports.
     const SpeechRecognitionClass =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognitionClass) {
@@ -643,6 +763,11 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         recognition.lang = "en-US";
 
         recognition.onresult = (e: any) => {
+          // CRITICAL: Ignore any input if candidate is muted, or if AI is currently speaking/playing audio
+          if (isMutedRef.current || isAiSpeakingRef.current || audioManager.hasActivePlayback()) {
+            return;
+          }
+
           let interim = "";
           let final = "";
 
@@ -655,33 +780,64 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             }
           }
 
-          const currentText = final || interim;
-          if (currentText.trim()) {
-            setCurrentCaption({
-              speaker: "user",
-              speakerName: config.candidateName || "You",
-              text: currentText.trim(),
-            });
+          const currentText = (final || interim).trim();
+          if (!currentText) return;
 
-            if (final.trim()) {
-              // Only simulate client-side turns in autonomous fallback mode.
-              // When connected to Gemini Live, raw 16kHz PCM audio is streamed directly.
-              if (isAutonomousModeRef.current) {
-                handleAutonomousUserTurn(final.trim());
-              }
-              setTranscripts((prev) => [
-                ...prev,
-                {
-                  id: `user-${Date.now()}`,
-                  speaker: "user",
-                  speakerName: config.candidateName || "You",
-                  text: final.trim(),
-                  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                  isFinal: true,
-                },
-              ]);
-            }
+          // If Gemini Live's native input_transcript arrived within the last 1500ms,
+          // Gemini Live is providing cloud-native transcription, so don't double-post.
+          const isGeminiLiveTranscribing = Date.now() - lastGeminiInputTranscriptTimeRef.current < 1500;
+          if (isGeminiLiveTranscribing) return;
+
+          // Otherwise, browser SpeechRecognition serves as real-time caption provider
+          currentUserTurnTextRef.current = currentText;
+          if (captionTimerRef.current) {
+            clearTimeout(captionTimerRef.current);
+            captionTimerRef.current = null;
           }
+          setCurrentCaption({
+            speaker: "user",
+            speakerName: config.candidateName || "You",
+            text: formatCaptionWindow(currentText, 22),
+          });
+
+          // Recover spoken answers as text when the browser's WebAudio path
+          // is not actually capturing speech. This also records the answer
+          // through the canonical server transcript path.
+          if (final.trim() && !audioManager.hasRecentSpeech() && ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "recognized_text", data: final.trim() }));
+          }
+
+          if (userTurnCompleteTimeoutRef.current) clearTimeout(userTurnCompleteTimeoutRef.current);
+          userTurnCompleteTimeoutRef.current = setTimeout(() => {
+            if (currentUserTurnTextRef.current.trim()) {
+              const fullAnswer = currentUserTurnTextRef.current.trim();
+              currentUserTurnTextRef.current = "";
+              void analyzeCompletedAnswer(fullAnswer);
+              setTranscripts((prev) => {
+                const last = prev[prev.length - 1];
+                if (last && last.speaker === "user" && !last.isFinal) {
+                  return [...prev.slice(0, -1), { ...last, isFinal: true }];
+                }
+                return [
+                  ...prev,
+                  {
+                    id: `user-${Date.now()}`,
+                    speaker: "user",
+                    speakerName: config.candidateName || "You",
+                    text: fullAnswer,
+                    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                    isFinal: true,
+                  },
+                ];
+              });
+            }
+            if (captionTimerRef.current) clearTimeout(captionTimerRef.current);
+            captionTimerRef.current = setTimeout(() => {
+              setCurrentCaption((prev) => prev.speaker === "user" ? { speaker: "none", speakerName: "", text: "" } : prev);
+              captionTimerRef.current = null;
+            }, 3500);
+            userTurnCompleteTimeoutRef.current = null;
+          }, 2000);
         };
 
         recognition.onerror = (err: any) => {
@@ -705,9 +861,27 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       }
     }
 
-    // Keep video useful for vision while leaving the WebSocket queue for audio.
+    // Ultra-strict proctoring: capture frames at 2.5 FPS for near-instant violation detection.
+    // Track whether we've already sent a camera-off notification to avoid spamming
+    let cameraOffNotified = false;
     frameIntervalRef.current = setInterval(() => {
-      if (!ws || ws.readyState !== WebSocket.OPEN || isVideoOff || ws.bufferedAmount > 16 * 1024) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+      // CRITICAL: If video is off, notify backend so proctor heartbeat detects it
+      if (isVideoOff) {
+        if (!cameraOffNotified) {
+          cameraOffNotified = true;
+          ws.send(JSON.stringify({ type: "camera_state", active: false }));
+        }
+        return;
+      }
+      // Video is on — reset notification flag
+      if (cameraOffNotified) {
+        cameraOffNotified = false;
+        ws.send(JSON.stringify({ type: "camera_state", active: true }));
+      }
+
+      if (ws.bufferedAmount > 24 * 1024) return;
       const canvas = hiddenCanvasRef.current;
       if (!canvas) return;
 
@@ -724,16 +898,17 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       if (activeVideo && activeVideo.readyState >= 2) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          const scale = Math.min(384 / activeVideo.videoWidth, 288 / activeVideo.videoHeight, 1);
+          // Preserve source detail for face, hand, device, and additional-person observations.
+          const scale = Math.min(720 / activeVideo.videoWidth, 540 / activeVideo.videoHeight, 1);
           canvas.width = Math.max(1, Math.round(activeVideo.videoWidth * scale));
           canvas.height = Math.max(1, Math.round(activeVideo.videoHeight * scale));
           ctx.drawImage(activeVideo, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
           const base64Jpeg = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
           ws.send(JSON.stringify({ type: "video", data: base64Jpeg }));
         }
       }
-    }, 1400);
+    }, 400);
 
     // Live analytics timer
     const analyticsTimer = setInterval(() => {
@@ -769,7 +944,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         socketRef.current = null;
       }
     };
-  }, [connectionKey, reconnectCount]);
+  }, [connectionKey, reconnectCount, analyzeCompletedAnswer]);
 
   // Update mute state in Audio Manager
   useEffect(() => {
@@ -794,6 +969,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         setScreenStream(null);
       }
       setIsScreenSharing(false);
+      emitUiEvent("screen_share_stopped");
     } else {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -801,6 +977,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         });
         setScreenStream(stream);
         setIsScreenSharing(true);
+        emitUiEvent("screen_share_started");
         stream.getVideoTracks()[0].onended = () => {
           setIsScreenSharing(false);
           setScreenStream(null);
@@ -812,13 +989,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   };
 
   // Reactions trigger
-  const handleTriggerReaction = (emoji: string) => {
+  const handleTriggerReaction = (emoji: string, fromInterviewer = false) => {
     const newReaction: FloatingReactionItem = {
       id: `react-${Date.now()}-${Math.random()}`,
       emoji,
       leftPercent: 30 + Math.random() * 40,
     };
     setReactions((prev) => [...prev, newReaction]);
+    if (!fromInterviewer) emitUiEvent("reaction_sent", emoji);
     setTimeout(() => {
       setReactions((prev) => prev.filter((r) => r.id !== newReaction.id));
     }, 2500);
@@ -879,8 +1057,102 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     handleTriggerReaction("🎨");
   };
 
+  const registerLocalProctorWarning = useCallback((reason: string) => {
+    if (!proctoredAssessment || isDisqualifiedRef.current) return;
+    const now = Date.now();
+    // 30s debounce between local warnings to avoid rapid-fire
+    if (now - lastLocalWarningAtRef.current < 30_000) return;
+    lastLocalWarningAtRef.current = now;
+    localViolationCountRef.current += 1;
+    const number = localViolationCountRef.current;
+    const warning: ProctorWarning = {
+      warning_number: Math.min(3, proctorWarnings.length + 1),
+      violation_type: 'assessment_integrity',
+      warning_message: reason,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setProctorWarnings(previous => [...previous, warning]);
+    setActiveWarningBanner(warning);
+    setTimeout(() => setActiveWarningBanner(null), 10_000);
+    // Local violations require 5 strikes to disqualify (backend proctor handles vision-based disqualification at 3)
+    if (number >= 5) {
+      isDisqualifiedRef.current = true;
+      setDisqualificationReason('The assessment was ended after repeated camera, microphone, fullscreen, or focus interruptions.');
+      setTimeout(() => { void handleEndCall(); }, 0);
+    }
+  }, [proctoredAssessment, proctorWarnings.length]);
+
+  useEffect(() => {
+    if (!proctoredAssessment) return;
+    const mountedAt = Date.now();
+    let cameraFlagged = false;
+    let micFlagged = false;
+    let focusFlagged = false;
+    // Fullscreen is optional unless the candidate entered it first. Do not
+    // count page load outside fullscreen as a violation.
+    let fullscreenFlagged = !document.fullscreenElement;
+    const checkDevices = () => {
+      // 30 second warmup grace period — don't fire local warnings while candidate is setting up
+      if (Date.now() - mountedAt < 30_000) return;
+      const cameraLive = Boolean(userStream?.getVideoTracks().some(track => track.readyState === 'live' && track.enabled)) && !isVideoOff;
+      const micLive = Boolean(userStream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled)) && !isMuted;
+      if (!cameraLive && !cameraFlagged) { cameraFlagged = true; registerLocalProctorWarning('Camera feed was disabled or interrupted.'); }
+      else if (cameraLive) cameraFlagged = false;
+      if (!micLive && !micFlagged) { micFlagged = true; registerLocalProctorWarning('Microphone was muted or interrupted.'); }
+      else if (micLive) micFlagged = false;
+    };
+    const checkFocus = () => {
+      if (document.visibilityState !== 'visible' && !focusFlagged) { focusFlagged = true; registerLocalProctorWarning('The assessment page was moved to the background.'); }
+      else if (document.visibilityState === 'visible') focusFlagged = false;
+    };
+    const checkFullscreen = () => {
+      if (!document.fullscreenElement && !fullscreenFlagged) { fullscreenFlagged = true; registerLocalProctorWarning('Fullscreen assessment mode was exited.'); }
+      else if (document.fullscreenElement) fullscreenFlagged = false;
+    };
+    document.addEventListener('visibilitychange', checkFocus);
+    document.addEventListener('fullscreenchange', checkFullscreen);
+    const timer = window.setInterval(checkDevices, 1500);
+    checkDevices();
+    checkFullscreen();
+    return () => {
+      document.removeEventListener('visibilitychange', checkFocus);
+      document.removeEventListener('fullscreenchange', checkFullscreen);
+      window.clearInterval(timer);
+    };
+  }, [proctoredAssessment, userStream, isVideoOff, isMuted, registerLocalProctorWarning]);
+
+  const guardMicToggle = () => {
+    if (proctoredAssessment) {
+      emitUiEvent("microphone_toggle_blocked", "Proctored mode keeps the microphone enabled.");
+      registerLocalProctorWarning('Attempted to mute the microphone during a proctored assessment.');
+      return;
+    }
+    if (!isMuted) {
+      // User is muting: instantly clear user captions and clear in-progress turn
+      currentUserTurnTextRef.current = "";
+      if (userTurnCompleteTimeoutRef.current) {
+        clearTimeout(userTurnCompleteTimeoutRef.current);
+        userTurnCompleteTimeoutRef.current = null;
+      }
+      setCurrentCaption((prev) => prev.speaker === "user" ? { speaker: "none", speakerName: "", text: "" } : prev);
+    }
+    onToggleMic();
+    emitUiEvent(isMuted ? "microphone_unmuted" : "microphone_muted");
+  };
+  const guardVideoToggle = () => {
+    if (proctoredAssessment) {
+      emitUiEvent("camera_toggle_blocked", "Proctored mode keeps the camera enabled.");
+      registerLocalProctorWarning('Attempted to turn off the camera during a proctored assessment.');
+      return;
+    }
+    onToggleVideo();
+    emitUiEvent(isVideoOff ? "camera_enabled" : "camera_disabled");
+  };
+
   // End Call & Trigger Comprehensive Evaluation
   const handleEndCall = async () => {
+    if (endCallStartedRef.current) return;
+    endCallStartedRef.current = true;
     isCallEndedRef.current = true;
     setShowEvaluation(true);
     setIsEvaluating(true);
@@ -888,22 +1160,54 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
     if (audioManagerRef.current) {
       audioManagerRef.current.stopPlayback();
     }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (speechRecognitionRef.current) {
+      try { speechRecognitionRef.current.stop(); } catch {}
+      speechRecognitionRef.current = null;
+    }
+    userStream?.getTracks().forEach((track) => track.stop());
+    const liveSocket = socketRef.current;
+    socketRef.current = null;
+    if (liveSocket && liveSocket.readyState < WebSocket.CLOSING) {
+      liveSocket.close(1000, "Interview ended");
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/v1/interview/evaluate-interview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transcript: transcripts,
+          transcript: transcriptsRef.current,
+          company: config.company,
           role: config.role,
           seniority: config.seniority,
           format: config.format,
-          codeSnippet: lastCodeWritten,
+          skillAssessment: config.proctoredSkill || null,
+          jobDescription: config.jobDescription,
+          liveAnalysis: liveAnalysisRef.current,
+          sessionObservations: scratchpadNotesRef.current,
+          orchestratorActions: orchestratorActionsRef.current,
+          uiEvents: uiEventsRef.current,
+          proctorEvents: proctorWarningsRef.current.map(({ violation_type, warning_message, timestamp }) => ({ violation_type, warning_message, timestamp })),
+          warningsIssued: proctorWarningCountRef.current,
+          disqualified: isDisqualifiedRef.current,
+          terminationReason: terminationReasonRef.current,
+          candidateTurns: transcriptsRef.current.filter(item => item.speaker === 'user' && item.text.trim().length >= 12).length,
+          codeSnippet: lastCodeWrittenRef.current,
           notes: chatMessages.map((m) => `${m.senderName}: ${m.text}`).join("\n"),
         }),
       });
       const data = await res.json();
       setEvaluationReport(data);
+      if (proctoredAssessment && data && typeof data.overallScore === 'number') {
+        onAssessmentResult?.({
+          report: data,
+          warnings: Math.max(proctorWarnings.length, localViolationCountRef.current),
+          disqualified: isDisqualifiedRef.current || Boolean(disqualificationReason),
+          candidateTurns: transcriptsRef.current.filter(item => item.speaker === 'user' && item.text.trim().length >= 12).length,
+          codeArtifact: lastCodeWrittenRef.current,
+        });
+      }
     } catch (err) {
       console.error("Evaluation request failed:", err);
     } finally {
@@ -944,6 +1248,32 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       />
       <canvas ref={hiddenCanvasRef} className="hidden" />
 
+      {orchestratorNotice && (
+        <div className={`fixed right-4 top-16 z-[80] max-w-sm rounded-xl border p-3 shadow-2xl ${orchestratorNotice.action === "explanation_required" ? "border-amber-400/40 bg-amber-950/90" : "border-blue-400/30 bg-[#202124]/95"}`} role="status">
+          <div className="text-xs font-semibold text-white">{orchestratorNotice.action === "explanation_required" ? "Please add context" : orchestratorNotice.action === "camera_adjustment_required" ? "Camera visibility check" : "Live assessment update"}</div>
+          <p className="mt-1 text-xs leading-relaxed text-gray-200">{orchestratorNotice.message}</p>
+        </div>
+      )}
+
+      {cameraVisibilityMessage && (
+        <div className={`fixed left-1/2 top-16 z-[85] w-[min(92vw,34rem)] -translate-x-1/2 rounded-xl border p-4 shadow-2xl ${cameraVisibilityCountdown === 0 ? "border-amber-400/60 bg-amber-950/95" : "border-blue-400/50 bg-[#202124]/95"}`} role="alert" aria-live="assertive">
+          <div className={`mb-1 text-xs font-bold uppercase tracking-wider ${cameraVisibilityCountdown === 0 ? "text-amber-200" : "text-blue-200"}`}>
+            {cameraVisibilityCountdown === 0 ? "Camera visibility warning · please return to frame" : cameraVisibilityCountdown === null ? "Camera attention check · no score impact" : "Camera visibility check · no score impact"}
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm leading-relaxed text-white">{cameraVisibilityMessage}</p>
+            {cameraVisibilityCountdown !== null && cameraVisibilityCountdown > 0 && (
+              <span className="shrink-0 rounded-full border border-amber-300/50 px-3 py-1 text-lg font-bold tabular-nums text-amber-200" aria-label={`${cameraVisibilityCountdown} seconds remaining`}>
+                {cameraVisibilityCountdown}s
+              </span>
+            )}
+          </div>
+          {cameraVisibilityCountdown !== null && cameraVisibilityCountdown > 0 && (
+            <div className="mt-3 h-1 overflow-hidden rounded bg-white/10"><div className="h-full bg-amber-300 transition-all duration-1000" style={{ width: `${cameraVisibilityCountdown * 10}%` }} /></div>
+          )}
+        </div>
+      )}
+
       {/* Floating Emojis Overlay */}
       <FloatingReactions reactions={reactions} />
 
@@ -971,7 +1301,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                 {activeWarningBanner.warning_message}
               </p>
               <div className="flex items-center justify-between mt-2 pt-2 border-t border-red-800/50 text-[11px] text-amber-300">
-                <span>Maintain direct camera eye contact</span>
+                <span>{activeWarningBanner.warning_number >= 2 ? "⚠️ FINAL WARNING — Next violation = disqualification" : "Proctoring integrity violation · formal warning issued"}</span>
                 <span className="font-mono text-gray-400">{activeWarningBanner.timestamp}</span>
               </div>
             </div>
@@ -1009,7 +1339,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                 ? "bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30"
                 : "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
             }`}
-            title="Click to toggle Proctor & Noticing Radar Drawer"
+            title="Open session monitoring and event log"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Proctored:</span>
@@ -1018,14 +1348,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             </span>
           </button>
 
-          {/* Noticing Radar Pill */}
+          {/* Live analysis shortcut */}
           <button
-            onClick={() => setActiveSideTab(activeSideTab === "proctor" ? null : "proctor")}
-            className="hidden md:flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/15 border border-blue-500/40 text-blue-300 hover:bg-blue-500/25 transition-all"
-            title="Click to view live gaze, posture, and candidate observations"
+            onClick={() => setActiveSideTab(activeSideTab === "analysis" ? null : "analysis")}
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/15 border border-blue-500/40 text-blue-300 hover:bg-blue-500/25 transition-all"
+            title="View live answer analysis and evidence"
           >
-            <Eye className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-            <span>Noticing Radar</span>
+            <Sparkles className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+            <span>Live Analysis</span>
           </button>
 
           {isHandRaised && (
@@ -1064,8 +1394,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                 isMuted={isMuted}
                 isVideoOff={isVideoOff && !isScreenSharing}
                 userVolume={userVolume}
-                onToggleMic={onToggleMic}
-                onToggleVideo={onToggleVideo}
+                onToggleMic={guardMicToggle}
+                onToggleVideo={guardVideoToggle}
               />
             </div>
           )}
@@ -1091,8 +1421,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                     isMuted={isMuted}
                     isVideoOff={isVideoOff && !isScreenSharing}
                     userVolume={userVolume}
-                    onToggleMic={onToggleMic}
-                    onToggleVideo={onToggleVideo}
+                    onToggleMic={guardMicToggle}
+                    onToggleVideo={guardVideoToggle}
                   />
                 </div>
               </div>
@@ -1133,8 +1463,8 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                     isMuted={isMuted}
                     isVideoOff={isVideoOff && !isScreenSharing}
                     userVolume={userVolume}
-                    onToggleMic={onToggleMic}
-                    onToggleVideo={onToggleVideo}
+                    onToggleMic={guardMicToggle}
+                    onToggleVideo={guardVideoToggle}
                   />
                 </div>
               </div>
@@ -1152,6 +1482,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             speaker={currentCaption.speaker}
             speakerName={currentCaption.speakerName}
             text={currentCaption.text}
+            isLiveSpeaking={currentCaption.speaker === "ai" ? isAiSpeaking : !isMuted}
           />
         </div>
 
@@ -1168,6 +1499,9 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             userVolume={userVolume}
             proctorWarnings={proctorWarnings}
             scratchpadNotes={scratchpadNotes}
+            liveAnalysis={liveAnalysis}
+            isAnalyzingAnswer={isAnalyzingAnswer}
+            orchestratorActions={orchestratorActions}
             onSendMessage={handleSendMessage}
             onClose={() => setActiveSideTab(null)}
           />
@@ -1185,10 +1519,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         isHandRaised={isHandRaised}
         warningCount={proctorWarnings.length}
         userVolume={userVolume}
-        onToggleMic={onToggleMic}
-        onToggleVideo={onToggleVideo}
+        onToggleMic={guardMicToggle}
+        onToggleVideo={guardVideoToggle}
         onToggleScreenShare={handleToggleScreenShare}
-        onToggleCaptions={() => setCaptionsEnabled(!captionsEnabled)}
+        onToggleCaptions={() => {
+          const enabled = !captionsEnabled;
+          setCaptionsEnabled(enabled);
+          emitUiEvent("captions_changed", enabled ? "captions on" : "captions off");
+        }}
         onToggleHandRaise={() => {
           setIsHandRaised(!isHandRaised);
           if (!isHandRaised) {
@@ -1201,19 +1539,27 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
                 })
               );
             }
+
           }
         }}
-        onSelectLayout={(layout) => setActiveLayout(layout)}
-        onToggleSideTab={(tab) =>
-          setActiveSideTab(activeSideTab === tab ? null : tab)
-        }
+        onSelectLayout={(layout) => {
+          setActiveLayout(layout);
+          if (layout === "code_split") emitUiEvent("opened_coding_playground");
+          else if (layout === "whiteboard_split") emitUiEvent("opened_whiteboard");
+          else emitUiEvent("meeting_layout_changed", layout);
+        }}
+        onToggleSideTab={(tab) => {
+          const closing = activeSideTab === tab;
+          setActiveSideTab(closing ? null : tab);
+          if (!closing) emitUiEvent("side_panel_opened", tab);
+        }}
         onTriggerReaction={handleTriggerReaction}
         onEndCall={handleEndCall}
       />
 
       {/* Malpractice Disqualification Modal */}
       {disqualificationReason && (
-        <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[40] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-[#1e1014] border-2 border-red-500 rounded-3xl p-6 sm:p-8 shadow-2xl text-center space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="w-16 h-16 mx-auto rounded-full bg-red-600/20 border border-red-500/50 flex items-center justify-center">
               <AlertTriangle className="w-9 h-9 text-red-500 animate-pulse" />

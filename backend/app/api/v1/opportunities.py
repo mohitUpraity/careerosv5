@@ -27,9 +27,9 @@ async def get_live_opportunities(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
-    Returns real-time verified opportunities (Jobs, Internships, Hackathons, Open Source Fellowships)
-    scraped directly from Unstop, Devfolio, Remotive, Jobicy, Arbeitnow, RemoteOK & Flagship Portals
-    and scored semantically against user profile with strict unexpired deadline verification.
+    Returns opportunities from live source feeds (Unstop, Devfolio, Remotive, Jobicy,
+    Arbeitnow, RemoteOK), scored against the user's profile. Expired dated listings
+    and stale postings are excluded; missing deadlines remain unspecified.
     """
     user_id = current_user["id"]
     try:

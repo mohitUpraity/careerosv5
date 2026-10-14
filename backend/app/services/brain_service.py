@@ -163,7 +163,7 @@ Rules for Responses:
 3. When referencing specific skills, projects, hackathons, or companies from the graph, cite them clearly using tags like `[Skill: FastAPI]`, `[Project: IntelliGuard]`, `[Award: SIH 2024]`, `[Alumni: Person Name @ Company]`.
 4. NETWORK & REFERRAL INTELLIGENCE:
    - When the user asks about getting referrals, internships, or job outreach, actively traverse their [WARM 1ST-DEGREE CONNECTIONS & ALUMNI REFERRAL BRIDGES].
-   - Specifically name relevant people from their network who work at the target company or in the target domain, highlight shared college/alumni bridges, and provide a tailored cold outreach message citing the user's real projects (like SIH hackathon or DRDO NGFW project).
+   - Name relevant people only when they appear in the user's network data, highlight shared bridges only when those relationships exist, and cite projects only when they appear in the user's profile.
 5. Be direct, authoritative, highly encouraging, and provide crisp, strategic career advice.
 6. Provide structured, readable output using markdown (bullet points, bold text, code snippets if relevant).
 7. Always return your response in strictly valid JSON with the following structure:
@@ -175,7 +175,7 @@ Rules for Responses:
   "graph_nodes_referenced": ["Skill: FastAPI", "Project: IntelliGuard", "Alumni: Name @ Company"],
   "graph_lens": {{
     "query": "Focused query string representing the referenced topic (e.g. DRDO Firewall & Network Engineering)",
-    "title": "Title of focused subgraph lens (e.g. DRDO NGFW Architecture)",
+    "title": "Title of focused subgraph lens based on the user's actual profile data",
     "explanation": "One sentence explaining what this focused subgraph contains."
   }},
   "suggested_followups": [
@@ -248,11 +248,7 @@ Respond in strictly valid JSON format matching the schema.
                 "citations": result.get("citations", []),
                 "graph_nodes_referenced": result.get("graph_nodes_referenced", []),
                 "graph_lens": graph_lens,
-                "suggested_followups": result.get("suggested_followups", [
-                    "How can I tailor my resume for this role?",
-                    "What skill gaps should I focus on next?",
-                    "Draft an alumni referral outreach message for this company."
-                ]),
+                "suggested_followups": result.get("suggested_followups", []),
                 "context_stats": {
                     "verified_skills_count": len(verified_skills),
                     "projects_count": len(projects),
@@ -260,32 +256,7 @@ Respond in strictly valid JSON format matching the schema.
                 }
             }
 
-        # Fallback if JSON generation was interrupted
-        fallback_reply = f"Based on your CareerOS Knowledge Graph, you have strong verified foundations in **{', '.join(verified_skills[:4])}** backed by projects like **{projects[0]['name'] if projects else 'your repositories'}**.\n\nTo optimize for `{query}`, leverage your authentic STAR metrics and verified code evidence."
-        return {
-            "status": "success",
-            "reply": fallback_reply,
-            "citations": [
-                {"type": "skill", "label": s, "detail": "Code-verified skill in graph"}
-                for s in verified_skills[:3]
-            ],
-            "graph_nodes_referenced": [f"Skill: {s}" for s in verified_skills[:3]],
-            "graph_lens": {
-                "query": query,
-                "title": f"Graph Lens: {query[:30]}",
-                "explanation": f"Focused view on {', '.join(verified_skills[:3])}."
-            },
-            "suggested_followups": [
-                "What are my highest-impact projects in the graph?",
-                "Which opportunities match my verified tech stack best?",
-                "How do I compare against industry benchmarks?"
-            ],
-            "context_stats": {
-                "verified_skills_count": len(verified_skills),
-                "projects_count": len(projects),
-                "opportunities_found": len(opportunities)
-            }
-        }
+        raise RuntimeError("Career graph response generation is unavailable; no answer was generated.")
 
     @classmethod
     async def smart_graph_query(cls, user_id: str, query: str) -> Dict[str, Any]:
@@ -439,4 +410,3 @@ Return strictly valid JSON with the exact matched_node_ids answering this query.
         }
 
 brain_service = BrainService()
-

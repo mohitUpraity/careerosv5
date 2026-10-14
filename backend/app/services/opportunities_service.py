@@ -2,7 +2,8 @@ import logging
 import asyncio
 import time
 import re
-from datetime import datetime, timedelta
+from urllib.parse import urlparse
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 import httpx
 from app.services.neo4j_service import neo4j_service
@@ -23,238 +24,44 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-def _get_dynamic_flagships() -> List[Dict[str, Any]]:
-    """
-    Returns authentic, verified tech opportunities, internships, challenges,
-    and open-source fellowships with active, strictly future deadlines.
-    """
-    now = datetime.now()
-    return [
-        {
-            "id": "opp-flagship-sih",
-            "title": "Smart India Hackathon (SIH) – National Innovation Challenge",
-            "organization": "Ministry of Education & AICTE",
-            "category": "hackathons",
-            "opportunity_type": "Govt & Defense Challenge",
-            "location": "National / Hybrid (India)",
-            "reward": "₹1,00,000 per Problem Statement + Direct Govt Project Grants",
-            "deadline_date": (now + timedelta(days=21)).strftime("%Y-%m-%d"),
-            "source_platform": "Unstop & SIH Official",
-            "apply_url": "https://unstop.com/hackathons/smart-india-hackathon-2024",
-            "skills_required": ["Python", "FastAPI", "React", "AI/ML", "Neo4j", "System Architecture"],
-            "description": "Nationwide initiative to solve pressing technical problems of Indian ministries, state departments, and defense research organizations.",
-            "eligibility": "B.Tech / MCA / Degree Students in India",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-gsoc",
-            "title": "Google Summer of Code (GSoC) – Global Open Source Fellowship",
-            "organization": "Google & Open Source Organizations",
-            "category": "opensource",
-            "opportunity_type": "Paid Global Fellowship",
-            "location": "100% Remote Worldwide",
-            "reward": "$1,500 – $3,300 USD Stipend + Google Certification",
-            "deadline_date": (now + timedelta(days=28)).strftime("%Y-%m-%d"),
-            "source_platform": "GSoC Official Portal",
-            "apply_url": "https://summerofcode.withgoogle.com",
-            "skills_required": ["Git", "Python", "C++", "TypeScript", "Docker", "Open Source Collaboration"],
-            "description": "Contribute to top open-source projects (Linux Foundation, PSF, CNCF) with 1-on-1 industry mentors and direct Google stipend.",
-            "eligibility": "Developers aged 18+ worldwide",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-lfx",
-            "title": "Linux Foundation (LFX) Cloud Native & Networking Mentorship",
-            "organization": "Linux Foundation (CNCF)",
-            "category": "opensource",
-            "opportunity_type": "Systems & Cloud Mentorship",
-            "location": "100% Remote Worldwide",
-            "reward": "$3,000 – $6,000 USD Full Stipend",
-            "deadline_date": (now + timedelta(days=24)).strftime("%Y-%m-%d"),
-            "source_platform": "LFX Mentorship Portal",
-            "apply_url": "https://mentorship.lfx.linuxfoundation.org",
-            "skills_required": ["C++", "Python", "Networking", "eBPF", "Packet Processing", "Linux", "Kubernetes"],
-            "description": "Contribute directly to core networking, security, and cloud infrastructure used across the global software ecosystem.",
-            "eligibility": "Open to all software developers and students worldwide",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-mlh",
-            "title": "MLH Fellowship – 12-Week Open Source Software Fellowship",
-            "organization": "Major League Hacking & GitHub",
-            "category": "opensource",
-            "opportunity_type": "Paid Open Source Fellowship",
-            "location": "100% Remote Worldwide",
-            "reward": "$5,000 USD Educational Stipend + GitHub Mentorship",
-            "deadline_date": (now + timedelta(days=19)).strftime("%Y-%m-%d"),
-            "source_platform": "MLH Fellowship",
-            "apply_url": "https://fellowship.mlh.io",
-            "skills_required": ["Python", "JavaScript", "React", "Go", "Docker", "Git"],
-            "description": "Remote software engineering fellowship where fellows contribute directly to production open source libraries used by millions.",
-            "eligibility": "Students & Early Career Developers Worldwide",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-flipkart-grid",
-            "title": "Flipkart GRiD 6.0 – Software Development Track",
-            "organization": "Flipkart",
-            "category": "hackathons",
-            "opportunity_type": "National Tech Challenge & PPO Drive",
-            "location": "Bengaluru / Online (India)",
-            "reward": "₹1,50,000 Cash Prize + Direct Flipkart SDE PPO/PPI Offers (₹32 LPA CTC)",
-            "deadline_date": (now + timedelta(days=16)).strftime("%Y-%m-%d"),
-            "source_platform": "Unstop & Flipkart Official",
-            "apply_url": "https://unstop.com/competitions/flipkart-grid-60",
-            "skills_required": ["Data Structures", "Algorithms", "System Design", "Python", "Java", "Problem Solving"],
-            "description": "Flipkart's flagship campus engineering competition offering pre-placement interviews (PPI) for Software Development Engineer roles.",
-            "eligibility": "B.Tech / B.E. / MCA / M.Tech Students across India",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-amazon-wow",
-            "title": "Amazon WOW / SDE Intern Technical Drive",
-            "organization": "Amazon",
-            "category": "internships",
-            "opportunity_type": "SDE Internship & Pre-Placement Drive",
-            "location": "Bengaluru / Hyderabad / Delhi NCR (India)",
-            "reward": "₹80,000/month Stipend + Pre-Placement Offer (₹45 LPA)",
-            "deadline_date": (now + timedelta(days=18)).strftime("%Y-%m-%d"),
-            "source_platform": "Amazon University Careers",
-            "apply_url": "https://www.amazon.jobs/en/teams/amazon-university",
-            "skills_required": ["Java", "Python", "C++", "Data Structures", "Algorithms", "Object Oriented Design"],
-            "description": "Amazon India technical mentorship and recruitment drive for aspiring software engineers to earn 6-month SDE internships and full-time conversions.",
-            "eligibility": "Pre-final and Final Year Engineering Students in India",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-swiggy-sde",
-            "title": "Swiggy Early Career Software Engineer (Backend / Distributed Systems)",
-            "organization": "Swiggy",
-            "category": "jobs",
-            "opportunity_type": "Full-Time SDE-1",
-            "location": "Bengaluru / Remote (India)",
-            "reward": "₹14 - ₹20 LPA CTC + ESOPs & High Growth Benefits",
-            "deadline_date": (now + timedelta(days=22)).strftime("%Y-%m-%d"),
-            "source_platform": "Swiggy Careers",
-            "apply_url": "https://careers.swiggy.com",
-            "skills_required": ["Go", "Java", "Python", "PostgreSQL", "Redis", "Kafka", "Microservices"],
-            "description": "Build ultra-low latency food delivery and quick-commerce hyper-local logistics backend microservices operating at millions of requests per second.",
-            "eligibility": "0-2 Years Experience / Tech Graduates",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-razorpay-sde",
-            "title": "Razorpay Software Engineer – Core Payment Rails",
-            "organization": "Razorpay",
-            "category": "jobs",
-            "opportunity_type": "Full-Time Software Engineer",
-            "location": "Bengaluru / Remote (India)",
-            "reward": "₹18 - ₹24 LPA + ESOPs + Premium Health Cover",
-            "deadline_date": (now + timedelta(days=25)).strftime("%Y-%m-%d"),
-            "source_platform": "Razorpay Careers",
-            "apply_url": "https://razorpay.com/jobs",
-            "skills_required": ["Python", "Go", "MySQL", "Kafka", "High Concurrency", "System Design"],
-            "description": "Design and scale resilient financial infrastructure, payment gateways, and banking APIs powering over 10 million Indian businesses.",
-            "eligibility": "0-3 Years Experience / B.Tech / MCA",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-cred-sde",
-            "title": "CRED Backend Engineering Associate",
-            "organization": "CRED",
-            "category": "jobs",
-            "opportunity_type": "Full-Time Backend Engineer",
-            "location": "Bengaluru / Hybrid",
-            "reward": "₹22 - ₹30 LPA CTC + Joining Bonus",
-            "deadline_date": (now + timedelta(days=17)).strftime("%Y-%m-%d"),
-            "source_platform": "CRED Careers",
-            "apply_url": "https://cred.club/careers",
-            "skills_required": ["Java", "Spring Boot", "Microservices", "DynamoDB", "Kafka", "Distributed Systems"],
-            "description": "Architect high-throughput, security-critical backend services powering financial credit management and frictionless transactions.",
-            "eligibility": "Graduates with solid DSA & system fundamentals",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-postman-intern",
-            "title": "Postman API Engineering Internship",
-            "organization": "Postman",
-            "category": "internships",
-            "opportunity_type": "Paid Engineering Internship (PPO Eligible)",
-            "location": "Bengaluru / Remote (India)",
-            "reward": "₹50,000/month Stipend + Full-Time SDE Conversion",
-            "deadline_date": (now + timedelta(days=15)).strftime("%Y-%m-%d"),
-            "source_platform": "Postman Careers",
-            "apply_url": "https://www.postman.com/careers",
-            "skills_required": ["TypeScript", "Node.js", "React", "REST APIs", "GraphQL", "WebSockets"],
-            "description": "Work on the world's leading API platform used by over 30 million software engineers to design, build, and test modern software.",
-            "eligibility": "Final or Pre-Final Year Engineering Students",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-zerodha-sde",
-            "title": "Zerodha Tech SDE Associate (Kite Infrastructure)",
-            "organization": "Zerodha",
-            "category": "jobs",
-            "opportunity_type": "Full-Time Software Engineer",
-            "location": "Bengaluru / 100% Remote (India)",
-            "reward": "₹15 - ₹24 LPA + Generous Profit Share & Bonuses",
-            "deadline_date": (now + timedelta(days=27)).strftime("%Y-%m-%d"),
-            "source_platform": "Zerodha Tech",
-            "apply_url": "https://zerodha.com/careers",
-            "skills_required": ["Python", "Go", "PostgreSQL", "Redis", "WebSockets", "Linux"],
-            "description": "Build high-speed, high-reliability fintech systems processing millions of orders daily on Kite, free from bloated enterprise frameworks.",
-            "eligibility": "Self-driven engineers passionate about FOSS & systems",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-outreachy",
-            "title": "Outreachy Global FOSS Paid Internship",
-            "organization": "Software Freedom Conservancy",
-            "category": "opensource",
-            "opportunity_type": "100% Remote Global Internship",
-            "location": "100% Remote Worldwide",
-            "reward": "$7,000 USD Total Stipend + Community Mentorship",
-            "deadline_date": (now + timedelta(days=20)).strftime("%Y-%m-%d"),
-            "source_platform": "Outreachy Portal",
-            "apply_url": "https://www.outreachy.org",
-            "skills_required": ["Python", "Git", "JavaScript", "Linux", "Documentation", "Open Source"],
-            "description": "Three-month paid remote internship supporting underrepresented groups in tech, pairing interns with mentors in free and open-source software.",
-            "eligibility": "Global applicants eligible under Outreachy rules",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-tata",
-            "title": "Tata Imagination Challenge 2026",
-            "organization": "Tata Sons",
-            "category": "hackathons",
-            "opportunity_type": "National Student Innovation Challenge",
-            "location": "India (Online & Mumbai)",
-            "reward": "₹2,00,000 Cash Prize + Fast-Track PPI Interview at Tata Companies",
-            "deadline_date": (now + timedelta(days=14)).strftime("%Y-%m-%d"),
-            "source_platform": "Tata & Unstop Official",
-            "apply_url": "https://unstop.com/competitions/tata-imagination-challenge",
-            "skills_required": ["Problem Solving", "AI/ML", "Systems Thinking", "Product Innovation"],
-            "description": "One of India's largest campus innovation competitions with opportunities across TCS, Tata Digital, and Tata Motors.",
-            "eligibility": "College & University Students across India",
-            "verified": True
-        },
-        {
-            "id": "opp-flagship-devpost-genai",
-            "title": "Global Autonomous AI & Agent Hackathon",
-            "organization": "Devpost & Cloud Partners",
-            "category": "hackathons",
-            "opportunity_type": "Global Virtual AI Challenge",
-            "location": "100% Virtual / Global",
-            "reward": "$30,000 USD Cash + Cloud Credits & Global Showcase",
-            "deadline_date": (now + timedelta(days=23)).strftime("%Y-%m-%d"),
-            "source_platform": "Devpost Live",
-            "apply_url": "https://devpost.com/hackathons",
-            "skills_required": ["Python", "Generative AI", "LLMs", "LangChain", "React", "Cloud APIs"],
-            "description": "Build next-generation autonomous AI agents and multimodal applications with global developer teams.",
-            "eligibility": "Open to all developers worldwide",
-            "verified": True
-        }
-    ]
+_MAX_LISTING_AGE_DAYS = 30
+
+
+def _parse_source_date(value: Any) -> Optional[datetime]:
+    """Parse a date supplied by the listing source; never synthesize one."""
+    if not value:
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(value)
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def _valid_listing_url(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value.strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc) and parsed.netloc not in {"#"}
+
+
+def _source_window_is_open(deadline: Any, published: Any, today: datetime, *, deadline_required: bool = False) -> bool:
+    """Trust explicit source deadlines; otherwise accept only recent live-feed posts."""
+    deadline_dt = _parse_source_date(deadline)
+    if deadline and not deadline_dt:
+        return False
+    if deadline_dt:
+        if deadline_dt.date() < today.date():
+            return False
+    elif deadline_required:
+        return False
+
+    published_dt = _parse_source_date(published)
+    if published_dt and (today.date() - published_dt.date()).days > _MAX_LISTING_AGE_DAYS:
+        return False
+    return True
 
 class OpportunitiesService:
     @classmethod
@@ -272,21 +79,15 @@ class OpportunitiesService:
                         continue
 
                     # Parse deadline and ensure it has NOT expired
-                    reg_ends_at = item.get("reg_ends_at") or item.get("ends_at") or item.get("starts_at")
-                    deadline_str = (today + timedelta(days=14)).strftime("%Y-%m-%d")
-                    if reg_ends_at:
-                        try:
-                            clean_date = str(reg_ends_at).replace("Z", "+00:00")
-                            dt = datetime.fromisoformat(clean_date)
-                            if dt.date() < today.date():
-                                continue  # Already expired!
-                            deadline_str = dt.strftime("%Y-%m-%d")
-                        except Exception:
-                            pass
+                    reg_ends_at = item.get("reg_ends_at") or item.get("ends_at")
+                    if not _source_window_is_open(reg_ends_at, item.get("created_at"), today, deadline_required=True):
+                        continue
 
-                    apply_url = f"https://{slug}.devfolio.co/" if slug else item.get("seo_url")
-                    if not apply_url:
-                        apply_url = f"https://devfolio.co/hackathons/{slug}"
+                    apply_url = item.get("seo_url") or (f"https://{slug}.devfolio.co/" if slug else None)
+                    if not _valid_listing_url(apply_url):
+                        continue
+                    deadline_dt = _parse_source_date(reg_ends_at)
+                    deadline_str = deadline_dt.strftime("%Y-%m-%d") if deadline_dt else ""
 
                     is_online = item.get("is_online", False)
                     city = item.get("city") or "India"
@@ -355,36 +156,28 @@ class OpportunitiesService:
 
                     # Deadline verification: MUST BE IN THE FUTURE
                     end_date_raw = opp.get("end_date") or opp.get("regn_end_date")
-                    deadline_str = (today + timedelta(days=14)).strftime("%Y-%m-%d")
-                    if end_date_raw:
-                        try:
-                            clean_end = str(end_date_raw).replace("Z", "+00:00")
-                            dt = datetime.fromisoformat(clean_end)
-                            if dt.date() < today.date():
-                                continue  # Expired, skip!
-                            deadline_str = dt.strftime("%Y-%m-%d")
-                        except Exception:
-                            pass
+                    published_raw = opp.get("created_at") or opp.get("published_at")
+                    if not _source_window_is_open(end_date_raw, published_raw, today, deadline_required=channel in {"hackathons", "competitions"}):
+                        continue
 
-                    seo_url = opp.get("seo_url") or f"https://unstop.com/{opp.get('public_url')}"
-                    org_name = opp.get("organisation", {}).get("name") or "Tech Partner"
+                    seo_url = opp.get("seo_url")
+                    if not _valid_listing_url(seo_url):
+                        public_path = opp.get("public_url")
+                        seo_url = f"https://unstop.com/{str(public_path).lstrip('/')}" if public_path else None
+                    if not _valid_listing_url(seo_url):
+                        continue
+                    deadline_dt = _parse_source_date(end_date_raw)
+                    deadline_str = deadline_dt.strftime("%Y-%m-%d") if deadline_dt else ""
+                    org_name = (opp.get("organisation") or {}).get("name") or "Not listed"
 
                     skills = [sk.get("skill") for sk in opp.get("required_skills", []) if sk.get("skill")]
-                    if not skills:
-                        if channel == "jobs":
-                            skills = ["Python", "FastAPI", "React", "SQL", "Docker", "Git"]
-                        elif channel == "internships":
-                            skills = ["JavaScript", "Python", "React", "REST APIs", "Git"]
-                        else:
-                            skills = ["Problem Solving", "Data Structures", "Algorithms", "AI/ML"]
-
                     prizes = opp.get("prizes")
                     if channel == "jobs":
-                        reward_str = "₹8 - ₹24 LPA + Performance Benefits"
+                        reward_str = opp.get("salary") or "Not listed"
                     elif channel == "internships":
-                        reward_str = "Monthly Stipend + PPO Opportunity"
+                        reward_str = opp.get("stipend") or opp.get("salary") or "Not listed"
                     else:
-                        reward_str = f"Prizes: {prizes}" if prizes else "Cash Prizes, PPI/PPO SDE Fast-Track & Certificates"
+                        reward_str = f"Prizes: {prizes}" if prizes else "Not listed"
 
                     source_label = "Unstop Live Jobs" if channel == "jobs" else (
                         "Unstop Live Internships" if channel == "internships" else "Unstop Live Hackathons"
@@ -398,7 +191,7 @@ class OpportunitiesService:
                         "organization": org_name,
                         "category": category,
                         "opportunity_type": opp_type_label,
-                        "location": "Bengaluru / Noida / Pune / Remote (India)",
+                        "location": opp.get("location") or "See listing",
                         "reward": reward_str,
                         "deadline_date": deadline_str,
                         "source_platform": source_label,
@@ -426,30 +219,19 @@ class OpportunitiesService:
                         continue
 
                     is_intern = "intern" in title.lower()
-                    loc_req = j.get("candidate_required_location") or "Worldwide"
+                    loc_req = j.get("candidate_required_location") or "see listing"
 
                     # Check publication date to ensure active application window
                     pub_date_raw = j.get("publication_date")
-                    deadline_str = (today + timedelta(days=20)).strftime("%Y-%m-%d")
-                    if pub_date_raw:
-                        try:
-                            clean_pub = str(pub_date_raw).replace("Z", "+00:00")
-                            pub_dt = datetime.fromisoformat(clean_pub)
-                            elapsed = (today.date() - pub_dt.date()).days
-                            if elapsed > 35:
-                                continue  # Too old, likely closed
-                            remaining_days = max(4, 30 - elapsed)
-                            deadline_str = (today + timedelta(days=remaining_days)).strftime("%Y-%m-%d")
-                        except Exception:
-                            pass
+                    if not _source_window_is_open(None, pub_date_raw, today):
+                        continue
 
                     tags = j.get("tags") or []
                     skills = [t.strip() for t in tags if isinstance(t, str) and len(t.strip()) < 20][:6]
-                    if not skills:
-                        skills = ["Python", "TypeScript", "React", "Cloud", "REST APIs", "Git"]
-
-                    salary = j.get("salary") or "$60k – $140k USD / Competitive Market Rate"
-                    apply_link = j.get("url") or "https://remotive.com"
+                    salary = j.get("salary") or "Not listed"
+                    apply_link = j.get("url")
+                    if not _valid_listing_url(apply_link):
+                        continue
 
                     desc_clean = re.sub(r'<[^>]+>', ' ', j.get("description", ""))
                     desc_clean = re.sub(r'\s+', ' ', desc_clean)[:300]
@@ -457,16 +239,16 @@ class OpportunitiesService:
                     results.append({
                         "id": f"remotive-{j.get('id')}",
                         "title": title,
-                        "organization": j.get("company_name", "Global Remote Tech"),
+                        "organization": j.get("company_name") or "Not listed",
                         "category": "internships" if is_intern else "jobs",
                         "opportunity_type": "Remote Tech Internship" if is_intern else "Remote Software Engineer",
                         "location": f"Remote ({loc_req})",
                         "reward": salary,
-                        "deadline_date": deadline_str,
+                        "deadline_date": "",
                         "source_platform": "Remotive Tech Feed",
                         "apply_url": apply_link,
                         "skills_required": skills,
-                        "description": desc_clean or f"Software engineering position at {j.get('company_name')}. 100% remote.",
+                        "description": desc_clean or "See the source listing for role details.",
                         "verified": True
                     })
                 logger.info(f"Remotive loaded {len(results)} active developer roles.")
@@ -493,40 +275,34 @@ class OpportunitiesService:
 
                     is_intern = "intern" in title.lower()
                     pub_date_raw = j.get("pubDate")
-                    deadline_str = (today + timedelta(days=20)).strftime("%Y-%m-%d")
-                    if pub_date_raw:
-                        try:
-                            clean_pub = str(pub_date_raw).replace("Z", "+00:00")
-                            pub_dt = datetime.fromisoformat(clean_pub)
-                            elapsed = (today.date() - pub_dt.date()).days
-                            if elapsed > 35:
-                                continue
-                            remaining_days = max(4, 30 - elapsed)
-                            deadline_str = (today + timedelta(days=remaining_days)).strftime("%Y-%m-%d")
-                        except Exception:
-                            pass
+                    if not _source_window_is_open(None, pub_date_raw, today):
+                        continue
 
-                    industry_val = j.get("jobIndustry") or ["Python", "React", "Cloud", "API"]
+                    apply_url = j.get("url")
+                    if not _valid_listing_url(apply_url):
+                        continue
+
+                    industry_val = j.get("jobIndustry") or []
                     if isinstance(industry_val, list):
                         skills = [str(s).strip() for s in industry_val if str(s).strip()][:6]
                     elif isinstance(industry_val, str):
                         skills = [s.strip() for s in industry_val.split(",") if s.strip()][:6]
                     else:
-                        skills = ["Python", "React", "Cloud", "API"]
+                        skills = []
 
                     results.append({
                         "id": f"jobicy-{j.get('id')}",
                         "title": title,
-                        "organization": j.get("companyName", "Global Tech Company"),
+                        "organization": j.get("companyName") or "Not listed",
                         "category": "internships" if is_intern else "jobs",
                         "opportunity_type": "Paid Tech Internship" if is_intern else "Full-time Remote SDE",
                         "location": "100% Remote Worldwide",
-                        "reward": f"${j.get('annualSalaryMin'):,} - ${j.get('annualSalaryMax', 0):,} USD" if j.get("annualSalaryMin") else "Competitive Market Rate (USD/EUR)",
-                        "deadline_date": deadline_str,
+                        "reward": f"{j.get('annualSalaryMin')} - {j.get('annualSalaryMax')} {j.get('salaryCurrency') or ''}".strip(" -") if j.get("annualSalaryMin") else "Not listed",
+                        "deadline_date": "",
                         "source_platform": "Jobicy Live Remote Feed",
-                        "apply_url": j.get("url", "https://jobicy.com"),
+                        "apply_url": apply_url,
                         "skills_required": skills,
-                        "description": re.sub(r'<[^>]+>', '', j.get("jobExcerpt", ""))[:320] + "...",
+                        "description": re.sub(r'<[^>]+>', '', j.get("jobExcerpt", ""))[:320],
                         "verified": True
                     })
                 logger.info(f"Jobicy loaded {len(results)} active roles.")
@@ -556,11 +332,13 @@ class OpportunitiesService:
 
                     is_intern = "intern" in title.lower()
                     is_remote = j.get("remote", False)
+                    if not _source_window_is_open(None, j.get("created_at") or j.get("createdAt"), today):
+                        continue
+                    apply_url = j.get("url")
+                    if not _valid_listing_url(apply_url):
+                        continue
                     loc = "100% Remote / Hybrid" if is_remote else (j.get("location") or "Remote / Europe / Worldwide")
                     skills = [t for t in tags if len(t) < 20][:6]
-                    if not skills:
-                        skills = ["Python", "FastAPI", "React", "Docker", "Git"]
-
                     desc_clean = re.sub(r'<[^>]+>', ' ', j.get("description", ""))
                     desc_clean = re.sub(r'\s+', ' ', desc_clean)[:300]
 
@@ -571,10 +349,10 @@ class OpportunitiesService:
                         "category": "internships" if is_intern else "jobs",
                         "opportunity_type": "Internship" if is_intern else "Full-Time Software Engineer",
                         "location": loc,
-                        "reward": "Competitive Compensation + Equity & Remote Perks",
-                        "deadline_date": (today + timedelta(days=24)).strftime("%Y-%m-%d"),
+                        "reward": j.get("salary") or "Not listed",
+                        "deadline_date": "",
                         "source_platform": "Arbeitnow Tech Jobs",
-                        "apply_url": j.get("url", "https://www.arbeitnow.com"),
+                        "apply_url": apply_url,
                         "skills_required": skills,
                         "description": desc_clean or f"Software engineering position at {j.get('company_name')}.",
                         "verified": True
@@ -597,7 +375,7 @@ class OpportunitiesService:
                     items = [x for x in data if isinstance(x, dict) and x.get("position")]
                     for item in items[:35]:
                         pos = item.get("position", "")
-                        comp = item.get("company", "Tech Company")
+                        comp = item.get("company") or "Not listed"
                         tags = item.get("tags") or []
                         tag_str = " ".join(tags)
 
@@ -610,15 +388,16 @@ class OpportunitiesService:
 
                         is_intern = "intern" in pos.lower()
                         apply_url = item.get("url") or f"https://remoteok.com/remote-jobs/{item.get('id')}"
+                        if not _source_window_is_open(None, item.get("date") or item.get("epoch"), today):
+                            continue
+                        if not _valid_listing_url(apply_url):
+                            continue
 
                         desc = item.get("description", "")
                         desc_clean = re.sub(r'<[^>]+>', ' ', desc)
                         desc_clean = re.sub(r'\s+', ' ', desc_clean)[:300]
 
                         skills = [t for t in tags if len(t) < 18][:6]
-                        if not skills:
-                            skills = ["Python", "React", "TypeScript", "Cloud", "APIs"]
-
                         results.append({
                             "id": f"remoteok-{item.get('id')}",
                             "title": pos,
@@ -626,12 +405,12 @@ class OpportunitiesService:
                             "category": "internships" if is_intern else "jobs",
                             "opportunity_type": "Internship" if is_intern else "Full-Time Remote SDE",
                             "location": "100% Remote Worldwide",
-                            "reward": "$70k – $150k USD / Global Competitive",
-                            "deadline_date": (today + timedelta(days=22)).strftime("%Y-%m-%d"),
+                            "reward": item.get("salary") or "Not listed",
+                            "deadline_date": "",
                             "source_platform": "RemoteOK Global Feed",
                             "apply_url": apply_url,
                             "skills_required": skills,
-                            "description": desc_clean or f"Engineering position at {comp}. 100% remote role.",
+                            "description": desc_clean or "See the source listing for role details.",
                             "verified": True
                         })
                 logger.info(f"RemoteOK loaded {len(results)} tech jobs.")
@@ -685,8 +464,8 @@ class OpportunitiesService:
             elif isinstance(res, Exception):
                 logger.warning(f"Batch scraper worker returned error: {res}")
 
-        # Combine with dynamic verified flagships
-        combined = _get_dynamic_flagships() + all_scraped
+        # Only include records returned by live source feeds.
+        combined = all_scraped
 
         # Deduplicate by organization + title
         deduped: List[Dict[str, Any]] = []
@@ -765,9 +544,9 @@ class OpportunitiesService:
         force_refresh: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Retrieves live verified opportunities from Unstop, Devfolio, Remotive, Jobicy, 
-        Arbeitnow, RemoteOK & Flagships, enforcing that every opportunity has an ACTIVE, 
-        UNEXPIRED deadline (days_left >= 1).
+        Retrieves live opportunities from source feeds, excluding expired dated listings
+        and stale posts. Where the source does not publish a deadline, the listing is
+        marked as rolling/unspecified rather than assigned an invented date.
         """
         # 1. Fetch user preferences
         user_prefs = await neo4j_service.get_user_preferences(user_id)
@@ -840,21 +619,15 @@ class OpportunitiesService:
                 if not matches_search:
                     continue
 
-            # ==============================================================
-            # CRITICAL REQUIREMENT: "saari real and deadline bachi ho"
-            # Calculate Days Remaining and strictly EXCLUDE expired items
-            # ==============================================================
-            try:
-                deadline_dt = datetime.strptime(opp["deadline_date"], "%Y-%m-%d")
-                days_left = (deadline_dt.date() - today.date()).days
+            deadline_dt = _parse_source_date(opp.get("deadline_date"))
+            if deadline_dt:
+                days_left: Optional[int] = (deadline_dt.date() - today.date()).days
+                if days_left < 0:
+                    continue
                 deadline_formatted = deadline_dt.strftime("%d %b %Y")
-            except Exception:
-                days_left = 14
-                deadline_formatted = "Rolling Active Window"
-
-            # Strict validation: If deadline has already passed (days_left < 1), DISCARD IT!
-            if days_left < 1:
-                continue
+            else:
+                days_left = None
+                deadline_formatted = "Rolling / no deadline published"
 
             # Calculate Semantic Match
             opp_skills = opp.get("skills_required", [])
@@ -881,16 +654,16 @@ class OpportunitiesService:
                 skill_ratio = len(matched_skills) / len(opp_skills)
                 calculated_match_score = int(72 + (skill_ratio * 26))
             else:
-                calculated_match_score = 85
+                calculated_match_score = 72
 
             # Dream Company score boost (+6%)
             if is_dream:
                 calculated_match_score = min(99, calculated_match_score + 6)
 
             urgency = "normal"
-            if days_left <= 4:
+            if days_left is not None and days_left <= 4:
                 urgency = "critical"
-            elif days_left <= 8:
+            elif days_left is not None and days_left <= 8:
                 urgency = "high"
 
             scored_item = {
@@ -899,7 +672,7 @@ class OpportunitiesService:
                 "matched_skills": matched_skills,
                 "missing_skills": missing_skills,
                 "days_left": days_left,
-                "is_urgent": days_left <= 5,
+                "is_urgent": days_left is not None and days_left <= 5,
                 "urgency_level": urgency,
                 "deadline_formatted": deadline_formatted,
                 "is_dream_company": is_dream
@@ -908,7 +681,7 @@ class OpportunitiesService:
 
         # 5. Sorting
         if sort_by == "deadline":
-            scored_opportunities.sort(key=lambda x: x["days_left"])
+            scored_opportunities.sort(key=lambda x: x["days_left"] if x["days_left"] is not None else 10**9)
         elif sort_by == "newest":
             scored_opportunities.reverse()
         else:  # match_score

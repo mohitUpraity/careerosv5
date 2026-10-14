@@ -52,45 +52,8 @@ interface LobbyProps {
   initialCandidateName?: string;
   initialResumeText?: string;
   onBack?: () => void;
+  skillAssessment?: string;
 }
-
-const COMPANY_PRESETS = [
-  {
-    name: "Google",
-    role: "Senior Distributed Systems Engineer (L5)",
-    seniority: "Senior" as SeniorityLevel,
-    jd: "Google Cloud Platform Core Infrastructure:\nDesigning high-throughput microservices, Paxos/Raft consensus pipelines, Spanner/Bigtable data modeling, and Kubernetes cluster orchestration. Candidates are evaluated on distributed systems trade-offs, concurrency bottlenecks, fault-tolerant replication, and end-to-end production ownership.",
-    keySkills: ["Distributed Systems", "Go/C++/Java", "Kubernetes", "gRPC", "High Concurrency", "Consensus Algorithms"],
-  },
-  {
-    name: "Meta",
-    role: "Senior Full Stack Software Engineer (E5)",
-    seniority: "Senior" as SeniorityLevel,
-    jd: "Meta Core Products & Systems:\nBuilding ultra-responsive web interfaces using React/Next.js, high-concurrency GraphQL endpoints, distributed Redis caching, and real-time streaming architectures. Emphasizes problem decomposition, systematic edge case analysis, component telemetry, and high-velocity engineering execution.",
-    keySkills: ["React", "TypeScript", "GraphQL", "Distributed Caching", "Node.js/Python", "System Architecture"],
-  },
-  {
-    name: "Amazon",
-    role: "Software Development Engineer II (SDE-2)",
-    seniority: "Senior" as SeniorityLevel,
-    jd: "Amazon Web Services (AWS):\nDesigning resilient, decoupled multi-tenant backend architectures with AWS DynamoDB, SQS, SNS, and ECS. Tested heavily on Amazon Leadership Principles (Customer Obsession, Ownership, Dive Deep, Bias for Action), operational metrics, and zero-downtime deployment pipelines.",
-    keySkills: ["Java/Python", "AWS DynamoDB", "Event-Driven Architecture", "Microservices", "System Scalability"],
-  },
-  {
-    name: "Stripe",
-    role: "Senior Backend Payments Architect",
-    seniority: "Senior" as SeniorityLevel,
-    jd: "Stripe Payments Core Engine:\nHigh-integrity transactional infrastructure, idempotent payment processing APIs, ledger consistency, zero-downtime database migrations, and microsecond-latency API routing. High bar for code clarity, precision, and defensive error boundaries under high financial throughput.",
-    keySkills: ["API Design", "Distributed Transactions", "PostgreSQL", "Idempotency", "Concurrency", "High Reliability"],
-  },
-  {
-    name: "Apponward Technologies",
-    role: "Senior Full Stack & AI Systems Lead",
-    seniority: "Senior" as SeniorityLevel,
-    jd: "Apponward Scalable Platform:\nFull stack engineering with Python FastAPI, React TypeScript, Neo4j knowledge graphs, distributed queue worker pools, and Gemini/Groq LLM streaming pipelines. Requires strong system architecture intuition, rapid prototyping, and clean API design.",
-    keySkills: ["Python", "FastAPI", "React", "Neo4j", "Distributed Queues", "LLM Pipelines"],
-  },
-];
 
 export const Lobby: React.FC<LobbyProps> = ({
   onJoinMeeting,
@@ -108,15 +71,16 @@ export const Lobby: React.FC<LobbyProps> = ({
   initialCandidateName,
   initialResumeText,
   onBack,
+  skillAssessment,
 }) => {
   const { getAuthHeaders, activeProfile } = useAuth();
 
   // Basic Information
   const [candidateName, setCandidateName] = useState(
-    initialCandidateName || activeProfile?.name || "Alex Turner"
+    initialCandidateName || activeProfile?.name || ""
   );
-  const [company, setCompany] = useState(initialCompany || "Google");
-  const [role, setRole] = useState(initialRole || "Senior Distributed Systems Engineer (L5)");
+  const [company, setCompany] = useState(initialCompany || "");
+  const [role, setRole] = useState(initialRole || "");
   const [seniority, setSeniority] = useState<SeniorityLevel>("Senior");
   const [format, setFormat] = useState<InterviewFormat>("Full Technical & Coding");
   const [selectedInterviewer, setSelectedInterviewer] = useState<InterviewerProfile>(
@@ -134,7 +98,7 @@ export const Lobby: React.FC<LobbyProps> = ({
 
   // Job Description
   const [jobDescription, setJobDescription] = useState(
-    initialJobDescription || COMPANY_PRESETS[0].jd
+    initialJobDescription || ""
   );
   const [showJdEditor, setShowJdEditor] = useState(false);
 
@@ -156,6 +120,18 @@ export const Lobby: React.FC<LobbyProps> = ({
   useEffect(() => { if (initialCompany) setCompany(initialCompany); }, [initialCompany]);
   useEffect(() => { if (initialRole) setRole(initialRole); }, [initialRole]);
   useEffect(() => { if (initialJobDescription !== undefined) setJobDescription(initialJobDescription); }, [initialJobDescription]);
+  useEffect(() => { if (initialResumeText) setResumeText(initialResumeText); }, [initialResumeText]);
+
+  useEffect(() => {
+    if (!skillAssessment) return;
+    const normalized = skillAssessment.toLowerCase();
+    const behavioral = /leadership|communication|public speaking|sales|product|negotiation|strategy|management|writing/.test(normalized);
+    const systems = /system design|architecture|distributed systems|cloud/.test(normalized);
+    setCompany('CareerOS Proctored Skill Assessment');
+    setRole(`${skillAssessment} skill assessment`);
+    setFormat(behavioral ? 'Behavioral & Leadership (STAR)' : systems ? 'System Design & Architecture' : 'Full Technical & Coding');
+    setJobDescription(`SKILL ASSESSMENT: ${skillAssessment}\n\nConduct a rigorous, skill-specific live interview. Adapt every question, practical exercise, follow-up, and rubric to ${skillAssessment}. For programming and technical implementation skills, require the candidate to write and explain working code in the built-in editor, test edge cases, debug a failing example, and justify complexity and trade-offs. For leadership, communication, product, and people skills, use realistic cases, role-play, stakeholder conflict, prioritization, and evidence-based behavioral follow-ups. For architecture skills, require a design exercise and trade-off defense. Ask one question at a time, probe vague claims, do not provide hints or answers, and assess only evidence demonstrated in this session. Do not infer ability from resume claims.`);
+  }, [skillAssessment]);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -165,14 +141,6 @@ export const Lobby: React.FC<LobbyProps> = ({
       videoRef.current.play().catch(() => {});
     }
   }, [stream, isVideoOff, hasLiveVideo]);
-
-  // Handle Preset Selection
-  const handleSelectPreset = (preset: typeof COMPANY_PRESETS[0]) => {
-    setCompany(preset.name);
-    setRole(preset.role);
-    setSeniority(preset.seniority);
-    setJobDescription(preset.jd);
-  };
 
   // Pre-fill from active CareerOS profile
   const handlePreloadFromProfile = async () => {
@@ -254,8 +222,21 @@ export const Lobby: React.FC<LobbyProps> = ({
   const handleTakeInterview = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Trigger true Fullscreen mode on user gesture
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+    if (skillAssessment && (!hasLiveVideo || !hasLiveAudio)) {
+      setUploadError('Proctored skill assessments require a live camera and microphone. Enable both devices before starting.');
+      return;
+    }
+
+    // A proctored assessment requires fullscreen; fail closed if the browser refuses it.
+    if (skillAssessment && !document.fullscreenElement) {
+      try {
+        if (!document.documentElement.requestFullscreen) throw new Error('Fullscreen is not supported by this browser.');
+        await document.documentElement.requestFullscreen();
+      } catch {
+        setUploadError('Fullscreen is required for a proctored assessment. Allow fullscreen and try again.');
+        return;
+      }
+    } else if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
 
@@ -269,7 +250,7 @@ export const Lobby: React.FC<LobbyProps> = ({
     }
 
     onJoinMeeting({
-      candidateName: candidateName.trim() || "Candidate",
+      candidateName: candidateName.trim(),
       company: company.trim() || "Target Company",
       role: role.trim() || "Senior Software Engineer",
       seniority,
@@ -279,11 +260,15 @@ export const Lobby: React.FC<LobbyProps> = ({
       jobDescription: jobDescription.trim(),
       customRequirements: `Target Company: ${company}\nTarget Role: ${seniority} ${role}\nCandidate Resume Context:\n${resumeText}\nJob Description:\n${jobDescription}`,
       durationMinutes: 45,
+      proctoredSkill: skillAssessment,
     });
   };
 
   const hasAudio = !!stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled) && !isMuted;
   const hasVideo = !!stream?.getVideoTracks().some(track => track.readyState === 'live' && track.enabled) && !isVideoOff;
+  const assessmentDisclosure = skillAssessment
+    ? "Your answers and submitted work are analyzed against this skill rubric. Sampled webcam frames are sent to Google Gemini Live for interview context and timestamped notes about camera visibility, gaze direction, posture, gestures, visible devices, and additional people. Frame observations can miss or misread behavior; gaze, posture, or gestures are not treated as proof of cheating or as skill scores."
+    : "Practice your next interview with audio, video, and personalised feedback.";
 
   return (
     <div className="ws-interview-lobby flex flex-col gap-6">
@@ -296,13 +281,13 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div>
             <h2 className="text-lg sm:text-xl font-semibold text-white tracking-tight flex flex-wrap items-center gap-2">
               Your interview room
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold border flex items-center gap-1.5 ${skillAssessment ? 'bg-amber-500/20 text-amber-200 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'}`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                Audio & video practice
+                {skillAssessment ? 'Proctored skill assessment' : 'Audio & video practice'}
               </span>
             </h2>
             <p className="text-xs text-gray-400">
-              Practice your next interview with audio, video, and personalised feedback.
+              {assessmentDisclosure}
             </p>
           </div>
         </div>        <div className="flex items-center space-x-3">
@@ -323,7 +308,7 @@ export const Lobby: React.FC<LobbyProps> = ({
             </button>
           )}
 
-          {onBack && (
+          {onBack && !skillAssessment && (
             <button
               type="button"
               onClick={onBack}
@@ -633,27 +618,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 <Building2 className="w-4 h-4 text-emerald-400" />
                 <span>The role you want</span>
               </label>
-              <span className="text-[11px] text-gray-400">Quick Select:</span>
             </div>
-
-            {/* Quick Company Preset Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {COMPANY_PRESETS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => handleSelectPreset(p)}
-                  className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    company.toLowerCase() === p.name.toLowerCase()
-                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                      : "bg-[#2d2f34] text-gray-300 hover:bg-[#383a40] border border-[#3c4043]"
-                  }`}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-
             {/* Company, Role & Candidate Name Inputs */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -664,7 +629,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                   type="text"
                   value={candidateName}
                   onChange={(e) => setCandidateName(e.target.value)}
-                  placeholder="e.g. Alex Turner"
+                  placeholder="Your name"
                   required
                   className="w-full bg-[#2d2f34] text-white text-xs rounded-xl px-3 py-2.5 border border-[#3c4043] focus:outline-none focus:border-blue-500 font-medium"
                 />
@@ -677,8 +642,9 @@ export const Lobby: React.FC<LobbyProps> = ({
                 <input aria-label="Target Company"
                   type="text"
                   value={company}
+                  disabled={Boolean(skillAssessment)}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Google, Meta"
+                  placeholder="Target company"
                   required
                   className="w-full bg-[#2d2f34] text-white text-xs rounded-xl px-3 py-2.5 border border-[#3c4043] focus:outline-none focus:border-blue-500 font-medium"
                 />
@@ -691,6 +657,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 <input aria-label="Target Role"
                   type="text"
                   value={role}
+                  disabled={Boolean(skillAssessment)}
                   onChange={(e) => setRole(e.target.value)}
                   placeholder="e.g. Senior Backend Engineer"
                   required
@@ -707,6 +674,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 </label>
                 <select aria-label="Seniority Level"
                   value={seniority}
+                  disabled={Boolean(skillAssessment)}
                   onChange={(e) => setSeniority(e.target.value as SeniorityLevel)}
                   className="w-full bg-[#2d2f34] text-white text-xs rounded-xl px-3 py-2.5 border border-[#3c4043] focus:outline-none focus:border-blue-500 font-medium cursor-pointer"
                 >
@@ -724,6 +692,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 </label>
                 <select aria-label="Interview Format"
                   value={format}
+                  disabled={Boolean(skillAssessment)}
                   onChange={(e) => setFormat(e.target.value as InterviewFormat)}
                   className="w-full bg-[#2d2f34] text-white text-xs rounded-xl px-3 py-2.5 border border-[#3c4043] focus:outline-none focus:border-blue-500 font-medium cursor-pointer"
                 >
@@ -743,6 +712,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                 </span>
                 <button
                   type="button"
+                  disabled={Boolean(skillAssessment)}
                   onClick={() => setShowJdEditor(!showJdEditor)}
                   className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 cursor-pointer flex items-center gap-1"
                 >
@@ -754,6 +724,7 @@ export const Lobby: React.FC<LobbyProps> = ({
               {showJdEditor ? (
                 <textarea aria-label="Paste or customize job description requirements..."
                   value={jobDescription}
+                  disabled={Boolean(skillAssessment)}
                   onChange={(e) => setJobDescription(e.target.value)}
                   rows={4}
                   className="w-full bg-[#1e1e24] text-xs text-gray-200 p-2.5 rounded-xl border border-[#3c4043] focus:outline-none focus:border-blue-500 font-mono leading-relaxed resize-y"

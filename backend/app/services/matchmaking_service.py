@@ -84,13 +84,7 @@ Job Description:
         if parsed and isinstance(parsed, dict) and "required_skills" in parsed:
             return parsed
 
-        return {
-            "company_name": "Target Company",
-            "job_title": "Software Engineer",
-            "experience_level": "Mid",
-            "required_skills": ["Python", "FastAPI", "PostgreSQL", "Docker"],
-            "preferred_skills": ["React", "Kubernetes"]
-        }
+        raise RuntimeError("Job requirements could not be extracted; no sample requirements were substituted.")
 
     @classmethod
     async def analyze_match_against_graph(
@@ -242,13 +236,8 @@ Job Description:
                 "summary": f"Analyzed fit for {job_title} at {target_company}. Code evidence verified across {len(matched_skills)} core technical requirements.",
                 "matched_skills": matched_skills_ui,
                 "missing_skills": missing_skills,
-                "key_strengths": [f"Deep code evidence in {', '.join(matched_skills[:3])}", "Direct Alumni & Referral network reach"],
+                "key_strengths": [f"Code evidence in {', '.join(matched_skills[:3])}"] if matched_skills else [],
                 "gap_recommendations": [f"Highlight related project modules for {s}" for s in missing_skills[:2]],
-                "peer_comparison": {
-                    "coworker_score": 68,
-                    "advantage_summary": "Higher AST code proof and verified open source contributions.",
-                    "differentiators": ["DRDO research experience", "4x Hackathon Winner"]
-                },
                 "job_summary": {
                     "company": target_company,
                     "title": job_title,
@@ -271,71 +260,8 @@ Job Description:
                 "referral_bridges": referral_bridges
             }
         except Exception as e:
-            logger.warning(f"Error analyzing match with Neo4j: {e}. Using verified default match analysis.")
-            return cls._generate_default_match_analysis(job_title, target_company, all_target_skills)
-
-    @classmethod
-    def _generate_default_match_analysis(cls, job_title: str, company: str, target_skills: List[str]) -> Dict[str, Any]:
-        default_skills = [
-            {"skill": "Python", "matched": True, "repo_name": "careerosv5", "code_evidence": "AST verified in backend FastAPI/Neo4j engine", "confidence": 98},
-            {"skill": "FastAPI", "matched": True, "repo_name": "careerosv5", "code_evidence": "Async REST endpoints and middleware implementations", "confidence": 95},
-            {"skill": "Docker", "matched": True, "repo_name": "RecoverIQ", "code_evidence": "Multi-stage Dockerfile and container deployment configuration", "confidence": 90},
-            {"skill": "Neo4j / Graph Databases", "matched": True, "repo_name": "careerosv5", "code_evidence": "Cypher graph traversals and schema constraint initialization", "confidence": 94},
-            {"skill": "React / Next.js", "matched": True, "repo_name": "AgriFarm AI", "code_evidence": "Component architecture with real-time state synchronization", "confidence": 88}
-        ]
-
-        return {
-            "status": "success",
-            "job_title": job_title or "Senior Backend / Full Stack Engineer",
-            "company": company or "Apponward Technologies",
-            "match_score": 88,
-            "summary": f"High compatibility with {company}! Candidate possesses code-verified skills in Python, FastAPI, Neo4j, and React backed by production repositories.",
-            "matched_skills": default_skills,
-            "missing_skills": ["Kubernetes", "AWS EKS"],
-            "key_strengths": [
-                "Proven AST code evidence across Python, FastAPI, and Neo4j",
-                "Real-world cybersecurity internship at DRDO ADRDE",
-                "Direct alumni bridge at Anand Engineering College"
-            ],
-            "gap_recommendations": [
-                "Review Kubernetes pod lifecycle and helm chart deployment basics",
-                "Highlight DRDO network socket optimization in cover pitch"
-            ],
-            "peer_comparison": {
-                "coworker_score": 70,
-                "advantage_summary": "18% higher code-verified AST proof and direct alumni referral bridge.",
-                "differentiators": [
-                    "AST Verified Python & GraphRAG vs generic resume claims",
-                    "Direct 1st-degree connection (Kuldeep Chaudhary) at target company"
-                ]
-            },
-            "job_summary": {
-                "company": company,
-                "title": job_title,
-                "experience_level": "Mid-Senior",
-                "total_required_skills": 6
-            },
-            "match_metrics": {
-                "match_percentage": 88,
-                "matched_skills_count": 5,
-                "code_verified_matches_count": 5,
-                "missing_skills_count": 2,
-                "referral_bridges_found": 3
-            },
-            "skills_breakdown": {
-                "matched_skills": ["Python", "FastAPI", "Docker", "Neo4j", "React"],
-                "code_verified_proofs": default_skills,
-                "missing_skills": ["Kubernetes", "AWS EKS"]
-            },
-            "top_relevant_projects": [
-                {"name": "careerosv5", "description": "GraphRAG Career Navigation Engine", "primary_language": "Python", "stars": 2},
-                {"name": "RecoverIQ", "description": "Automated Incident Response Platform", "primary_language": "Python", "stars": 3}
-            ],
-            "referral_bridges": [
-                {"name": "Kuldeep Chaudhary", "position": "Backend Developer", "company": "Apponward Technologies", "college": "Anand Engineering College", "connection_bridge": "Direct University Alumni Bridge"},
-                {"name": "Saurabh Kumar", "position": "Senior Cloud Engineer", "company": "Apponward Technologies", "college": "Alumni Network", "connection_bridge": "1st Degree Direct Connection"}
-            ]
-        }
+            logger.exception("Could not analyze the candidate graph for a job match")
+            raise RuntimeError("Job match analysis is unavailable; no profile match was generated.") from e
 
     @classmethod
     async def generate_personalized_pitch(
@@ -361,12 +287,12 @@ Job Description:
         user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
         user_info = user_res[0] if user_res else {}
 
-        candidate_name = user_info.get("full_name") or "Candidate"
-        candidate_college = user_info.get("college") or "Engineering Institute"
+        candidate_name = user_info.get("full_name") or ""
+        candidate_college = user_info.get("college") or ""
         top_projs = user_info.get("top_projects", [])
-        projects_str = ", ".join(top_projs) if top_projs else "Verified Code Repositories"
+        projects_str = ", ".join(top_projs)
         milestones_list = user_info.get("milestones", [])
-        milestones_str = ", ".join(milestones_list) if milestones_list else "Key Milestones & Hackathons"
+        milestones_str = ", ".join(milestones_list)
 
         system_prompt = "You are an elite career strategist and executive outreach copywriter. Generate high-converting, concise referral outreach pitches."
         user_prompt = f"""
@@ -374,17 +300,17 @@ Candidate:
 - Name: {candidate_name}
 - College: {candidate_college}
 - Top Code Projects: {projects_str}
-- Key Skills: {job_summary.get("matched_skills", "Python, FastAPI, Neo4j, React")}
+- Key Skills: {job_summary.get("matched_skills", "")}
 - Milestones: {milestones_str}
 
 Target Opportunity:
-- Company: {job_summary.get("company", "Target Company")}
-- Role: {job_summary.get("title", "Software Engineer")}
+- Company: {job_summary.get("company", "")}
+- Role: {job_summary.get("title", "")}
 
 Target Connection:
-- Name: {target_contact.get("name", "Connection")}
-- Role: {target_contact.get("position", "Engineer")}
-- Bridge: {target_contact.get("connection_bridge", "Alumni / Shared Network")}
+- Name: {target_contact.get("name", "")}
+- Role: {target_contact.get("position", "")}
+- Bridge: {target_contact.get("connection_bridge", "")}
 
 Return JSON:
 {{
@@ -396,11 +322,6 @@ Return JSON:
         parsed = await llm_service.chat_json(system_prompt=system_prompt, user_prompt=user_prompt)
         if parsed and isinstance(parsed, dict) and "linkedin_note" in parsed:
             return parsed
-
-        return {
-            "linkedin_note": f"Hi {target_contact.get('name', '').split(' ')[0]}, noticed we share {candidate_college}! Built RecoverIQ (FastAPI/Python) and GraphRAG co-pilot. Saw an opening at {job_summary.get('company', '')} — would love to connect!",
-            "full_message": f"Hi {target_contact.get('name', '')},\n\nI hope you're doing well! I saw your work at {job_summary.get('company', '')} and noticed our shared connection through {candidate_college}.\n\nI recently built {projects_str} and DRDO NGFW modules. I saw the {job_summary.get('title', 'Software Engineer')} role open on your team and would be grateful for your brief advice or a referral.\n\nBest regards,\n{candidate_name}",
-            "key_talking_points": ["Shared Alma Mater", "Proof of code: " + projects_str]
-        }
+        raise RuntimeError("Personalized outreach could not be generated; no sample pitch was substituted.")
 
 matchmaking_service = MatchmakingService()

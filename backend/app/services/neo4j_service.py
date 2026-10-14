@@ -21,8 +21,7 @@ class Neo4jService:
         Guarantees strict multi-tenant scoping anchored to (:User {id: $user_id}).
         """
         if not neo4j_client.driver:
-            logger.warning("Neo4j driver offline. Skipping live graph upsert.")
-            return len(projects)
+            raise RuntimeError("Graph database is unavailable; GitHub projects were not saved.")
 
         nodes_merged_count = 0
 
@@ -142,8 +141,7 @@ class Neo4jService:
         and creates multi-tenant relationships in Neo4j AuraDB.
         """
         if not neo4j_client.driver or not neo4j_client.is_connected:
-            logger.warning("Neo4j driver offline. Skipping live resume graph upsert.")
-            return 1
+            raise RuntimeError("Graph database is unavailable; resume data was not saved.")
 
         nodes_merged = 0
 
@@ -555,28 +553,28 @@ class Neo4jService:
         Defaults to India & Global Remote target profile.
         """
         default_prefs = {
-            "primary_role": "Backend Engineer",
-            "priority_domain": "Distributed Systems & Cloud",
-            "target_country": "India",
-            "preferred_cities": ["Bengaluru", "Noida", "Delhi NCR", "Hyderabad", "Pune", "Mumbai", "Remote"],
-            "work_modes": ["Remote", "Hybrid", "Onsite"],
-            "preferred_roles": ["Backend Engineer", "Full Stack Developer", "Software Engineer", "AI/ML Engineer"],
-            "opportunity_types": ["jobs", "internships", "hackathons", "opensource"],
-            "experience_level": "Fresher / 0-3 yrs",
-            "min_salary": "₹8-18 LPA / $30k+ Remote",
-            "priority_factor": "best_fit",
-            "dream_companies": ["Google", "Razorpay", "CRED", "Stripe", "Zepto"],
+            "primary_role": "",
+            "priority_domain": "",
+            "target_country": "",
+            "preferred_cities": [],
+            "work_modes": [],
+            "preferred_roles": [],
+            "opportunity_types": [],
+            "experience_level": "",
+            "min_salary": "",
+            "priority_factor": "",
+            "dream_companies": [],
             "blocked_companies": [],
-            "notice_period": "Immediate (0-15 days)",
-            "work_authorization": "Authorized in India & Remote Worldwide",
-            "spoken_languages": ["English (Professional)", "Hindi (Native)"],
+            "notice_period": "",
+            "work_authorization": "",
+            "spoken_languages": [],
             "career_goals": {
-                "target_milestone": "Targeting SDE-1 / SDE-2 High-Growth Role",
-                "target_timeline": "Next 30-90 Days",
-                "target_ctc": "₹15-28 LPA",
-                "focus_areas": ["Distributed Systems", "Graph Databases", "Agentic AI", "High-Throughput APIs"]
+                "target_milestone": "",
+                "target_timeline": "",
+                "target_ctc": "",
+                "focus_areas": []
             },
-            "in_progress_skills": ["Kafka", "Kubernetes", "Vector Databases"],
+            "in_progress_skills": [],
             "custom_locations": []
         }
 
@@ -634,14 +632,13 @@ class Neo4jService:
         cls,
         user_id: str,
         connections: List[Dict[str, Any]],
-        shared_college: Optional[str] = "Anand Engineering College"
+        shared_college: Optional[str] = None
     ) -> int:
         """
         Upserts LinkedIn professional connections, companies, universities, skills, and verified alumni edges into Neo4j AuraDB.
         """
         if not neo4j_client.driver or not neo4j_client.is_connected:
-            logger.warning("Neo4j driver offline. Skipping live LinkedIn graph upsert.")
-            return len(connections)
+            raise RuntimeError("Graph database is unavailable; LinkedIn connections were not saved.")
 
         # 1. Clean up any previous corrupt blanket ATTENDED edges for this user's connections
         try:
@@ -718,41 +715,7 @@ class Neo4jService:
             "connections": connections
         })
 
-        # 3. Seed Sharda Group of Institutions (SGI) Semantic Hierarchy
-        sgi_query = """
-        MERGE (g:EducationGroup {name: 'Sharda Group of Institutions (SGI)'})
-        
-        MERGE (u1:University {name: 'Anand Engineering College'})
-        ON CREATE SET u1.aliases = ['AEC', 'AEC Agra', 'Anand Engg College']
-        MERGE (u1)-[:AFFILIATED_WITH]->(g)
-
-        MERGE (u2:University {name: 'Sharda University Agra'})
-        ON CREATE SET u2.aliases = ['SUA', 'Sharda Agra', 'Sharda University']
-        MERGE (u2)-[:AFFILIATED_WITH]->(g)
-
-        MERGE (u3:University {name: 'Hindustan College of Science and Technology'})
-        ON CREATE SET u3.aliases = ['HCST', 'HCST Mathura', 'Hindustan College']
-        MERGE (u3)-[:AFFILIATED_WITH]->(g)
-
-        MERGE (u4:University {name: 'Sharda University'})
-        ON CREATE SET u4.aliases = ['Sharda Greater Noida', 'SU Greater Noida']
-        MERGE (u4)-[:AFFILIATED_WITH]->(g)
-
-        RETURN g.name;
-        """
-        await neo4j_client.execute_query(sgi_query)
-
-        # 4. Link ONLY Genuine Verified Alumni to College
-        alumni_query = """
-        MATCH (u:User {id: $user_id})-[:CONNECTED_TO]->(p:Person)
-        WHERE p.is_alumni = true
-        MATCH (univ:University {name: 'Anand Engineering College'})
-        MERGE (p)-[:ATTENDED]->(univ)
-        RETURN count(p) AS alumni_linked;
-        """
-        await neo4j_client.execute_query(alumni_query, {"user_id": user_id})
-
-        return len(connections) * 2
+        return len(connections)
 
     @classmethod
     async def upsert_hiring_lead_job(
@@ -764,7 +727,7 @@ class Neo4jService:
         Injects an active hiring lead into the knowledge graph and immediately traverses referral bridges.
         """
         if not neo4j_client.driver or not neo4j_client.is_connected:
-            return {"job_id": "lead_001", "referral_bridges": []}
+            raise RuntimeError("Graph database is unavailable; hiring lead was not saved.")
 
         job_id = f"lead:{lead_data['company_name'].lower().replace(' ', '_')}:{lead_data['job_title'].lower().replace(' ', '_')}"
         
@@ -786,7 +749,7 @@ class Neo4jService:
             "company_name": lead_data["company_name"],
             "job_id": job_id,
             "job_title": lead_data["job_title"],
-            "location": lead_data.get("location", "Remote"),
+            "location": lead_data.get("location", ""),
             "skills": lead_data.get("skills", [])
         })
 
@@ -802,7 +765,7 @@ class Neo4jService:
         RETURN DISTINCT p.name AS name,
                p.position AS position,
                target_comp.name AS company,
-               coalesce(univ.name, p_univ.name, 'Anand Engineering College') AS shared_school,
+               coalesce(univ.name, p_univ.name) AS shared_school,
                CASE 
                  WHEN (u)-[:CONNECTED_TO]->(p) THEN '1st Degree Connection' 
                  WHEN univ IS NOT NULL AND p_univ IS NOT NULL AND univ = p_univ THEN 'University Alumni Bridge'
@@ -832,12 +795,14 @@ class Neo4jService:
         Links the Person to their Company, Education, and computes instant referral bridges to the User.
         """
         if not neo4j_client.driver or not neo4j_client.is_connected:
-            return {"status": "success", "person_id": "simulated", "nodes_merged": 1, "referral_bridges": []}
+            raise RuntimeError("Graph database is unavailable; scanned profile was not saved.")
 
-        name = (target_data.get("name") or "LinkedIn Contact").strip()
+        name = (target_data.get("name") or "").strip()
         headline = (target_data.get("headline") or "").strip()
         company = (target_data.get("company") or "").strip()
-        role = (target_data.get("role") or headline or "Professional").strip()
+        role = (target_data.get("role") or headline or "").strip()
+        if not name:
+            raise ValueError("Scanned profile name is required.")
         profile_url = (target_data.get("profile_url") or "").strip()
         shared_college = (target_data.get("shared_college") or "").strip()
         skills = target_data.get("skills") or []
@@ -939,13 +904,12 @@ class Neo4jService:
         """
         Executes a Cypher query with keyword arguments and returns records as dictionaries.
         """
-        if not neo4j_client.driver:
-            logger.warning("Neo4j driver offline. Skipping query execution.")
-            return []
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            raise RuntimeError("Graph database is unavailable; query was not executed.")
         try:
             return await neo4j_client.execute_query(query, params)
         except Exception as e:
-            logger.error(f"Error executing Neo4j Cypher query: {e}")
-            return []
+            logger.exception("Error executing Neo4j Cypher query")
+            raise RuntimeError("Graph database query failed.") from e
 
 neo4j_service = Neo4jService()

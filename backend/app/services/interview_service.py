@@ -5,7 +5,6 @@ import uuid
 from typing import Dict, Any, Optional, List
 from app.services.llm_service import llm_service
 from app.services.neo4j_service import neo4j_service
-from app.services.profile_service import profile_service
 
 logger = logging.getLogger(__name__)
 
@@ -135,21 +134,27 @@ Return STRICTLY a JSON object with this schema:
         # Fetch candidate profile details if not passed
         if user_skills is None or user_projects is None:
             try:
-                profile_data = await profile_service.get_full_profile(user_id)
-                user_skills = profile_data.get("skills", [])
-                user_projects = profile_data.get("projects", [])
+                # Interview prep is grounded in the saved resume blueprint only.
+                blueprint = await neo4j_service.get_user_resume_blueprint(user_id) or {}
+                user_skills = [
+                    skill
+                    for category in blueprint.get("skills", [])
+                    if isinstance(category, dict)
+                    for skill in category.get("skills", [])
+                ]
+                user_projects = blueprint.get("projects", [])
             except Exception as e:
                 logger.warning(f"Failed to fetch profile for job intelligence: {e}")
-                user_skills = user_skills or ["Python", "FastAPI", "React", "TypeScript", "SQL", "Docker"]
+                user_skills = user_skills or []
                 user_projects = user_projects or []
 
         projects_summary = "\n".join([
-            f"- {p.get('name', 'Project')}: {p.get('description', '')} (Tech: {', '.join(p.get('tech_stack', []) or [])})"
+            f"- {p.get('name', 'Project')}: {'; '.join(p.get('bullets', [])[:2])} (Tech: {p.get('tech_stack', '')})"
             for p in user_projects[:4]
         ])
 
-        system_prompt = """You are a Principal Engineering Interviewer and Elite Career Strategist.
-Generate a comprehensive 360° Job & Interview Intelligence Dossier for the candidate targeting this specific company and role.
+        system_prompt = """You are a Principal Engineering Interviewer and Career Strategist.
+Generate a job and interview intelligence dossier using only the supplied company name, role, job description, and resume evidence. You have no web research tool: do not invent current company facts, culture, stack, recent initiatives, hiring rounds, or candidate credentials. Mark unsupported company details as unknown and derive role competencies/questions from the JD. Clearly distinguish JD requirements from resume evidence.
 
 Return STRICTLY a JSON object with this schema:
 {
@@ -270,27 +275,23 @@ Candidate Profile:
         except Exception as e:
             logger.warning(f"Failed to generate deep job intelligence via LLM: {e}")
 
-        # Fallback structured intelligence
+        # Honest fallback when generation fails; do not fabricate employer or candidate facts.
         return {
             "company_intel": {
                 "company_name": company,
-                "business_overview": f"{company} is actively recruiting for {role}. They emphasize strong problem solving, architectural clarity, and fast execution.",
-                "engineering_culture": "Agile, product-focused engineering with emphasis on scalable systems, clean testable code, and collaborative ownership.",
-                "tech_stack_footprint": ["Python", "FastAPI", "React", "TypeScript", "PostgreSQL / Neo4j", "Docker"],
-                "recent_focus_areas": ["Cloud Native Migration", "High Throughput Microservices", "AI-Powered Automation"]
+                "business_overview": "Company background could not be verified from the supplied job description.",
+                "engineering_culture": "Not stated in the supplied job description.",
+                "tech_stack_footprint": [],
+                "recent_focus_areas": []
             },
             "candidate_fit_assessment": {
-                "match_score": 82,
-                "verdict": "Solid Candidate Fit",
-                "key_advantages": [
-                    f"Strong background in modern tech stack ({', '.join(user_skills[:4])})",
-                    "Practical hands-on project implementation experience"
-                ],
+                "match_score": 0,
+                "verdict": "Unable to assess; intelligence generation failed",
+                "key_advantages": [f"Resume lists: {', '.join(user_skills[:4])}"] if user_skills else [],
                 "critical_gaps": [
-                    "Brush up on concurrency and database index internals",
-                    "Structure project defense with concrete metrics and trade-offs"
+                    "Retry intelligence generation to compare resume evidence against the job description."
                 ],
-                "tailored_pitch": f"I am a software engineer skilled in building scalable applications with {', '.join(user_skills[:3])}. In my recent projects, I focused on high-performance data modeling and responsive full-stack architectures."
+                "tailored_pitch": "Use the resume and job description to prepare a specific pitch; no tailored pitch could be generated."
             },
             "interview_rounds_blueprint": [
                 {"round_name": "Round 1: Coding & DSA", "focus": "Data Structures, Algorithms, Complexity", "duration": "60 mins", "weightage": "Elimination"},
@@ -372,7 +373,7 @@ Candidate Profile:
                 logger.warning(f"Could not load resume blueprint for interview: {e}")
                 blueprint = None
 
-        candidate_name = blueprint.get("contact", {}).get("full_name", "Candidate") if blueprint else "Candidate"
+        candidate_name = blueprint.get("contact", {}).get("full_name", "") if blueprint else ""
         projects = blueprint.get("projects", []) if blueprint else []
         skills = []
         if blueprint and blueprint.get("skills"):
@@ -385,8 +386,12 @@ Candidate Profile:
         projects_str = "\n".join([f"- {p.get('name')}: {', '.join(p.get('bullets', [])[:2])}" for p in projects[:3]])
 
         system_prompt = f"""You are an elite Senior Interviewer at {company} conducting a {round_type.upper()} mock interview for the {role} position.
-Your persona: Professional, rigorous, sharp, and encouraging.
+Your persona: Adapt your seniority, questioning style, and evaluation bar to the target role and the requirements explicitly present in the job description. Be professional, rigorous, sharp, and encouraging.
 You have the candidate's actual resume blueprint in front of you.
+Use only the supplied job description and candidate resume as evidence about this role and candidate. Do not invent company-specific hiring practices, candidate experience, projects, metrics, or skills. If the JD is sparse, state uncertainty and ask role-relevant fundamentals.
+
+Target Job Description:
+{jd[:6000] or 'No job description supplied; use only the stated role and resume.'}
 
 Candidate Info:
 - Name: {candidate_name}
@@ -413,7 +418,7 @@ Return STRICTLY a JSON object with this schema:
   "context_hints": "1-2 lines of hints for the candidate if they get stuck"
 }}"""
 
-        user_prompt = f"Initialize the {round_type} interview session for {company} - {role} at {difficulty} difficulty."
+        user_prompt = f"Initialize the {round_type} interview session for {company} - {role} at {difficulty} difficulty. Prioritize competencies and interview formats signaled by the supplied JD."
 
         try:
             res = await llm_service.chat_json(
@@ -482,7 +487,8 @@ Return STRICTLY a JSON object with this schema:
         candidate_answer: str,
         step: int,
         total_steps: int = 5,
-        history: Optional[List[Dict[str, Any]]] = None
+        history: Optional[List[Dict[str, Any]]] = None,
+        job_description: str = ""
     ) -> Dict[str, Any]:
         """
         Scores candidate's answer (/10), provides immediate strengths, gaps, model response,
@@ -492,6 +498,10 @@ Return STRICTLY a JSON object with this schema:
 
         system_prompt = f"""You are a Principal Software Engineer and Bar Raiser conducting an interview for {role} at {company}.
 Evaluate the candidate's answer to the current question realistically.
+Ground role-specific evaluation and the next question in this job description and the interview transcript only. Do not assume company practices or candidate credentials that are not stated.
+
+Target job description:
+{job_description[:6000] or 'Not supplied.'}
 
 Current Question: "{current_question}"
 Candidate Answer: "{candidate_answer}"
@@ -508,11 +518,11 @@ If not final, generate an adaptive, challenging follow-up question that builds o
 
 Return STRICTLY a JSON object with this schema:
 {{
-  "score": 8.5,
-  "strengths": ["Clear explanation of asynchronous processing", "Good mention of caching layers"],
-  "gaps": ["Did not mention how cache invalidation or race conditions were handled"],
-  "model_answer": "An exemplary 2-3 sentence answer showing how a top 1% engineer would articulate this.",
-  "interviewer_reaction": "A natural 1-2 sentence spoken reaction from the interviewer to transition to the next question.",
+  "score": 0,
+  "strengths": [],
+  "gaps": [],
+  "model_answer": "",
+  "interviewer_reaction": "",
   "next_question": "{"" if is_final else "Next challenging question"}",
   "next_category": "{"" if is_final else "Category for next question"}",
   "next_hint": "{"" if is_final else "Helpful clue for the candidate if they get stuck"}",
@@ -530,34 +540,20 @@ Return STRICTLY a JSON object with this schema:
             if eval_res and isinstance(eval_res, dict) and "score" in eval_res:
                 return {
                     "step": step,
-                    "score": eval_res.get("score", 7.5),
-                    "strengths": eval_res.get("strengths", ["Clear communication"]),
-                    "gaps": eval_res.get("gaps", ["Could provide more technical depth on edge cases"]),
-                    "model_answer": eval_res.get("model_answer", "Focus on describing concrete system components and measurable performance gains."),
-                    "interviewer_reaction": eval_res.get("interviewer_reaction", "Great points. Let's move on."),
+                    "score": eval_res["score"],
+                    "strengths": eval_res.get("strengths", []),
+                    "gaps": eval_res.get("gaps", []),
+                    "model_answer": eval_res.get("model_answer", ""),
+                    "interviewer_reaction": eval_res.get("interviewer_reaction", ""),
                     "next_question": eval_res.get("next_question") if not is_final else None,
-                    "next_category": eval_res.get("next_category", "Core Technical") if not is_final else None,
-                    "next_hint": eval_res.get("next_hint", "Think about concurrency and scalability.") if not is_final else None,
+                    "next_category": eval_res.get("next_category", "") if not is_final else None,
+                    "next_hint": eval_res.get("next_hint", "") if not is_final else None,
                     "is_completed": is_final
                 }
         except Exception as e:
             logger.error(f"Error evaluating interview response: {e}")
 
-        # Fallback scoring
-        word_count = len(candidate_answer.split())
-        score = min(9.0, max(4.0, 5.0 + (word_count // 30)))
-        return {
-            "step": step,
-            "score": score,
-            "strengths": ["Directly addressed the question", "Demonstrated clear understanding"],
-            "gaps": ["Could elaborate more on scalability edge cases and failover mechanisms"],
-            "model_answer": "A top-tier answer clearly defines the architectural flow, trade-offs of chosen technologies, and measurable impact.",
-            "interviewer_reaction": "Thanks for sharing that perspective. Let's dig deeper into the next area.",
-            "next_question": "How would you handle database connection pooling and transaction rollbacks during a high-traffic spike?" if not is_final else None,
-            "next_category": "Database & Concurrency" if not is_final else None,
-            "next_hint": "Consider isolation levels and connection pool exhaustion." if not is_final else None,
-            "is_completed": is_final
-        }
+        raise RuntimeError("Interview response evaluation is unavailable; no score or follow-up was generated.")
 
     @classmethod
     async def generate_final_scorecard(
@@ -580,28 +576,18 @@ Analyze the transcript and scores to generate the final Hireability Scorecard.
 
 Return STRICTLY a JSON object with this schema:
 {{
-  "overall_score": 84,
-  "verdict": "Strong Hire / Hire / Leaning Hire / No Hire",
-  "verdict_summary": "2-3 sentence executive hiring committee summary",
+  "overall_score": null,
+  "verdict": "",
+  "verdict_summary": "",
   "competency_breakdown": {
-    "technical_depth": 85,
-    "system_architecture": 80,
-    "problem_solving": 88,
-    "communication_star": 82
+    "technical_depth": null,
+    "system_architecture": null,
+    "problem_solving": null,
+    "communication_star": null
   },
-  "top_superpowers": [
-    "Superpower 1 demonstrated in the interview",
-    "Superpower 2 demonstrated"
-  ],
-  "areas_for_improvement": [
-    "Specific improvement area 1",
-    "Specific improvement area 2"
-  ],
-  "fast_track_study_plan": [
-    "Step 1 to master before the real interview",
-    "Step 2",
-    "Step 3"
-  ]
+  "top_superpowers": [],
+  "areas_for_improvement": [],
+  "fast_track_study_plan": []
 }}"""
 
         user_prompt = f"Interview Transcript:\n\n{history_text}"
@@ -617,36 +603,6 @@ Return STRICTLY a JSON object with this schema:
         except Exception as e:
             logger.error(f"Error generating final interview scorecard: {e}")
 
-        # Compute averages from history
-        scores = [float(item.get("score", 7.0)) for item in conversation_history if item.get("score") is not None]
-        avg_score = (sum(scores) / len(scores)) if scores else 7.5
-        overall_100 = round(avg_score * 10)
-
-        verdict = "Strong Hire" if overall_100 >= 85 else ("Hire" if overall_100 >= 72 else ("Leaning Hire" if overall_100 >= 60 else "Needs More Practice"))
-
-        return {
-            "overall_score": overall_100,
-            "verdict": verdict,
-            "verdict_summary": f"The candidate demonstrated strong foundational knowledge and clear articulation for the {role} role at {company}.",
-            "competency_breakdown": {
-                "technical_depth": min(95, overall_100 + 2),
-                "system_architecture": max(50, overall_100 - 4),
-                "problem_solving": overall_100,
-                "communication_star": min(95, overall_100 + 1)
-            },
-            "top_superpowers": [
-                "Strong conceptual foundation and hands-on familiarity with project architecture",
-                "Structured approach to problem solving under interview conditions"
-            ],
-            "areas_for_improvement": [
-                "Incorporate more quantitative metrics when discussing project impact",
-                "Deep dive into concurrency, race conditions, and distributed systems trade-offs"
-            ],
-            "fast_track_study_plan": [
-                "Review database indexing mechanics (B-Trees vs LSM Trees)",
-                "Practice framing architectural trade-offs using the STAR method",
-                "Rehearse explaining project bottlenecks in under 2 minutes"
-            ]
-        }
+        raise RuntimeError("Interview scorecard generation is unavailable; no score was issued.")
 
 interview_service = InterviewService()

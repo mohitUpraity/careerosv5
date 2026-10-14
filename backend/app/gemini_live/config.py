@@ -4,7 +4,7 @@ from typing import List, Optional
 class LiveEngineConfig(BaseModel):
     model: str = "gemini-3.8-live"
     fallback_models: List[str] = ["gemini-3.8-live", "gemini-2.5-flash-native-audio-latest"]
-    voice_name: str = "Zephyr"  # Options: Aoede, Puck, Charon, Kore, Fenrir, Zephyr
+    voice_name: str = "Kore"  # Options: Aoede, Puck, Charon, Kore, Fenrir, Zephyr
     input_sample_rate: int = 16000
     output_sample_rate: int = 24000
     channels: int = 1

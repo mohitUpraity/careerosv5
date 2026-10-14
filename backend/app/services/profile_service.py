@@ -22,18 +22,6 @@ class ProfileService:
             return cls._generate_default_profile_analysis(user_id)
 
         try:
-            # 0. Check and fallback user ID if requested ID has no nodes
-            check_u = await neo4j_client.execute_query(
-                "MATCH (u:User {id: $user_id}) RETURN u.id as id",
-                {"user_id": user_id}
-            )
-            if not check_u or len(check_u) == 0:
-                fallback_u = await neo4j_client.execute_query(
-                    "MATCH (u:User) RETURN u.id as id ORDER BY u.created_at DESC LIMIT 1"
-                )
-                if fallback_u and len(fallback_u) > 0 and fallback_u[0].get("id"):
-                    user_id = fallback_u[0]["id"]
-
             # 1. Fetch User Identity and Education
             user_query = """
             MATCH (u:User {id: $user_id})
@@ -109,6 +97,7 @@ class ProfileService:
                    p.description AS description,
                    p.repo_url AS repo_url,
                    p.stars_count AS stars,
+                   coalesce(p.is_public, true) AS is_public,
                    p.primary_language AS primary_language,
                    collect(DISTINCT s.name) AS tech_stack
             ORDER BY p.stars_count DESC, p.name ASC
@@ -217,7 +206,7 @@ class ProfileService:
                 "graph_nodes_count": 1 + proj_count + total_skills_count + exp_count + network_count,
                 "top_skills": top_skills,
                 "profile": {
-                    "full_name": user_info.get("full_name") or "Candidate",
+                "full_name": user_info.get("full_name") or "",
                     "email": user_info.get("email"),
                     "github_username": user_info.get("github_username"),
                     "linkedin_url": user_info.get("linkedin_url"),
@@ -267,17 +256,17 @@ class ProfileService:
             "repos_count": 0,
             "connections_count": 0,
             "alumni_count": 0,
-            "graph_nodes_count": 1,
+            "graph_nodes_count": 0,
             "top_skills": [],
             "profile": {
-                "full_name": "Candidate",
+                "full_name": "",
                 "email": "",
                 "github_username": "",
                 "linkedin_url": "",
                 "education": []
             },
             "metrics": {
-                "profile_strength_score": 10,
+                "profile_strength_score": 0,
                 "total_skills": 0,
                 "code_verified_skills_count": 0,
                 "resume_skills_count": 0,
@@ -299,9 +288,7 @@ class ProfileService:
                 "total_connections": 0,
                 "target_companies_accessible": []
             },
-            "recommendations": [
-                "Welcome to CareerOS! Sync your GitHub repositories or upload your resume to build your personal Knowledge Graph."
-            ]
+            "recommendations": []
         }
 
     @classmethod
@@ -340,21 +327,9 @@ class ProfileService:
                     "label": label or rel_type
                 })
 
-        user_name = "Candidate"
+        user_name = ""
         try:
             if neo4j_client.driver and neo4j_client.is_connected:
-                # 0. Check and fallback user ID if requested ID has no nodes
-                check_u = await neo4j_client.execute_query(
-                    "MATCH (u:User {id: $user_id}) RETURN u.id as id",
-                    {"user_id": user_id}
-                )
-                if not check_u or len(check_u) == 0:
-                    fallback_u = await neo4j_client.execute_query(
-                        "MATCH (u:User) RETURN u.id as id ORDER BY u.created_at DESC LIMIT 1"
-                    )
-                    if fallback_u and len(fallback_u) > 0 and fallback_u[0].get("id"):
-                        user_id = fallback_u[0]["id"]
-
                 # 1. User
                 u_res = await neo4j_client.execute_query(
                     "MATCH (u:User {id: $user_id}) RETURN u.full_name as name, u.github_username as gh, u.email as email",
@@ -366,7 +341,8 @@ class ProfileService:
                     user_name = u_res[0]["email"].split("@")[0]
 
                 gh_handle = u_res[0].get("gh", "") if u_res else ""
-                add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "Candidate Profile", "github": gh_handle})
+                if u_res:
+                    add_node(f"user_{user_id}", user_name, "user", "Candidate", {"headline": "", "github": gh_handle})
 
                 verified_res = await neo4j_client.execute_query(
                     """
@@ -397,9 +373,9 @@ class ProfileService:
                 for p in proj_res:
                     pid = f"proj_{p['name']}"
                     add_node(pid, p["name"], "project", "Code Repository", {
-                        "desc": p.get("desc") or "Verified Project",
-                        "url": p.get("url") or f"https://github.com/{gh_handle}/{p['name']}",
-                        "lang": p.get("lang") or "Code",
+                        "desc": p.get("desc") or "",
+                        "url": p.get("url") or "",
+                        "lang": p.get("lang") or "",
                         "stars": p.get("stars", 0),
                         "skills": [item.get("name") for item in p.get("skill_details", []) if item and item.get("name")]
                     })
@@ -642,46 +618,12 @@ class ProfileService:
             if n_degree > 0 or nid == user_node_id or len(nodes) == 1:
                 filtered_nodes.append(n)
 
-        # If empty, return clean user node only
-        if len(filtered_nodes) == 0:
-            filtered_nodes = [{
-                "id": user_node_id,
-                "label": user_name,
-                "type": "user",
-                "category": "Candidate",
-                "val": 30,
-                "headline": "Candidate Profile",
-                "connections_count": 0,
-                "neighbors": []
-            }]
-
         return {
             "status": "success",
             "nodes_count": len(filtered_nodes),
             "links_count": len(valid_links),
             "nodes": filtered_nodes,
             "links": valid_links
-        }
-
-    @classmethod
-    def _generate_default_rich_graph(cls, user_id: str, user_name: str = "Candidate") -> Dict[str, Any]:
-        """
-        Returns a clean initial graph node for the user if database is completely fresh.
-        """
-        return {
-            "status": "success",
-            "nodes_count": 1,
-            "links_count": 0,
-            "nodes": [
-                {
-                    "id": f"user_{user_id}",
-                    "label": user_name,
-                    "type": "user",
-                    "category": "Candidate",
-                    "val": 28
-                }
-            ],
-            "links": []
         }
 
     @classmethod
@@ -738,12 +680,12 @@ class ProfileService:
 
         default_details = {
             "id": user_id,
-            "username": "candidate",
-            "is_public": True,
-            "full_name": "Candidate",
+            "username": "",
+            "is_public": False,
+            "full_name": "",
             "email": "",
             "phone": "",
-            "headline": "Software Engineer",
+            "headline": "",
             "location": "",
             "bio": "",
             "github_username": "",
@@ -755,29 +697,13 @@ class ProfileService:
             "experience": [],
             "skills": [],
             "preferences": {
-                "primary_role": "Backend Engineer",
-                "priority_domain": "Distributed Systems & Cloud",
-                "target_country": "India",
-                "preferred_cities": ["Bengaluru", "Noida / Delhi NCR", "Hyderabad", "Pune", "Mumbai", "Remote India"],
-                "work_modes": ["Remote", "Hybrid", "Onsite"],
-                "preferred_roles": ["Backend Engineer", "Full Stack Developer", "Software Engineer", "AI/ML Engineer"],
-                "opportunity_types": ["jobs", "internships", "hackathons", "opensource"],
-                "experience_level": "Fresher / 0-3 yrs",
-                "min_salary": "₹8-18 LPA / $30k+ Remote",
-                "priority_factor": "best_fit",
-                "dream_companies": ["Google", "Razorpay", "CRED", "Stripe", "Zepto"],
-                "blocked_companies": [],
-                "notice_period": "Immediate (0-15 days)",
-                "work_authorization": "Authorized in India & Remote Worldwide",
-                "spoken_languages": ["English (Professional)", "Hindi (Native)"],
-                "career_goals": {
-                    "target_milestone": "Targeting SDE-1 / SDE-2 High-Growth Role",
-                    "target_timeline": "Next 30-90 Days",
-                    "target_ctc": "₹15-28 LPA",
-                    "focus_areas": ["Distributed Systems", "Graph Databases", "Agentic AI", "High-Throughput APIs"]
-                },
-                "in_progress_skills": ["Kafka", "Kubernetes", "Vector Databases"],
-                "custom_locations": []
+                "primary_role": "", "priority_domain": "", "target_country": "",
+                "preferred_cities": [], "work_modes": [], "preferred_roles": [],
+                "opportunity_types": [], "experience_level": "", "min_salary": "",
+                "priority_factor": "", "dream_companies": [], "blocked_companies": [],
+                "notice_period": "", "work_authorization": "", "spoken_languages": [],
+                "career_goals": {"target_milestone": "", "target_timeline": "", "target_ctc": "", "focus_areas": []},
+                "in_progress_skills": [], "custom_locations": []
             }
         }
 
@@ -805,15 +731,6 @@ class ProfileService:
             """
             user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
             
-            # If no user found, fallback or check last user
-            if not user_res or len(user_res) == 0:
-                fallback_u = await neo4j_client.execute_query(
-                    "MATCH (u:User) RETURN u.id as id ORDER BY u.created_at DESC LIMIT 1"
-                )
-                if fallback_u and len(fallback_u) > 0 and fallback_u[0].get("id"):
-                    user_id = fallback_u[0]["id"]
-                    user_res = await neo4j_client.execute_query(user_query, {"user_id": user_id})
-
             u_record = user_res[0] if user_res else {}
 
             # Parse Preferences
@@ -1193,7 +1110,8 @@ class ProfileService:
                             p.repo_url = coalesce(nullif($repo_url, ''), p.repo_url),
                             p.live_url = coalesce(nullif($live_url, ''), p.live_url),
                             p.primary_language = coalesce(nullif($primary_language, ''), p.primary_language),
-                            p.stars_count = coalesce($stars, p.stars_count)
+                            p.stars_count = coalesce($stars, p.stars_count),
+                            p.is_public = $is_public
                         MERGE (u)-[:BUILT]->(p);
                         """
                         await neo4j_client.execute_query(ins_proj_query, {
@@ -1204,7 +1122,8 @@ class ProfileService:
                             "repo_url": p.get("repo_url", ""),
                             "live_url": p.get("live_url", ""),
                             "primary_language": p.get("primary_language", "Code"),
-                            "stars": p.get("stars_count", 0)
+                            "stars": p.get("stars_count", 0),
+                            "is_public": p.get("is_public", True) is not False
                         })
 
                         # Link tech stack
@@ -1665,10 +1584,14 @@ class ProfileService:
           AND ($current_user_id IS NULL OR u.id <> $current_user_id)
         RETURN count(u) AS count
         """
-        res = await neo4j_client.execute_query(query, {
-            "username": clean,
-            "current_user_id": current_user_id
-        })
+        try:
+            res = await neo4j_client.execute_query(query, {
+                "username": clean,
+                "current_user_id": current_user_id
+            })
+        except Exception:
+            logger.exception("Username availability lookup failed")
+            return {"available": False, "username": clean, "message": "Username service is temporarily unavailable. Try again shortly."}
         is_taken = res and res[0].get("count", 0) > 0
         return {
             "available": not is_taken,
@@ -1681,7 +1604,11 @@ class ProfileService:
         """
         Claims or updates the unique CareerOS public username for the candidate.
         """
-        check = await cls.check_username_availability(username, current_user_id=user_id)
+        try:
+            check = await cls.check_username_availability(username, current_user_id=user_id)
+        except Exception:
+            logger.exception("Username availability check failed for %s", user_id)
+            return {"success": False, "message": "Username service is temporarily unavailable. Try again shortly.", "username": username.strip().lower()}
         if not check["available"]:
             return {"success": False, "message": check["message"], "username": check["username"]}
 
@@ -1714,9 +1641,9 @@ class ProfileService:
         cls,
         user_id: str,
         skill_name: str,
-        difficulty_tier: str = "L2",
-        verification_score: int = 90,
-        proctoring_score: int = 100,
+        difficulty_tier: str,
+        verification_score: int,
+        proctoring_score: int,
         audio_proof_url: Optional[str] = None,
         radar_scores: Optional[Dict[str, int]] = None,
         feedback_summary: Optional[str] = None
@@ -1730,12 +1657,7 @@ class ProfileService:
             return {"status": "error", "message": "Skill name is required"}
 
         if not radar_scores:
-            radar_scores = {
-                "system_architecture": max(70, min(100, verification_score - 2)),
-                "code_efficiency": max(70, min(100, verification_score + 3)),
-                "debugging_speed": max(70, min(100, verification_score - 5)),
-                "communication": max(70, min(100, verification_score + 1))
-            }
+            raise ValueError("Assessment rubric scores are required; no verification was recorded.")
 
         tier_label = difficulty_tier
         if difficulty_tier == "L1":
@@ -1745,13 +1667,12 @@ class ProfileService:
         elif difficulty_tier == "L3":
             tier_label = "L3 Staff / Architect"
 
-        feedback = feedback_summary or (
-            f"Candidate successfully passed the proctored {tier_label} technical interrogation for {clean_skill} "
-            f"with an integrity trust index of {proctoring_score}%."
-        )
+        feedback = feedback_summary or ""
 
-        audio_url = audio_proof_url or f"/api/v1/interview/proof-audio/{clean_skill.lower()}"
+        audio_url = audio_proof_url or ""
 
+        if not neo4j_client.driver or not neo4j_client.is_connected:
+            raise RuntimeError("Graph database is unavailable; skill verification was not saved.")
         if neo4j_client.driver and neo4j_client.is_connected:
             query = """
             MATCH (u:User {id: $user_id})
@@ -1793,7 +1714,7 @@ class ProfileService:
                 "audio_proof_url": audio_url,
                 "radar_scores": radar_scores,
                 "feedback_summary": feedback,
-                "verified_at": "Just now"
+                "verified_at": None
             }
         }
 
@@ -1875,6 +1796,19 @@ class ProfileService:
         ))
 
         # 4. Extract mini-subgraph for recruiter visualization
+        visibility_defaults = {"bio": True, "location": True, "links": True, "skills": True, "projects": True, "experience": True, "education": True, "credentials": True, "activity": True}
+        visibility = {**visibility_defaults, **(details.get("preferences", {}).get("profile_visibility") or {})}
+        if not visibility["skills"]:
+            verified_skills = []
+            claimed_skills = []
+        public_projects = [p for p in (details.get("projects") or []) if p.get("is_public", True) is not False] if visibility["projects"] else []
+        public_experience = details.get("experience") or [] if visibility["experience"] else []
+        public_education = details.get("education") or [] if visibility["education"] else []
+        public_certifications = details.get("certifications") or [] if visibility["credentials"] else []
+        public_achievements = details.get("achievements") or [] if visibility["credentials"] else []
+        if not visibility["activity"]:
+            interview_history = []
+            interview_count = 0
         public_nodes = [
             {
                 "id": "candidate_node",
@@ -1885,7 +1819,7 @@ class ProfileService:
         ]
         public_links = []
         
-        for p in (details.get("projects") or [])[:4]:
+        for p in public_projects[:4]:
             p_id = f"proj_{p.get('name', 'project')}"
             public_nodes.append({
                 "id": p_id,
@@ -1939,27 +1873,28 @@ class ProfileService:
                 "id": matched_user_id,
                 "username": user_record.get("username") or clean_user or details.get("username"),
                 "full_name": details.get("full_name", user_record.get("full_name")),
-                "headline": details.get("headline", "Software Engineer"),
-                "bio": details.get("bio", ""),
-                "location": details.get("location", "Bengaluru, India"),
-                "github_username": details.get("github_username", ""),
-                "github_url": details.get("github_url", ""),
-                "linkedin_url": details.get("linkedin_url", ""),
-                "portfolio_url": details.get("portfolio_url", ""),
+                "headline": details.get("headline", ""),
+                "bio": details.get("bio", "") if visibility["bio"] else "",
+                "location": details.get("location", "") if visibility["location"] else "",
+                "github_username": details.get("github_username", "") if visibility["links"] else "",
+                "github_url": details.get("github_url", "") if visibility["links"] else "",
+                "linkedin_url": details.get("linkedin_url", "") if visibility["links"] else "",
+                "portfolio_url": details.get("portfolio_url", "") if visibility["links"] else "",
                 "is_public": details.get("is_public", True),
+                "profile_visibility": visibility,
                 "metrics": {
                     "verified_skills_count": len(verified_skills),
-                    "total_projects": len(details.get("projects") or []),
+                    "total_projects": len(public_projects),
                     "overall_readiness_score": avg_verification,
                     "proctoring_trust_score": avg_proctoring
                 },
                 "verified_skills": verified_skills,
                 "claimed_skills": claimed_skills,
-                "projects": details.get("projects") or [],
-                "experience": details.get("experience") or [],
-                "education": details.get("education") or [],
-                "certifications": details.get("certifications") or [],
-                "achievements": details.get("achievements") or [],
+                "projects": public_projects,
+                "experience": public_experience,
+                "education": public_education,
+                "certifications": public_certifications,
+                "achievements": public_achievements,
                 "interviews": interview_history,
                 "interviews_count": interview_count,
                 "public_graph": {

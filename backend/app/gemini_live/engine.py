@@ -118,6 +118,7 @@ class GeminiLiveEngine:
     def _build_connect_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
+            media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self.config.voice_name)
@@ -214,7 +215,7 @@ class GeminiLiveEngine:
                     sent_count += 1
                     if sent_count % 10 == 1:
                         logger.info(f"📹 Streamed webcam frame #{sent_count} ({len(frame)} bytes) to Gemini Live Vision")
-                    await asyncio.sleep(0.7)  # ~1.4 FPS steady pacing
+                    await asyncio.sleep(1.0)  # Gemini Live accepts up to one video frame per second.
                 else:
                     await asyncio.sleep(0.1)  # Low-latency polling for next frame
             except asyncio.CancelledError:

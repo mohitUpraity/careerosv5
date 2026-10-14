@@ -109,70 +109,8 @@ interface TemplateStyle {
 }
 
 const DEFAULT_STARTER_BLUEPRINT: ResumeBlueprint = {
-  contact: {
-    full_name: 'Software Engineer',
-    email: 'engineer@example.com',
-    phone: '+1 (555) 019-2834',
-    location: 'San Francisco, CA',
-    github_url: 'https://github.com/username',
-    linkedin_url: 'https://linkedin.com/in/username',
-    portfolio_url: '',
-  },
-  summary: 'Passionate and results-driven Software Engineer with extensive experience architecting high-throughput distributed backends, graph data pipelines, and responsive frontend systems.',
-  experience: [
-    {
-      company: 'Tech Corp',
-      role: 'Software Engineer',
-      location: 'San Francisco, CA',
-      start_date: '2023',
-      end_date: 'Present',
-      is_current: true,
-      bullets: [
-        'Architected and deployed microservices handling 50k+ daily transactions with 99.9% uptime.',
-        'Engineered optimized database queries and caching layers, cutting P95 latency by 42%.'
-      ]
-    }
-  ],
-  projects: [
-    {
-      name: 'CareerOS Intelligence Platform',
-      tech_stack: 'React, TypeScript, FastAPI, Neo4j, Python',
-      repo_url: 'https://github.com/user/careeros',
-      live_url: '',
-      bullets: [
-        'Built automated graph ingestion pipeline extracting complex relationships across GitHub repositories and resumes.',
-        'Implemented sub-second semantic matching engine for candidates and technical roles.'
-      ]
-    }
-  ],
-  skills: [
-    {
-      category: 'Languages',
-      skills: ['Python', 'TypeScript', 'JavaScript', 'SQL', 'C++']
-    },
-    {
-      category: 'Frameworks & Libraries',
-      skills: ['FastAPI', 'React', 'Node.js', 'Next.js', 'TailwindCSS']
-    },
-    {
-      category: 'Databases & Tools',
-      skills: ['Neo4j', 'PostgreSQL', 'Redis', 'Docker', 'Git', 'AWS']
-    }
-  ],
-  education: [
-    {
-      university: 'State University',
-      degree: 'Bachelor of Technology',
-      field_of_study: 'Computer Science & Engineering',
-      start_date: '2020',
-      end_date: '2024',
-      gpa: '8.8 / 10'
-    }
-  ],
-  achievements: [
-    '1st Place Winner – National Hackathon 2024',
-    'Demonstrated core cybersecurity prototypes for technical defense research teams'
-  ]
+  contact: { full_name: '', email: '', phone: '', location: '', github_url: '', linkedin_url: '', portfolio_url: '' },
+  summary: '', experience: [], projects: [], skills: [], education: [], achievements: [],
 };
 
 const ACCENT_COLORS = [
@@ -248,12 +186,9 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   });
 
   // AI Tailoring Parameters
-  const [role, setRole] = useState(initialRole || 'Full Stack / Backend Engineer');
-  const [company, setCompany] = useState(initialCompany || 'Target Organization');
-  const [jd, setJd] = useState(
-    initialJd ||
-      `Looking for a strong Software Engineer with experience in building scalable backend services, modern APIs, graph databases, and high-performance frontend architectures.`
-  );
+  const [role, setRole] = useState(initialRole || '');
+  const [company, setCompany] = useState(initialCompany || '');
+  const [jd, setJd] = useState(initialJd || '');
 
   // Skill Gap & Evidence Verification Assistant State
   interface ConfirmedSkillDecision {
@@ -847,13 +782,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
   // --- Experience Actions ---
   const addExperience = () => {
     const newEntry: ExperienceEntry = {
-      company: 'New Company',
-      role: 'Software Engineer',
-      location: 'Location',
-      start_date: '2023',
-      end_date: 'Present',
-      is_current: true,
-      bullets: ['Led development of core features contributing to system performance and team velocity.']
+      company: '', role: '', location: '', start_date: '', end_date: '', is_current: false, bullets: []
     };
     updateActiveBlueprint({
       ...activeBlueprint,
@@ -1171,7 +1100,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                             type="text"
                             value={exp.company}
                             onChange={(e) => updateExperience(expIdx, 'company', e.target.value)}
-                            placeholder="Company Name (e.g. SUREXA IT Solutions, DRDO ADRDE)"
+                            placeholder="Company name"
                             className="input-base w-full text-xs font-semibold"
                           />
                         </div>
@@ -1380,7 +1309,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                             type="text"
                             value={proj.name}
                             onChange={(e) => updateProject(projIdx, 'name', e.target.value)}
-                            placeholder="e.g. NextGen Firewall (DRDO Project)"
+                            placeholder="Project name"
                             className="input-base w-full text-xs font-semibold"
                           />
                         </div>
@@ -1806,11 +1735,11 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               {isEditMode ? (
                 (activeBlueprint.achievements || []).map((ach, achIdx) => (
                   <div key={achIdx} className="flex items-center gap-2">
-                    <input aria-label="e.g. 1st Place Winner – SIH 2024, DRDO ADRDE Demonstration"
+                    <input aria-label="Achievement or award"
                       type="text"
                       value={ach}
                       onChange={(e) => updateAchievement(achIdx, e.target.value)}
-                      placeholder="e.g. 1st Place Winner – SIH 2024, DRDO ADRDE Demonstration"
+                      placeholder="Achievement or award"
                       className="input-base w-full text-xs"
                     />
                     <button
@@ -2069,7 +1998,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
                 type="text"
                 value={newTemplateNameInput}
                 onChange={(e) => setNewTemplateNameInput(e.target.value)}
-                placeholder="e.g. DRDO & AI Research Focus / Startup Full-Stack"
+                placeholder="Describe your professional focus"
                 className="input-base w-full text-xs"
                 autoFocus
                 onKeyDown={(e) => {
@@ -2291,7 +2220,7 @@ export const ResumeStudio: React.FC<ResumeStudioProps> = ({
               </label>
               <input aria-label="Target Company Name"
                 type="text"
-                placeholder="e.g. Google, Stripe, Microsoft, DRDO"
+                placeholder="Target companies (optional)"
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 className="input-base w-full text-xs"

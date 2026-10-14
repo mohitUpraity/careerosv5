@@ -30,61 +30,6 @@ interface JobMatchmakerProps {
   onSuccess: (message: string) => void;
 }
 
-const PRESET_JOBS = [
-  {
-    id: 'apponward',
-    company: 'Apponward Technologies',
-    role: 'Senior Backend / Full Stack Engineer',
-    badge: 'High Match',
-    jd: `Looking for a strong Backend / Full Stack Engineer with experience in Python, FastAPI, React/Next.js, and Modern Databases.
-Responsibilities:
-- Build high-performance REST and GraphQL microservices with FastAPI.
-- Architect real-time data pipelines and scalable graph/relational database schemas.
-- Collaborate with frontend engineers to build responsive, interactive user interfaces.
-Requirements:
-- 1-3 years of experience in Python, FastAPI, PostgreSQL/Neo4j, and React.
-- Strong fundamentals in data structures, algorithms, and system design.
-- Hands-on experience with Docker, CI/CD, and asynchronous programming.`
-  },
-  {
-    id: 'drdo_cyber',
-    company: 'DRDO – ADRDE Agra',
-    role: 'AI & Cybersecurity Research Engineer',
-    badge: 'Govt / Defense',
-    jd: `DRDO ADRDE is seeking an AI & Cybersecurity Research Engineer to design next-generation defense systems and intelligent packet inspection frameworks.
-Responsibilities:
-- Develop low-latency deep packet inspection (DPI) modules using Linux iptables and raw sockets.
-- Implement anomaly detection models using PyTorch/TensorFlow for real-time network telemetry.
-- Optimize high-throughput kernel-level packet capture and filtering algorithms.
-Requirements:
-- Proficiency in Python, Linux networking internals, iptables, and C/C++.
-- Background in Intrusion Detection Systems (IDS), machine learning, and security analytics.`
-  },
-  {
-    id: 'google_swe',
-    company: 'Google',
-    role: 'Software Engineer (Distributed Systems)',
-    badge: 'Big Tech',
-    jd: `Google is seeking a Software Engineer to work on large-scale distributed systems and graph computing infrastructure.
-Responsibilities:
-- Design fault-tolerant, highly available distributed services handling billions of queries.
-- Build graph indexing and knowledge retrieval pipelines (GraphRAG) with low latency.
-Requirements:
-- Strong programming skills in Python, C++, or Go.
-- Deep understanding of distributed storage, caching (Redis), and graph algorithms.`
-  },
-  {
-    id: 'sharda_ml',
-    company: 'Sharda / HCST Research Lab',
-    role: 'Applied ML & Graph Neural Network Researcher',
-    badge: 'Research Lab',
-    jd: `Research laboratory seeking an Applied ML Engineer to work on Knowledge Graph embeddings and Graph Retrieval-Augmented Generation (GraphRAG).
-Responsibilities:
-- Implement GNN models for knowledge extraction and link prediction.
-- Extract structured ontologies from unstructured text streams.`
-  }
-];
-
 export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   onSelectTailorResume,
   onNavigateToReferrals,
@@ -92,11 +37,10 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
   onError,
   onSuccess,
 }) => {
-  const { getAuthHeaders, activeProfile } = useAuth();
-  const [selectedPreset, setSelectedPreset] = useState<string>('apponward');
-  const [company, setCompany] = useState<string>(PRESET_JOBS[0].company);
-  const [role, setRole] = useState<string>(PRESET_JOBS[0].role);
-  const [jobDescription, setJobDescription] = useState<string>(PRESET_JOBS[0].jd);
+  const { getAuthHeaders } = useAuth();
+  const [company, setCompany] = useState<string>('');
+  const [role, setRole] = useState<string>('');
+  const [jobDescription, setJobDescription] = useState<string>('');
   
   const [loading, setLoading] = useState<boolean>(false);
   const [analysisResult, setAnalysisResult] = useState<MatchAnalysisResponse | null>(null);
@@ -109,19 +53,9 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
     setLoading(false);
   }, [company, role, jobDescription]);
 
-  const handleSelectPreset = (presetId: string) => {
-    const preset = PRESET_JOBS.find(p => p.id === presetId);
-    if (preset) {
-      setSelectedPreset(preset.id);
-      setCompany(preset.company);
-      setRole(preset.role);
-      setJobDescription(preset.jd);
-    }
-  };
-
   const handleRunMatch = async () => {
     if (!jobDescription.trim()) {
-      onError('Please provide a job description or select a preset');
+      onError('Please provide a job description');
       return;
     }
 
@@ -156,31 +90,11 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
 
   return (
     <div className="dashboard-view ws-page dashboard-view--matcher space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Top Header & Presets */}
       <WorkspacePageHeader
         page="matcher"
         eyebrow="SEE YOUR FIT"
         title="Understand the role. See where you stand."
         description="Compare a job description with your experience, then turn the insights into a stronger application."
-        actions={
-          <div className="ws-heading-controls">
-            {PRESET_JOBS.map((preset) => (
-              <button
-                key={preset.id}
-                onClick={() => handleSelectPreset(preset.id)}
-                className="dashboard-button"
-                style={{
-                  backgroundColor: selectedPreset === preset.id ? 'var(--brand-50)' : 'transparent',
-                  color: selectedPreset === preset.id ? 'var(--brand-600)' : 'var(--text-secondary)',
-                  border: `1px solid ${selectedPreset === preset.id ? 'var(--brand-100)' : 'var(--border-primary)'}`,
-                  fontWeight: selectedPreset === preset.id ? 600 : 500,
-                }}
-              >
-                {preset.company.split(' ')[0]}
-              </button>
-            ))}
-          </div>
-        }
       />
       <WorkspaceSteps steps={["Add the role", "Understand your fit", "Prepare your application"]} active={analysisResult ? 2 : loading ? 1 : 0} />
 
@@ -188,7 +102,7 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
       <div className="ws-match-grid">
         {/* Left: Job Input Card */}
         <div className="ws-match-input ws-surface space-y-5">
-          <WorkspaceSectionHeading number="01" title="Tell us about the role" description="Use a sample role above, or paste the job description you want to explore." />
+          <WorkspaceSectionHeading number="01" title="Tell us about the role" description="Enter a role and paste the job description you want to explore." />
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>Target Company</label>
@@ -197,7 +111,7 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 className="input-base w-full text-sm"
-                placeholder="e.g. Google, Apponward"
+                placeholder="Company name"
               />
             </div>
 
@@ -388,13 +302,12 @@ export const JobMatchmaker: React.FC<JobMatchmakerProps> = ({
                       Peer Benchmark Comparison
                     </h4>
                     <span className="text-xs font-bold" style={{ color: 'var(--brand-600)' }}>
-                      Peer: {analysisResult.peer_comparison.coworker_score ?? 74}%
+                      Peer: {analysisResult.peer_comparison.coworker_score ?? '—'}{typeof analysisResult.peer_comparison.coworker_score === 'number' ? '%' : ''}
                     </span>
                   </div>
 
                   <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                    {analysisResult.peer_comparison.advantage_summary ||
-                      'Your project evidence gives you a competitive edge for this role.'}
+                    {analysisResult.peer_comparison.advantage_summary || 'Peer comparison is unavailable.'}
                   </p>
                 </div>
               )}

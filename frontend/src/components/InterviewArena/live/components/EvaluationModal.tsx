@@ -29,7 +29,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
   onClose,
 }) => {
   useEffect(() => {
-    if (report && (report.hiringDecision === "Strong Hire" || report.hiringDecision === "Hire" || report.overallScore >= 75)) {
+    if (report && report.assessmentStatus !== "incomplete" && (report.hiringDecision === "Strong Hire" || report.hiringDecision === "Hire" || (report.overallScore ?? 0) >= 75)) {
       confetti({
         particleCount: 80,
         spread: 70,
@@ -65,7 +65,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 AI Interview Evaluation & Scorecard
               </h2>
               <p className="text-xs sm:text-sm text-gray-300">
-                Comprehensive performance feedback from Google Meet AI Interviewer
+                {report?.assessmentStatus === "incomplete" ? "Session completeness review · no skill score issued" : "Evidence-based performance feedback from your AI interviewer"}
               </p>
             </div>
           </div>
@@ -137,14 +137,14 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                   </span>
                   <div className="flex items-baseline space-x-1">
                     <span className="text-5xl font-black text-white tracking-tight">
-                      {report.overallScore}
+                      {report.overallScore ?? "N/A"}
                     </span>
-                    <span className="text-gray-400 text-lg font-medium">/100</span>
+                    {report.overallScore !== null && <span className="text-gray-400 text-lg font-medium">/100</span>}
                   </div>
                   <div className="w-full bg-[#1e1e24] h-2 rounded-full mt-3 overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full"
-                      style={{ width: `${report.overallScore}%` }}
+                      style={{ width: `${report.overallScore ?? 0}%` }}
                     />
                   </div>
                 </div>
@@ -162,13 +162,15 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                         ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
                         : report.hiringDecision === "Lean Hire"
                         ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                        : report.hiringDecision === "Insufficient evidence"
+                        ? "bg-amber-500/20 text-amber-200 border-amber-500/40"
                         : "bg-red-500/20 text-red-300 border-red-500/40"
                     }`}
                   >
                     {report.hiringDecision}
                   </div>
                   <span className="text-xs text-gray-400 mt-2 font-medium">
-                    Evaluated against Google Staff Level benchmarks
+                    Evaluated against the selected interview rubric
                   </span>
                 </div>
 
@@ -183,6 +185,23 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 </div>
               </div>
 
+              {(report.evidenceSummary?.length || report.communicationAnalysis || report.proctoringSummary) && (
+                <div className="space-y-4 rounded-2xl border border-purple-500/25 bg-[#24232b] p-5">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-purple-300">Evidence and session analysis</h3>
+                  {report.evidenceSummary?.length ? <div className="space-y-2">
+                    {report.evidenceSummary.map((item, index) => <div key={`${item.area}-${index}`} className="rounded-xl border border-[#3c4043] bg-[#2d2f34] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><strong className="text-white">{item.area}</strong><span className="text-gray-400">{item.confidence} confidence</span></div>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-300">{item.evidence}</p>
+                    </div>)}
+                  </div> : null}
+                  {report.communicationAnalysis && <div className="grid gap-2 sm:grid-cols-3">
+                    {([['Clarity', report.communicationAnalysis.clarity], ['Structure', report.communicationAnalysis.structure], ['Pace', report.communicationAnalysis.pace]] as const).map(([label, value]) => value ? <div key={label} className="rounded-xl bg-[#2d2f34] p-3"><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><p className="mt-1 text-xs text-gray-200">{value}</p></div> : null)}
+                  </div>}
+                  {report.proctoringSummary && <p className="text-xs leading-relaxed text-gray-400"><strong className="text-gray-200">Session events: </strong>{report.proctoringSummary}</p>}
+                  <p className="text-[10px] text-gray-500">Feedback is based on recorded answers and submitted work. It is an assessment aid, not a definitive judgment of intent or ability.</p>
+                </div>
+              )}
+
               {/* Category Breakdown Bars */}
               <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] space-y-4">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -190,16 +209,16 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                   Competency Score Breakdown
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {(Array.isArray(report.metrics) ? report.metrics : []).map((metric) => (
-                    <div key={metric.category || Math.random()} className="space-y-1.5">
+                  {(Array.isArray(report.metrics) ? report.metrics : []).map((metric, index) => (
+                    <div key={metric.category || index} className="space-y-1.5">
                       <div className="flex justify-between text-xs">
                         <span className="font-semibold text-gray-200">{metric.category}</span>
-                        <span className="font-mono text-blue-400 font-bold">{metric.score ?? 80}/100</span>
+                        <span className="font-mono text-blue-400 font-bold">{typeof metric.score === 'number' ? `${metric.score}/100` : 'Not scored'}</span>
                       </div>
                       <div className="w-full bg-[#1e1e24] h-2 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                          style={{ width: `${metric.score ?? 80}%` }}
+                          style={{ width: `${typeof metric.score === 'number' ? metric.score : 0}%` }}
                         />
                       </div>
                       <p className="text-[11px] text-gray-400 leading-tight">

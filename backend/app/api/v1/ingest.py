@@ -11,6 +11,7 @@ from app.services.gemini_extractor import gemini_extractor
 from app.services.resume_service import resume_service
 from app.services.linkedin_service import linkedin_service
 from app.services.neo4j_service import neo4j_service
+from app.core.database import neo4j_client
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,11 @@ async def ingest_github_repositories(
     user_id = current_user["id"]
     user_email = current_user.get("email", "")
 
+    if not neo4j_client.driver or not neo4j_client.is_connected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The graph database is unavailable. GitHub repositories were not synced; please try again later."
+        )
 
     logger.info(f"Initiating GitHub ingestion for user {user_id} (GitHub: {username}, max_repos: {payload.max_repos}, only_unsynced: {payload.only_unsynced})")
 
@@ -268,7 +274,7 @@ async def ingest_linkedin_connections(
 
 class DirectConnectionsIngestRequest(BaseModel):
     connections: List[Dict[str, Any]]
-    shared_college: Optional[str] = "Anand Engineering College"
+    shared_college: Optional[str] = None
 
 @router.post("/linkedin/connections")
 async def ingest_linkedin_connections_direct(

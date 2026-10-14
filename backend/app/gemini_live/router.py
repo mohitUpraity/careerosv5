@@ -17,11 +17,14 @@ FRAME_VIDEO = 0x02
 @router.websocket("/ws")
 async def gemini_live_websocket(
     websocket: WebSocket,
-    user_id: str = "candidate_1",
-    company: str = "Google",
-    role: str = "Senior Backend Engineer",
-    candidate_name: str = "Candidate",
-    voice: str = "Zephyr"
+    user_id: str = "",
+    company: str = "",
+    role: str = "",
+    candidate_name: str = "",
+    voice: str = "Kore",
+    job_description: str = "",
+    round_type: str = "mixed",
+    difficulty: str = "medium",
 ):
     """
     Direct WebSocket bridge connecting Browser WebRTC/Audio to Google Gemini Live API.
@@ -54,6 +57,9 @@ async def gemini_live_websocket(
         company=company,
         role=role,
         candidate_name=candidate_name,
+        job_description=job_description,
+        round_type=round_type,
+        difficulty=difficulty,
         voice_name=voice,
         send_json_callback=send_json_to_client,
         send_audio_callback=send_audio_to_client,
@@ -122,6 +128,17 @@ async def gemini_live_websocket(
                         logger.debug(f"Invalid video frame data: {ve}")
                 elif msg_type == "text":
                     await session.send_text_message(msg.get("data") or msg.get("text", ""))
+                elif msg_type == "recognized_text":
+                    await session.send_candidate_text_response(str(msg.get("data") or ""))
+                elif msg_type == "camera_state":
+                    # Frontend notifies us when camera is toggled on/off
+                    is_active = bool(msg.get("active", True))
+                    session.proctor_subagent.set_camera_active(is_active)
+                elif msg_type == "ui_event":
+                    await session.handle_ui_event(
+                        str(msg.get("name", "")),
+                        msg.get("details") if isinstance(msg.get("details"), dict) else {},
+                    )
                 elif msg_type == "code_sync":
                     code = msg.get("code", "")
                     lang = msg.get("language", "python")
@@ -139,7 +156,7 @@ async def gemini_live_websocket(
                     logger.info("Manual test trigger for proctor warning")
                     await session.proctor_subagent.trigger_warning(
                         violation_type=msg.get("violation_type", "looking_away"),
-                        reason=msg.get("reason", "Candidate averted eye contact downward towards secondary notes or phone."),
+                        reason=msg.get("reason", "A possible session event was flagged for review; the signal may be mistaken."),
                         is_critical=msg.get("is_critical", False)
                     )
                 elif msg_type == "test_reaction":

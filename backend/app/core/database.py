@@ -60,7 +60,53 @@ class Neo4jClient:
                     await session.run(query)
                 except Exception as e:
                     logger.debug(f"Schema query info: {e}")
+        try:
+            await self.cleanup_legacy_demo_data()
+        except Exception as e:
+            logger.warning("Legacy demo data cleanup failed: %s", e)
         logger.info("Neo4j schema constraints and indexes verified.")
+
+    async def cleanup_legacy_demo_data(self):
+        """Remove records created by the former hardcoded education/alumni demo seed."""
+        if not self.driver or not self.is_connected:
+            return
+
+        async with self.driver.session(database=settings.NEO4J_DATABASE) as session:
+            # The former seed assigned every keyword-flagged alumnus to this
+            # institution without source evidence; remove those generated links.
+            await session.run(
+                """
+                MATCH (:Person)-[r:ATTENDED]->(:University {name: $name})
+                DELETE r
+                """,
+                {"name": "Anand Engineering College"},
+            )
+            await session.run(
+                "MATCH (g:EducationGroup {name: $name}) DETACH DELETE g",
+                {"name": "Sharda Group of Institutions (SGI)"},
+            )
+            await session.run(
+                "MATCH (n) WHERE n.id IN $ids DETACH DELETE n",
+                {"ids": ["sharda_alum_goog", "hcst_alum_goog", "dev-user-0000-0000-0000-000000000001"]},
+            )
+            await session.run(
+                """
+                UNWIND $seeded_universities AS seeded
+                MATCH (u:University {name: seeded.name})
+                WHERE u.aliases = seeded.aliases
+                REMOVE u.aliases
+                WITH u WHERE NOT (u)--()
+                DETACH DELETE u
+                """,
+                {
+                    "seeded_universities": [
+                        {"name": "Anand Engineering College", "aliases": ["AEC", "AEC Agra", "Anand Engg College"]},
+                        {"name": "Sharda University Agra", "aliases": ["SUA", "Sharda Agra", "Sharda University"]},
+                        {"name": "Hindustan College of Science and Technology", "aliases": ["HCST", "HCST Mathura", "Hindustan College"]},
+                        {"name": "Sharda University", "aliases": ["Sharda Greater Noida", "SU Greater Noida"]},
+                    ]
+                },
+            )
 
     async def execute_query(self, query: str, parameters: dict = None):
         if not self.driver or not self.is_connected:

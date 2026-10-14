@@ -32,7 +32,7 @@ class LiveInterviewSession:
         candidate_name: str = "Candidate",
         job_description: str = "",
         resume_context: str = "",
-        voice_name: str = "Zephyr",
+        voice_name: str = "Kore",
         round_type: str = "mixed",
         difficulty: str = "medium",
         send_json_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
@@ -55,10 +55,13 @@ class LiveInterviewSession:
         self.start_time = time.time()
         self.transcript_log: List[Dict[str, str]] = []
         self.scratchpad_notes: List[Dict[str, Any]] = []
+        self.orchestrator_actions: List[Dict[str, Any]] = []
+        self.ui_events: List[Dict[str, Any]] = []
         self.current_ai_turn_text = ""
         self._pending_candidate_text = ""
         self._scratchpad_debounce_task: Optional[asyncio.Task] = None
         self.is_terminated = False
+        self.interview_concluded = False
         self.termination_reason = ""
 
         # Build system instruction with behavioral, visual, and persona cues
@@ -117,53 +120,74 @@ class LiveInterviewSession:
 
     def _build_system_instruction(self) -> str:
         who = f" The candidate's name is {self.candidate_name}." if self.candidate_name else ""
-        return f"""You are Sarah Jenkins, a Staff Software Engineer and Senior Hiring Lead at {self.company}, conducting a live, real-time conversational technical interview for the {self.role} role.{who}
+        return f"""You are Sarah Jenkins — 12 years in tech hiring, currently senior hiring lead at {self.company}. You're conducting a live {self.round_type} interview for {self.role}.{who}
 
-CORE HUMAN INTERVIEWER PERSONA & RULES:
-1. DEEP ACTIVE COMPREHENSION & SPECIFIC ACKNOWLEDGMENT:
-   - Carefully listen to what the candidate actually says.
-   - Always directly acknowledge their specific points, architectural decisions, and technologies before moving forward (e.g. "Got it, so you decoupled the ingestion using Kafka...", "Understood, PostgreSQL handled the consistency requirement.").
-   - Never respond with generic filler like "That's good, now tell me..." without showing you genuinely understood their explanation.
+WHO YOU ARE (not who you pretend to be):
+- You are a REAL interviewer. You have sat across thousands of candidates. You've hired people who became stars and you've passed on people who looked great on paper. Your reputation depends on making the right call TODAY.
+- You are NOT an AI assistant. You do NOT help, teach, tutor, coach, hint, or cheer. You do NOT say "great question" or "that's a really good point" unless you genuinely mean it. You do NOT pad your responses with reassurance.
+- You have a personality. You're direct but not cold. You're curious but not easily impressed. You lean forward when something interests you, and you notice when someone is dodging a question.
+- You think while the candidate talks. You're forming opinions. You're connecting what they say now to what they said 5 minutes ago. You catch contradictions.
 
-2. PATIENCE & CONVERSATIONAL BREATHING ROOM:
-   - Technical candidates need time to think, pause, and formulate architecture details.
-   - Never jump in prematurely when the candidate takes a breath or pauses between clauses.
-   - If the candidate says "Let me think for a second" or asks for clarification, respond patiently and warmly: "Take all the time you need, no rush."
-   - If the candidate does a mic check ("Am I audible?", "Can you hear me?"), reply like a genuine human colleague: "Yes, loud and clear! Whenever you're ready."
+HOW YOU SPEAK:
+- Like a real person in a real room. Short, natural sentences. "Walk me through that." "What broke?" "Why that approach specifically?" "And what happened when it hit production?"
+- You don't monologue. You don't repeat their answer back. You don't say "Thank you for sharing that" — you just ask the next thing.
+- You use silence. If they give a weak answer, you might just pause for a beat before moving on. That silence says more than words.
+- One question at a time. Never stack questions. Let them finish. If they ramble, interrupt naturally: "Let me stop you there — what was YOUR specific contribution?"
+- When something genuinely impresses you, your reaction is understated: "That's solid." "Interesting approach." Not "Wow, that's absolutely fantastic!"
+- When something doesn't add up, you say so: "That doesn't quite track with what you said earlier about..." or "Help me understand — you said you led the migration, but you also mentioned you joined after it was scoped?"
 
-3. CRISP, SPOKEN 1-TO-2 SENTENCE TURNS:
-   - This is a spoken voice call, not an essay. Speak in natural, spoken conversational English.
-   - Limit each response to 1 to 2 crisp spoken sentences:
-     * Sentence 1: Acknowledge and validate what they just said or what they showed on video (e.g., "I see what you're holding there...", "Understood on using Redis as cache...").
-     * Sentence 2: Ask ONE focused, thoughtful technical follow-up question probing scalability, trade-offs, bottlenecks, or failure modes.
-   - Never ask multiple questions in a single turn.
+HOW YOU INTERVIEW (this is your craft):
+- You study the job requirements below like your hiring decision depends on it — because it does. Every question you ask maps to a SPECIFIC skill, competency, or requirement from the JD.
+- You don't ask generic questions. Not "Tell me about a challenging project." Instead: "The role requires {self.role} to handle [specific JD requirement]. Give me a concrete example where you did exactly that — what was the system, what went wrong, and what did you ship?"
+- You go DEEP, not wide. When a candidate mentions a technology, architecture decision, or outcome, you drill into it: "What was the latency before and after?" "How many concurrent users?" "What was the alternative you rejected and why?" "If you had to do it again with half the timeline, what would you cut?"
+- For TECHNICAL/CODING interviews: Push a real coding challenge early using push_coding_challenge. Don't just talk about code — make them write it. Then ask about edge cases, time complexity, and what breaks at scale. Review their actual code, not their description of code.
+- For BEHAVIORAL interviews: Demand specifics. "You say you influenced the team — who specifically disagreed, what was their argument, and how did you change their mind?" Don't accept story frameworks without substance.
+- For SYSTEM DESIGN interviews: Start with requirements clarification to see if they ask the right questions. Then push on trade-offs, failure modes, and scale. "Your design handles 10K QPS — what happens at 100K? What's the first thing that breaks?"
+- You calibrate difficulty in real-time. If they nail an easy question, jump to hard. If they struggle, don't patronize — note it and move to assess a different competency.
+- NEVER give answers or hints. If they're stuck, you might reframe: "Let me put it differently..." but you never solve it for them.
 
-4. REAL FULL DUPLEX BARGE-IN:
-   - If the candidate starts speaking while you are talking, immediately yield the floor, listen attentively to what they say, and respond to their point.
+WHAT YOU NOTICE (you see everything):
+- Vague answers: "We improved performance" → "By how much? Measured how?"
+- Name-dropping without depth: "We used Kubernetes" → "What was your cluster config? How did you handle node failures?"
+- Passive voice hiding lack of ownership: "It was decided that..." → "Who decided? Were you in the room?"
+- Contradictions between resume claims and actual answers
+- Confidence level — are they stating facts or guessing?
+- When they light up talking about something vs. when they're clearly reciting rehearsed answers
 
-5. LANGUAGE & ACCENT:
-   - Speak in warm, fluent professional English. If the candidate speaks in Hindi or Hinglish, transition naturally and warmly into fluent Hindi/Hinglish.
-   - Never switch to Spanish or other unrelated languages.
+HOW YOU USE YOUR TOOLS (like a real person, not a robot):
+- trigger_interviewer_reaction: Use naturally and sparingly, like a real person would nod (👍), look intrigued (💡), or look skeptical (🤔). Don't react to every answer. React when you genuinely feel something — impressed by depth (🎯), amused by a good analogy (👏), or concerned by a gap (🤔).
+- update_interview_scratchpad: This is YOUR private notepad. Write like a real interviewer jotting notes: "Strong on distributed systems fundamentals but hand-wavy on consistency models." "Claims 4 years React but couldn't explain useEffect cleanup." "Gave a specific, measurable outcome — reduced p99 from 2s to 200ms. Credible." Use score_delta honestly: positive for real evidence of competence, negative for gaps or red flags.
+- push_coding_challenge: Deploy when the interview format calls for it. Choose problems relevant to the ACTUAL role requirements, not generic leetcode. For a backend role, test API design or data modeling. For frontend, test component architecture or state management.
+- control_interview_ui: Open the coding playground or whiteboard when the conversation naturally calls for it. Don't announce "I'm going to open the coding environment now" — just open it and say "Let's look at some code."
 
-6. REAL-TIME WEBCAM VISION:
-   - The session receives candidate webcam frames when the camera is enabled. Use the latest frame as evidence; do not assume a frame arrived just because the call is live.
-   - If the candidate asks "What is in my hand?", "Can you see what I'm holding?", or shows an object, describe only details that are actually visible.
-   - If asked "Can you see me?" or "Am I visible?", confirm visibility only when a recent frame shows the candidate. If no frame is available, say the video feed is not coming through yet and ask them to enable/check the camera.
-   - If asked about an object, use the latest visual frame and describe only what is clearly visible. The visual analysis may arrive as a system observation; acknowledge that object in your next spoken turn.
-   - Holding a phone up to show it is not, by itself, proof of cheating. If the candidate is clearly consulting/using a secondary device during the interview, call issue_proctor_warning with the observed evidence. Never invent a visual violation.
+WEBCAM VISION & ULTRA-STRICT PROCTORING:
+- This is a PROCTORED ASSESSMENT. Zero tolerance for integrity violations.
+- The session receives candidate webcam frames. Actively monitor for violations.
+- IMMEDIATELY call issue_proctor_warning for: phone/device visible anywhere in frame (even on desk), candidate repeatedly looking away, another person in frame, notes/papers visible, earpiece/earbud detected, signs of secondary screen reading.
+- A phone merely being VISIBLE is a violation. Do NOT wait for active use.
+- When a PROCTOR ALERT arrives, deliver the warning with real authority — not robotic scripted language. Like a real proctor would: "Hey — I can see a phone on your desk. Put it completely out of reach. This is your first warning."
+- The automated proctor system also runs independently. When it issues warnings, enforce them with your own voice and authority.
 
-7. INTERVIEW ACTION TOOLS:
-   - Use trigger_interviewer_reaction for a brief on-screen reaction when it adds a natural human cue.
-   - Use update_interview_scratchpad for specific evidence-based assessment notes, not generic praise.
-   - Use push_coding_challenge when the interview should move into a coding exercise.
-   - Follow the proctor warning sequence returned by the tools. Terminate only for a third warning or clear, serious malpractice; after any tool action, continue the spoken interview naturally unless the session was terminated.
+INTERVIEW PACING:
+- Keep going until the candidate says they're done or you've thoroughly assessed all key competencies from the JD.
+- A pause is NOT the end. Don't summarize or wrap up because of silence.
+- When YOU decide you've seen enough across all dimensions, deliver a brief, natural closing and call conclude_interview. Don't leave the session hanging.
+- If the candidate says goodbye, wrap quickly and conclude — don't give a 3-paragraph farewell speech.
+
+LANGUAGE:
+- Professional English by default. If the candidate speaks Hindi or Hinglish, respond naturally in the same language. Mirror their communication style.
 
 TARGET ROLE CONTEXT:
 Company: {self.company}
 Role: {self.role}
-ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
+INTERVIEW FORMAT: {self.round_type}
+DIFFICULTY: {self.difficulty}
+JOB REQUIREMENTS (study these — every question should connect to a specific requirement):
+{self.job_description[:6000] or 'No job description supplied. Ask role-relevant questions based on the role name and your expertise.'}
+RESUME CONTEXT (use to verify claims, find inconsistencies, ask targeted questions — NOT to praise):
+{self.resume_context[:3000] or 'No resume context supplied. Assess based on what the candidate demonstrates in real-time.'}"""
 
-    def _add_scratchpad_note(self, category: str, observation: str, sentiment: str, score_delta: int):
+    def _add_scratchpad_note(self, category: str, observation: str, sentiment: str, score_delta: int, confidence: Optional[float] = None):
         """Append an observation to session-level scratchpad ledger."""
         self.scratchpad_notes.append({
             "id": f"note_{len(self.scratchpad_notes)+1}_{int(time.time())}",
@@ -173,6 +197,8 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
             "score_delta": score_delta,
             "timestamp": time.strftime("%I:%M %p"),
         })
+        if confidence is not None:
+            self.scratchpad_notes[-1]["confidence"] = confidence
 
     async def _handle_malpractice_termination(self, reason: str):
         """Callback when ProctorGuardianSubAgent triggers disqualification termination."""
@@ -193,9 +219,11 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
 
         # Trigger warm opening question
         greeting_prompt = (
-            f"[The candidate has joined the live call. Greet them warmly and naturally by name ({self.candidate_name}), "
-            f"mention that you can see and hear them clearly on video, welcome them to the {self.role} interview at {self.company}, "
-            f"and ask how they're doing today before starting.]"
+            f"[The candidate has joined the live call. Open as a composed, professional hiring interviewer. "
+            f"Address them by name ({self.candidate_name}), identify the {self.role} interview at {self.company}, "
+            "briefly confirm they can hear you, then ask one specific, role-relevant opening question. "
+            "Avoid generic small talk, excessive praise, and claiming you can see or hear them clearly until live inputs confirm that. "
+            "Ask the question once and wait for the candidate's answer.]"
         )
         await self.engine.send_text_prompt(greeting_prompt)
 
@@ -215,6 +243,15 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
             self.transcript_log.append({"speaker": "Candidate (Text)", "text": text})
             await self.engine.send_text_prompt(text)
 
+    async def send_candidate_text_response(self, text: str):
+        """Use browser speech recognition only when live PCM capture is unavailable."""
+        if self.is_terminated or not text.strip():
+            return
+        await self._handle_engine_input_transcript(text.strip())
+        await self.engine.send_text_prompt(
+            f"[The candidate's spoken answer, recovered from the browser microphone transcript: {text.strip()}]"
+        )
+
     async def _handle_live_tool_call(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Execute interview actions requested by the live interviewer model."""
         if self.is_terminated:
@@ -230,6 +267,11 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
             reason = str(args.get("disqualification_reason", "Repeated interview integrity violations"))
             await self._terminate_for_malpractice(reason)
             return {"status": "terminated", "reason": reason}
+        if name == "conclude_interview":
+            self.interview_concluded = True
+            reason = str(args.get("closing_reason", "Interview completed"))[:240]
+            await self._emit_json({"type": "conclude_interview", "reason": reason})
+            return {"status": "concluded", "reason": reason}
         if name == "trigger_interviewer_reaction":
             await self._emit_json({"type": "interviewer_reaction", "data": {
                 "emoji": str(args.get("emoji", "👍")),
@@ -254,7 +296,77 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
             await self._emit_json({"type": "push_coding_challenge", "data": challenge})
             self.coding_subagent.active_challenge = challenge
             return {"status": "challenge_opened", "title": challenge["title"]}
+        if name == "control_interview_ui":
+            action = str(args.get("action", ""))
+            allowed = {
+                "open_coding_playground", "open_whiteboard", "set_layout",
+                "open_panel", "close_panel", "set_captions", "trigger_reaction",
+            }
+            if action not in allowed:
+                return {"status": "rejected", "reason": "unsupported_ui_action"}
+            payload: Dict[str, Any] = {"action": action}
+            if action == "set_layout":
+                layout = str(args.get("layout", "split"))
+                if layout not in {"split", "interviewer_focus", "candidate_focus", "code_split", "whiteboard_split"}:
+                    return {"status": "rejected", "reason": "unsupported_layout"}
+                payload["layout"] = layout
+            elif action == "open_panel":
+                panel = str(args.get("panel", "analysis"))
+                if panel not in {"people", "chat", "rubric", "notes", "proctor", "analysis"}:
+                    return {"status": "rejected", "reason": "unsupported_panel"}
+                payload["panel"] = panel
+            elif action == "set_captions":
+                payload["enabled"] = bool(args.get("enabled", True))
+            elif action == "trigger_reaction":
+                emoji = str(args.get("emoji", "👍"))
+                if emoji not in {"👍", "👎", "👏", "🤔", "💡", "💻", "🎨", "✋", "✅"}:
+                    return {"status": "rejected", "reason": "unsupported_reaction"}
+                payload["emoji"] = emoji
+            await self._emit_json({"type": "ui_action", "data": payload})
+            return {"status": "applied", **payload}
         return {"status": "unknown_tool", "name": name}
+
+    async def handle_ui_event(self, name: str, details: Optional[Dict[str, Any]] = None):
+        """Forward meaningful candidate UI actions to the live interviewer."""
+        safe_names = {
+            "raised_hand", "opened_coding_playground", "opened_whiteboard",
+            "screen_share_started", "screen_share_stopped", "meeting_layout_changed",
+            "side_panel_opened", "captions_changed", "chat_message_sent", "reaction_sent",
+            "microphone_muted", "microphone_unmuted", "camera_disabled", "camera_enabled",
+            "microphone_toggle_blocked", "camera_toggle_blocked",
+        }
+        if name not in safe_names:
+            return
+        details = details or {}
+        self.ui_events.append({
+            "event": name,
+            "detail": str(details.get("detail", ""))[:300],
+            "timestamp": time.strftime("%I:%M:%S %p"),
+        })
+        summary = {
+            "raised_hand": "the candidate raised their hand to ask something",
+            "opened_coding_playground": "the candidate opened the coding playground",
+            "opened_whiteboard": "the candidate opened the whiteboard",
+            "screen_share_started": "the candidate started screen sharing",
+            "screen_share_stopped": "the candidate stopped screen sharing",
+            "meeting_layout_changed": "the candidate changed the meeting layout",
+            "side_panel_opened": "the candidate opened a session side panel",
+            "captions_changed": "the candidate changed caption visibility",
+            "chat_message_sent": "the candidate sent a chat message",
+            "microphone_muted": "the candidate muted the microphone",
+            "microphone_unmuted": "the candidate unmuted the microphone",
+            "camera_disabled": "the candidate turned off the camera",
+            "camera_enabled": "the candidate turned on the camera",
+            "microphone_toggle_blocked": "a microphone toggle was blocked by assessment controls",
+            "camera_toggle_blocked": "a camera toggle was blocked by assessment controls",
+        }[name]
+        # Routine layout/caption navigation is observed but does not cause an
+        # unsolicited spoken turn. Intentful actions invite a brief response.
+        if name in {"raised_hand", "opened_coding_playground", "opened_whiteboard", "screen_share_started", "chat_message_sent"}:
+            detail_text = str(details.get("detail", ""))[:300]
+            await self.engine.send_text_prompt(
+                f"[LIVE UI EVENT: {summary}. {detail_text} Respond briefly only if a candidate-facing response is useful, then continue the interview. Do not infer intent from this interface action.]"
+            )
 
     async def _terminate_for_malpractice(self, reason: str):
         if self.is_terminated:
@@ -270,11 +382,54 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
     async def _emit_json(self, data: Dict[str, Any]):
         if self.send_json:
             try:
+                if data.get("type") == "scratchpad_updated":
+                    note_data = data.get("data") or data.get("note") or {}
+                    await self._orchestrate_scratchpad_update(note_data)
                 res = self.send_json(data)
                 if asyncio.iscoroutine(res):
                     await res
             except Exception as e:
                 logger.debug(f"Error in send_json callback: {e}")
+
+    async def _orchestrate_scratchpad_update(self, note: Dict[str, Any]):
+        """Read each subagent/tool note and route a candidate-facing real-time action."""
+        category = str(note.get("category", "general"))
+        sentiment = str(note.get("sentiment", note.get("observation_type", "neutral"))).lower()
+        confidence = note.get("confidence", note.get("confidence_score"))
+        observation = str(note.get("observation", note.get("note", ""))).strip()
+        if not observation:
+            return
+
+        if category == "visual_context" or category.startswith("visual_"):
+            if note.get("camera_adjustment_required"):
+                action = "camera_adjustment_required"
+                message = "The camera view needs a brief adjustment so your face is visible. This does not affect your skill score."
+            else:
+                action = "visual_observation"
+                message = "A sampled camera frame was reviewed. See the descriptive note; it does not affect your skill score."
+        elif category == "integrity_and_proctoring":
+            action = "explanation_required"
+            message = "A possible session event was logged. Please briefly explain or add context; this is not a conclusion."
+        elif sentiment in {"concern", "negative", "needs_improvement"}:
+            action = "follow_up_needed"
+            message = "The interviewer may ask you to clarify this point or give a concrete example."
+        else:
+            action = "evidence_recorded"
+            message = "This answer was added to the evidence review for your selected skill or role."
+
+        action_item = {
+            "id": f"orch_{len(self.orchestrator_actions) + 1}_{int(time.time() * 1000)}",
+            "action": action,
+            "category": category,
+            "message": message,
+            "timestamp": time.strftime("%I:%M:%S %p"),
+            "confidence": confidence,
+            "source": str(note.get("source", "interview subagent")),
+        }
+        self.orchestrator_actions.append(action_item)
+        result = self.send_json({"type": "orchestrator_action", "data": action_item})
+        if asyncio.iscoroutine(result):
+            await result
 
     async def _emit_audio(self, pcm_bytes: bytes):
         if self.send_audio and not self.is_terminated:
@@ -344,10 +499,20 @@ ROUND TYPE: {self.round_type.upper()} | DIFFICULTY: {self.difficulty.upper()}"""
         await self._emit_json({"type": "interrupted"})
 
     async def _handle_engine_turn_complete(self):
+        completed_ai_turn = self.current_ai_turn_text.strip()
         if self.current_ai_turn_text:
             self.transcript_log.append({"speaker": "Interviewer (AI)", "text": self.current_ai_turn_text})
             self.current_ai_turn_text = ""
         await self._emit_json({"type": "turn_complete"})
+        closing_markers = (
+            "that concludes our interview", "this concludes the interview",
+            "the interview is concluded", "we're done with the interview",
+            "we are done with the interview", "that is the end of the interview",
+        )
+        if completed_ai_turn and any(marker in completed_ai_turn.lower() for marker in closing_markers):
+            self.interview_concluded = True
+            await self._emit_json({"type": "conclude_interview", "reason": "The interviewer delivered the closing statement."})
+            return
 
     async def _handle_engine_error(self, err: str):
         await self._emit_json({"type": "error", "message": err})
@@ -393,30 +558,38 @@ Duration: {duration_min} minutes
 Candidate Name: {self.candidate_name}
 
 PROCTOR INTEGRITY SUMMARY:
-- Warnings Issued: {warning_count}/3
-- Recorded Violations: {json.dumps(violations, indent=2)}
+            - Warnings Issued: {warning_count}/3
+            - Recorded Violations: {json.dumps(violations, indent=2)}
 
 SCRATCHPAD EVALUATION NOTES:
 {json.dumps(self.scratchpad_notes, indent=2)}
+
+REAL-TIME ORCHESTRATOR ACTIONS:
+{json.dumps(self.orchestrator_actions, indent=2)}
+
+USER INTERFACE EVENTS (context only; never score as skill evidence):
+{json.dumps(self.ui_events[-40:], indent=2)}
+
+Visual-context notes are sampled frame descriptions only. Treat them as limited context; never use them to score skill, confidence, honesty, professionalism, emotion, gesture quality, or posture.
 
 TRANSCRIPT LOG:
 {json.dumps(self.transcript_log[-30:], indent=2)}
 
 Generate a strictly valid JSON response with this schema:
 {{
-  "overallScore": 85,
-  "hiringDecision": "Strong Hire / Hire / Lean Hire / Needs Preparation",
-  "executiveSummary": "2-3 sentences comprehensive evaluation incorporating technical depth and integrity.",
-  "technicalScore": 88,
-  "communicationScore": 85,
-  "behavioralScore": 82,
-  "topStrengths": ["Specific strength 1", "Specific strength 2"],
-  "areasForImprovement": ["Specific improvement area 1", "Specific improvement area 2"],
-  "actionableRoadmap": ["24h study recommendation 1", "recommendation 2"],
+  "overallScore": null,
+  "hiringDecision": "",
+  "executiveSummary": "",
+  "technicalScore": null,
+  "communicationScore": null,
+  "behavioralScore": null,
+  "topStrengths": [],
+  "areasForImprovement": [],
+  "actionableRoadmap": [],
   "integrityReport": {{
     "status": "PASSED / FLAGGED_WITH_WARNINGS",
     "warningsIssued": {warning_count},
-    "integrityScore": 95
+    "integrityScore": null
   }}
 }}"""
 
@@ -438,23 +611,7 @@ Generate a strictly valid JSON response with this schema:
         except Exception as e:
             logger.error(f"Scorecard generation error: {e}")
 
-        # Baseline fallback
-        return {
-            "overallScore": 82,
-            "hiringDecision": "Hire",
-            "executiveSummary": f"Demonstrated solid communication and problem-solving for {self.role}.",
-            "technicalScore": 84,
-            "communicationScore": 86,
-            "behavioralScore": 80,
-            "topStrengths": ["Clear communication", "Structured approach"],
-            "areasForImprovement": ["Deepen edge case analysis"],
-            "actionableRoadmap": ["Review distributed systems design"],
-            "integrityReport": {
-                "status": "PASSED" if warning_count == 0 else "FLAGGED_WITH_WARNINGS",
-                "warningsIssued": warning_count,
-                "integrityScore": max(0, 100 - (warning_count * 20)),
-            }
-        }
+        raise RuntimeError("Live interview evaluation is unavailable; no score was issued.")
 
     async def close(self):
         """Clean teardown of live session, subagents, and tasks."""

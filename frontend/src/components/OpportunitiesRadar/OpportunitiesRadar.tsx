@@ -52,13 +52,13 @@ interface OpportunitiesRadarProps {
 type CategoryTab = 'all' | 'jobs' | 'internships' | 'hackathons' | 'opensource';
 
 const DEFAULT_PREFERENCES: UserPreferences = {
-  target_country: 'India',
-  preferred_cities: ['Bengaluru', 'Noida / Delhi NCR', 'Hyderabad', 'Pune', 'Mumbai', 'Remote India'],
-  work_modes: ['Remote', 'Hybrid', 'Onsite'],
-  preferred_roles: ['Backend Engineer', 'Full Stack Developer', 'Software Engineer', 'AI/ML Engineer'],
-  opportunity_types: ['jobs', 'internships', 'hackathons', 'opensource'],
-  experience_level: 'Fresher / 0-3 yrs',
-  min_salary: '₹6-18 LPA / $25k+ Remote'
+  target_country: '',
+  preferred_cities: [],
+  work_modes: [],
+  preferred_roles: [],
+  opportunity_types: [],
+  experience_level: '',
+  min_salary: ''
 };
 
 const INDIAN_CITIES = [
@@ -812,7 +812,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                 </label>
                 <textarea aria-label="Paste Raw Notice / Circular / Telegram Post:"
                   rows={8}
-                  placeholder={`Example:\n🚀 Placement Drive Announcement!\nCompany: Apponward Technologies\nRole: SDE Intern / Backend Developer\nEligibility: 2025/2026 Batch B.Tech/MCA (CGPA > 7.0)\nStipend: ₹45,000/month (PPO: ₹14-18 LPA)\nLocation: Noida / Hybrid\nSkills: Python, FastAPI, React, SQL\nDeadline: Oct 15, 2026`}
+                  placeholder="Paste the complete notice or circular text here."
                   value={rawNoticeInput}
                   onChange={(e) => setRawNoticeInput(e.target.value)}
                   className="w-full p-3 rounded-2xl border text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
@@ -1169,7 +1169,7 @@ export const OpportunitiesRadar: React.FC<OpportunitiesRadarProps> = ({
                   <div className="flex items-center gap-1.5 text-xs font-semibold">
                     <Clock className={`w-3.5 h-3.5 ${opp.is_urgent ? 'text-red-500 animate-pulse' : 'text-gray-400'}`} />
                     <span className={opp.is_urgent ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-600 dark:text-gray-400'}>
-                      {opp.days_left === 0 ? 'Closes Today!' : `${opp.days_left} days left (${opp.deadline_formatted})`}
+                      {opp.days_left === null ? opp.deadline_formatted : opp.days_left === 0 ? 'Closes Today!' : `${opp.days_left} days left (${opp.deadline_formatted})`}
                     </span>
                   </div>
 

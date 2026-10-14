@@ -116,6 +116,8 @@ export interface EducationEntry {
 }
 
 export interface ProjectEntry {
+  id?: string;
+  is_public?: boolean;
   name: string;
   tech_stack?: string;
   repo_url?: string;
@@ -168,7 +170,7 @@ export interface Opportunity {
   reward?: string;
   deadline_date?: string;
   deadline_formatted: string;
-  days_left: number;
+  days_left: number | null;
   is_urgent: boolean;
   urgency_level?: 'normal' | 'high' | 'critical';
   source_platform: string;
@@ -229,6 +231,7 @@ export interface UserPreferences {
   career_goals?: CareerGoals;
   in_progress_skills?: string[];
   custom_locations?: string[];
+  profile_visibility?: { bio?: boolean; location?: boolean; links?: boolean; skills?: boolean; projects?: boolean; experience?: boolean; education?: boolean; credentials?: boolean; activity?: boolean };
 }
 
 export interface VerifiedSkill {
@@ -262,6 +265,7 @@ export interface PublicProfileData {
   linkedin_url?: string;
   portfolio_url?: string;
   is_public: boolean;
+  profile_visibility?: { bio?: boolean; location?: boolean; links?: boolean; skills?: boolean; projects?: boolean; experience?: boolean; education?: boolean; credentials?: boolean; activity?: boolean };
   metrics: {
     verified_skills_count: number;
     total_projects: number;
@@ -272,6 +276,7 @@ export interface PublicProfileData {
   claimed_skills: string[];
   projects: Array<{
     id?: string;
+    is_public?: boolean;
     name: string;
     description?: string;
     repo_url?: string;
@@ -339,6 +344,7 @@ export interface UserProfileDetails {
   id?: string;
   username?: string;
   is_public?: boolean;
+  profile_visibility?: { bio?: boolean; location?: boolean; links?: boolean; skills?: boolean; projects?: boolean; experience?: boolean; education?: boolean; credentials?: boolean; activity?: boolean };
   full_name: string;
   email: string;
   phone?: string;
@@ -368,6 +374,7 @@ export interface UserProfileDetails {
   }>;
   projects?: Array<{
     id?: string;
+    is_public?: boolean;
     name: string;
     description?: string;
     repo_url?: string;

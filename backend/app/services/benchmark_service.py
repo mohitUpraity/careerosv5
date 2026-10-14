@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 from typing import Dict, Any, List, Optional
 from app.core.config import settings
 from app.core.database import neo4j_client
@@ -88,29 +89,16 @@ class BenchmarkService:
             for r in records:
                 peers.append({
                     "id": r["id"],
-                    "name": r["name"] or r["github_username"] or "Benchmark Peer",
+                    "name": r["name"] or r["github_username"] or "",
                     "github_username": r["github_username"] or "",
-                    "role": r["role"] or "Staff Engineer",
-                    "company": r["company"] or "Top Tech",
+                    "role": r["role"] or "",
+                    "company": r["company"] or "",
                     "avatar_url": r["avatar_url"] or (f"https://github.com/{r['github_username']}.png" if r["github_username"] else ""),
                     "bio": r["bio"] or "",
                     "repos_count": r["repos_count"] or 0,
                     "skills": [s for s in r["skills"] if s]
                 })
             
-            # If user has no custom peers yet, provide a curated default benchmark peer
-            if not peers:
-                peers.append({
-                    "id": f"default_peer_{user_id}",
-                    "name": "Staff ML & Systems Peer",
-                    "github_username": "staff-ml-engineer",
-                    "role": "Staff Distributed Systems Engineer",
-                    "company": "Scale AI / Google DeepMind",
-                    "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-                    "bio": "Specializes in high-throughput GraphRAG, distributed inference, Kubernetes operators, and low-latency C++ kernels.",
-                    "repos_count": 8,
-                    "skills": ["Python", "C++", "Rust", "CUDA", "Kubernetes", "Distributed Systems", "GraphRAG", "vLLM", "Triton", "FastAPI", "Neo4j"]
-                })
             return peers
         except Exception as e:
             logger.error(f"Error fetching benchmark peers for {user_id}: {e}")
@@ -131,10 +119,12 @@ class BenchmarkService:
         Ingests a new peer via GitHub profile scan or custom specifications.
         """
         handle = (github_username or "").strip().lower()
-        peer_id = f"peer_{user_id}_{handle or 'custom'}_{int(neo4j_client.driver is not None)}"
-        display_name = name or (f"@{handle}" if handle else "Senior Benchmark Peer")
-        target_role = role or "Senior Software Engineer"
-        target_company = company or "Target Tech"
+        if not handle and not (name or "").strip():
+            raise ValueError("Provide a peer name or GitHub username.")
+        peer_id = f"peer_{user_id}_{uuid.uuid4().hex}"
+        display_name = (name or "").strip() or f"@{handle}"
+        target_role = (role or "").strip()
+        target_company = (company or "").strip()
         avatar = f"https://github.com/{handle}.png" if handle else ""
         bio = ""
 
@@ -165,7 +155,7 @@ class BenchmarkService:
                         "name": r.get("name"),
                         "description": r.get("description", ""),
                         "stars": r.get("stargazers_count", 0),
-                        "language": lang or "General",
+                        "language": lang or "",
                         "url": r.get("html_url", "")
                     })
             except Exception as ge:
@@ -199,7 +189,7 @@ class BenchmarkService:
         for repo in repos_data:
             repo_id = f"peer_repo_{peer_id}_{repo['name']}"
             repo_cypher = """
-            MATCH (p:BenchmarkPeer {id: $peer_id})
+            MATCH (u:User {id: $user_id})-[:HAS_BENCHMARK_PEER]->(p:BenchmarkPeer {id: $peer_id})
             MERGE (pr:Project {id: $repo_id})
             SET pr.name = $name,
                 pr.description = $description,
@@ -279,17 +269,19 @@ class BenchmarkService:
         cand_connections = cand_data.get("connections_count", 0)
 
         # 2. Fetch Peer Data
-        peer_name = "Staff ML & Systems Peer"
-        peer_role = "Staff Distributed Systems Engineer"
-        peer_company = "Scale AI / Google DeepMind"
-        peer_avatar = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
-        peer_repos_count = 8
-        peer_stars = 340
-        peer_languages = ["Python", "C++", "Rust", "CUDA"]
-        peer_skills = ["Python", "C++", "Rust", "CUDA", "Kubernetes", "Distributed Systems", "GraphRAG", "vLLM", "Triton", "FastAPI", "Neo4j", "Docker"]
-        peer_handle = "staff-ml-engineer"
+        if not peer_id:
+            raise ValueError("Select a saved benchmark peer before comparing.")
+        peer_name = ""
+        peer_role = ""
+        peer_company = ""
+        peer_avatar = ""
+        peer_repos_count = 0
+        peer_stars = 0
+        peer_languages = []
+        peer_skills = []
+        peer_handle = ""
 
-        if peer_id and not peer_id.startswith("default_peer"):
+        if peer_id:
             peer_cypher = """
             MATCH (p:BenchmarkPeer {id: $peer_id})
             OPTIONAL MATCH (p)-[:BUILT]->(pr:Project)
@@ -304,18 +296,20 @@ class BenchmarkService:
                    collect(DISTINCT pr.primary_language) AS languages,
                    collect(DISTINCT ps.name) AS skills
             """
-            peer_res = await neo4j_client.run_read_query(peer_cypher, {"peer_id": peer_id})
+            peer_res = await neo4j_client.run_read_query(peer_cypher, {"user_id": user_id, "peer_id": peer_id})
             if peer_res and peer_res[0].get("name"):
                 pr = peer_res[0]
-                peer_name = pr["name"] or peer_name
-                peer_role = pr["role"] or peer_role
-                peer_company = pr["company"] or peer_company
-                peer_avatar = pr["avatar_url"] or peer_avatar
+                peer_name = pr.get("name") or ""
+                peer_role = pr.get("role") or ""
+                peer_company = pr.get("company") or ""
+                peer_avatar = pr.get("avatar_url") or ""
                 peer_handle = pr["github_username"] or ""
-                peer_repos_count = pr["repos_count"] or peer_repos_count
-                peer_stars = pr["total_stars"] or peer_stars
-                peer_languages = [l for l in pr.get("languages", []) if l] or peer_languages
-                peer_skills = list(set([s for s in pr.get("skills", []) if s])) or peer_skills
+                peer_repos_count = pr.get("repos_count") or 0
+                peer_stars = pr.get("total_stars") or 0
+                peer_languages = [l for l in pr.get("languages", []) if l]
+                peer_skills = list(set([s for s in pr.get("skills", []) if s]))
+            else:
+                raise ValueError("The selected benchmark peer was not found.")
 
         # Compute Sets
         cand_set = set([s.lower() for s in cand_skills])
@@ -347,38 +341,7 @@ class BenchmarkService:
         )
 
         if not ai_eval or not isinstance(ai_eval, dict):
-            # Fallback deterministic comparison
-            ai_eval = {
-                "candidate_score": 72 if cand_repos_count > 0 else 25,
-                "peer_score": 90,
-                "experience_gap_summary": f"The benchmark peer holds strong mastery in distributed infra ({', '.join(peer_unique_skills[:3])}), while candidate demonstrates solid core foundations.",
-                "critical_skill_gaps": [
-                    {
-                        "skill": s,
-                        "priority": "High" if i < 2 else "Medium",
-                        "impact": "Crucial for scaling concurrent systems and distributed AI orchestration.",
-                        "action_item": f"Build a hands-on production repository implementing {s} with unit tests and benchmark throughput metrics."
-                    } for i, s in enumerate(peer_unique_skills[:4])
-                ],
-                "candidate_superpowers": candidate_unique_skills[:3] or ["Rapid prototyping", "Modern web stack agility"],
-                "strategic_roadmap": [
-                    {
-                        "phase": "Phase 1: Implement Missing Core Architecture",
-                        "milestones": [
-                            f"Build proof-of-concept incorporating {peer_unique_skills[0] if peer_unique_skills else 'distributed caching'}",
-                            "Publish benchmarks and AST-verifiable code to GitHub"
-                        ]
-                    },
-                    {
-                        "phase": "Phase 2: Scale and Public Demonstration",
-                        "milestones": [
-                            "Containerize and deploy with high availability CI/CD",
-                            "Draft targeted technical post on architectural trade-offs"
-                        ]
-                    }
-                ],
-                "hiring_manager_verdict": "Candidate has strong fundamental agility. Bridging 2-3 key systems skills will place them on par with staff-level benchmarks."
-            }
+            raise RuntimeError("Benchmark analysis is unavailable; no comparison was generated.")
 
         return {
             "status": "success",
@@ -391,7 +354,7 @@ class BenchmarkService:
                 "connections_count": cand_connections
             },
             "peer": {
-                "id": peer_id or f"default_peer_{user_id}",
+                "id": peer_id,
                 "name": peer_name,
                 "github_username": peer_handle,
                 "role": peer_role,
