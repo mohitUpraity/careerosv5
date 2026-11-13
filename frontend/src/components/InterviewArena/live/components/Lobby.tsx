@@ -83,6 +83,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   const [role, setRole] = useState(initialRole || "");
   const [seniority, setSeniority] = useState<SeniorityLevel>("Senior");
   const [format, setFormat] = useState<InterviewFormat>("Full Technical & Coding");
+  const [interviewMode, setInterviewMode] = useState<"strict" | "coach">("strict");
   const [selectedInterviewer, setSelectedInterviewer] = useState<InterviewerProfile>(
     INTERVIEWER_PROFILES[0]
   );
@@ -124,6 +125,7 @@ export const Lobby: React.FC<LobbyProps> = ({
 
   useEffect(() => {
     if (!skillAssessment) return;
+    setInterviewMode("strict");
     const normalized = skillAssessment.toLowerCase();
     const behavioral = /leadership|communication|public speaking|sales|product|negotiation|strategy|management|writing/.test(normalized);
     const systems = /system design|architecture|distributed systems|cloud/.test(normalized);
@@ -222,13 +224,13 @@ export const Lobby: React.FC<LobbyProps> = ({
   const handleTakeInterview = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (skillAssessment && (!hasLiveVideo || !hasLiveAudio)) {
+    if (skillAssessment && interviewMode === "strict" && (!hasLiveVideo || !hasLiveAudio)) {
       setUploadError('Proctored skill assessments require a live camera and microphone. Enable both devices before starting.');
       return;
     }
 
     // A proctored assessment requires fullscreen; fail closed if the browser refuses it.
-    if (skillAssessment && !document.fullscreenElement) {
+    if (skillAssessment && interviewMode === "strict" && !document.fullscreenElement) {
       try {
         if (!document.documentElement.requestFullscreen) throw new Error('Fullscreen is not supported by this browser.');
         await document.documentElement.requestFullscreen();
@@ -241,7 +243,7 @@ export const Lobby: React.FC<LobbyProps> = ({
     }
 
     // Actively prompt for camera and microphone on direct user click if not already live
-    if ((!hasLiveVideo || !hasLiveAudio) && onRequestPermissions) {
+    if ((!hasLiveVideo || !hasLiveAudio) && onRequestPermissions && !(skillAssessment && interviewMode === "coach")) {
       try {
         await onRequestPermissions();
       } catch (err) {
@@ -260,14 +262,17 @@ export const Lobby: React.FC<LobbyProps> = ({
       jobDescription: jobDescription.trim(),
       customRequirements: `Target Company: ${company}\nTarget Role: ${seniority} ${role}\nCandidate Resume Context:\n${resumeText}\nJob Description:\n${jobDescription}`,
       durationMinutes: 45,
+      interviewMode,
       proctoredSkill: skillAssessment,
     });
   };
 
   const hasAudio = !!stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled) && !isMuted;
   const hasVideo = !!stream?.getVideoTracks().some(track => track.readyState === 'live' && track.enabled) && !isVideoOff;
-  const assessmentDisclosure = skillAssessment
-    ? "Your answers and submitted work are analyzed against this skill rubric. Sampled webcam frames are sent to Google Gemini Live for interview context and timestamped notes about camera visibility, gaze direction, posture, gestures, visible devices, and additional people. Frame observations can miss or misread behavior; gaze, posture, or gestures are not treated as proof of cheating or as skill scores."
+  const assessmentDisclosure = skillAssessment && interviewMode === "strict"
+    ? "Your answers and submitted work are assessed against this skill rubric. Sampled webcam frames support proctoring and interview context."
+    : skillAssessment
+      ? "Coach practice for this skill: get live guidance and example answers. This session is not proctored and cannot award a verified skill badge."
     : "Practice your next interview with audio, video, and personalised feedback.";
 
   return (
@@ -283,7 +288,7 @@ export const Lobby: React.FC<LobbyProps> = ({
               Your interview room
               <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold border flex items-center gap-1.5 ${skillAssessment ? 'bg-amber-500/20 text-amber-200 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'}`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                {skillAssessment ? 'Proctored skill assessment' : 'Audio & video practice'}
+                {skillAssessment ? (interviewMode === "strict" ? 'Proctored skill assessment' : 'Skill coaching practice') : 'Audio & video practice'}
               </span>
             </h2>
             <p className="text-xs text-gray-400">
@@ -319,6 +324,28 @@ export const Lobby: React.FC<LobbyProps> = ({
           )}
         </div>
       </header>
+
+      <section className="ws-interview-setup w-full max-w-7xl mx-auto" aria-labelledby="interview-mode-heading">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 id="interview-mode-heading" className="text-sm font-semibold text-white">{skillAssessment ? "Choose skill assessment mode" : "Choose your practice mode"}</h3>
+              <p className="mt-1 text-xs text-gray-400">Switch between a realistic interview and a guided training session.</p>
+            </div>
+            <div role="group" aria-label="Interview mode" className="flex gap-2">
+              <button type="button" aria-pressed={interviewMode === "strict"} onClick={() => setInterviewMode("strict")} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${interviewMode === "strict" ? "border-blue-500 bg-blue-500/15 text-blue-200" : "border-[#3c4043] text-gray-300"}`}>
+                {skillAssessment ? "Strict assessment" : "Strict interview"}
+              </button>
+              <button type="button" aria-pressed={interviewMode === "coach"} onClick={() => setInterviewMode("coach")} className={`rounded-lg border px-3 py-2 text-xs font-semibold ${interviewMode === "coach" ? "border-emerald-500 bg-emerald-500/15 text-emerald-200" : "border-[#3c4043] text-gray-300"}`}>
+                Coach mode
+              </button>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-gray-400">
+            {interviewMode === "strict"
+              ? `Strict: realistic questions, follow-ups, and end-of-session feedback. No hints or model answers during the interview.${skillAssessment ? " Requires camera and microphone; a qualifying result can verify this skill and award its badge." : ""}`
+              : `Coach: after each answer, get specific feedback, a stronger answer structure, example talking points, and what to do or avoid before the next question.${skillAssessment ? " This is practice only: it is not proctored and can never verify the skill or award a badge." : " Coach sessions are for practice and never verify skills."}`}
+          </p>
+      </section>
 
       {/* Main Grid: Left Device Preview & Right Configuration */}
       <main className="ws-interview-setup-grid grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

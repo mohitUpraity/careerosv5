@@ -33,7 +33,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const apiBase = await getApiBase();
 
       const storedUser = await chrome.storage.local.get(["userId"]);
-      const effectiveUserId = request.userId || storedUser.userId || "4JzJQX61eshV7BAfG1OxHTBY0Xp2";
+      const effectiveUserId = request.userId || storedUser.userId;
 
       if (request.action === "HEALTH_CHECK") {
         try {
@@ -45,6 +45,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           sendResponse({ success: false, error: err.message, apiBase });
         }
       } else if (request.action === "INGEST_PROFILE_FULL") {
+        if (!effectiveUserId) throw new Error("Link your CareerOS login before syncing data.");
         const res = await fetch(`${apiBase}/ingest/linkedin/profile`, {
           method: "POST",
           headers: {
@@ -56,6 +57,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const data = await res.json();
         sendResponse({ success: res.ok, status: res.status, data });
       } else if (request.action === "INGEST_CONNECTIONS_JSON") {
+        if (!effectiveUserId) throw new Error("Link your CareerOS login before syncing data.");
         const res = await fetch(`${apiBase}/ingest/linkedin/connections`, {
           method: "POST",
           headers: {
@@ -70,6 +72,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const data = await res.json();
         sendResponse({ success: res.ok, status: res.status, data });
       } else if (request.action === "INGEST_POSTS_TEXT") {
+        if (!effectiveUserId) throw new Error("Link your CareerOS login before syncing data.");
         const formData = new FormData();
         formData.append("posts_text", request.postsText);
 
@@ -83,6 +86,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const data = await res.json();
         sendResponse({ success: res.ok, status: res.status, data });
       } else if (request.action === "ANALYZE_JOB") {
+        if (!effectiveUserId) throw new Error("Link your CareerOS login before syncing data.");
         const res = await fetch(`${apiBase}/matches/analyze`, {
           method: "POST",
           headers: {

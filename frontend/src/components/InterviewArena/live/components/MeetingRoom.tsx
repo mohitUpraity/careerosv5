@@ -36,7 +36,7 @@ interface MeetingRoomProps {
   onToggleVideo: () => void;
   onLeaveMeeting: () => void;
   proctoredAssessment?: boolean;
-  onAssessmentResult?: (result: { report: EvaluationReport; warnings: number; disqualified: boolean; candidateTurns: number; codeArtifact: string } | null) => void;
+  onAssessmentResult?: (result: { report: EvaluationReport; warnings: number; disqualified: boolean; candidateTurns: number; codeArtifact: string; interviewMode: InterviewConfig['interviewMode'] } | null) => void;
 }
 
 export const MeetingRoom: React.FC<MeetingRoomProps> = ({
@@ -326,6 +326,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       job_description: config.jobDescription || "",
       round_type: config.format || "mixed",
       difficulty: config.seniority || "medium",
+      interview_mode: config.interviewMode || "strict",
     });
     wsUrl = `${wsUrl}?${params.toString()}`;
 
@@ -685,7 +686,10 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           else if (action === "open_whiteboard") setActiveLayout("whiteboard_split");
           else if (action === "set_layout" && ["split", "interviewer_focus", "candidate_focus", "code_split", "whiteboard_split"].includes(msg.data?.layout)) {
             setActiveLayout(msg.data.layout as MeetingLayout);
-          } else if (action === "open_panel" && ["people", "chat", "rubric", "notes", "proctor", "analysis"].includes(msg.data?.panel)) {
+          } else if (action === "open_panel" && (
+            ["people", "chat", "rubric", "notes", "analysis"].includes(msg.data?.panel)
+            || (config.interviewMode === "strict" && msg.data?.panel === "proctor")
+          )) {
             setActiveSideTab(msg.data.panel);
           } else if (action === "close_panel") setActiveSideTab(null);
           else if (action === "set_captions") setCaptionsEnabled(Boolean(msg.data?.enabled));
@@ -1199,13 +1203,14 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       });
       const data = await res.json();
       setEvaluationReport(data);
-      if (proctoredAssessment && data && typeof data.overallScore === 'number') {
+      if (proctoredAssessment && config.interviewMode === 'strict' && config.proctoredSkill && data && typeof data.overallScore === 'number') {
         onAssessmentResult?.({
           report: data,
           warnings: Math.max(proctorWarnings.length, localViolationCountRef.current),
           disqualified: isDisqualifiedRef.current || Boolean(disqualificationReason),
           candidateTurns: transcriptsRef.current.filter(item => item.speaker === 'user' && item.text.trim().length >= 12).length,
           codeArtifact: lastCodeWrittenRef.current,
+          interviewMode: config.interviewMode,
         });
       }
     } catch (err) {
@@ -1321,7 +1326,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             </h1>
             <div className="flex items-center space-x-2 text-[11px] text-gray-400">
               <span className="flex items-center gap-1 text-emerald-400">
-                <Radio className="w-3 h-3 animate-pulse" /> Full Duplex Active
+                <Radio className="w-3 h-3 animate-pulse" /> {config.interviewMode === "coach" ? "Coach mode · Guided feedback" : "Strict interview · Proctored"}
               </span>
               <span>•</span>
               <span>Interviewer: {config.interviewerProfile.name}</span>
@@ -1332,7 +1337,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         {/* Top Right Controls & Status Indicators */}
         <div className="flex items-center space-x-2">
           {/* Proctoring Status Pill */}
-          <button
+          {proctoredAssessment && <button
             onClick={() => setActiveSideTab(activeSideTab === "proctor" ? null : "proctor")}
             className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
               proctorWarnings.length > 0
@@ -1346,7 +1351,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             <span className="font-bold">
               {proctorWarnings.length === 0 ? "Active" : `${proctorWarnings.length}/3 Warnings`}
             </span>
-          </button>
+          </button>}
 
           {/* Live analysis shortcut */}
           <button
@@ -1518,6 +1523,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         activeSideTab={activeSideTab}
         isHandRaised={isHandRaised}
         warningCount={proctorWarnings.length}
+        showProctorControls={proctoredAssessment}
         userVolume={userVolume}
         onToggleMic={guardMicToggle}
         onToggleVideo={guardVideoToggle}
@@ -1593,6 +1599,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         <EvaluationModal
           report={evaluationReport}
           isLoading={isEvaluating}
+          isCoachMode={config.interviewMode === "coach"}
           onRetake={() => {
             setShowEvaluation(false);
             onLeaveMeeting();

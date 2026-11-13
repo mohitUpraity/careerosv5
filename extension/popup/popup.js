@@ -98,7 +98,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (userIdInput && userIdInput.value.trim()) {
       return userIdInput.value.trim();
     }
-    return "4JzJQXG1eshV7BAfG1OxHTBYOXp2";
+    throw new Error("CareerOS account is not linked. Open the app while signed in, then click Link Account.");
   }
 
   function updateFooterLinks(apiUrl) {
@@ -187,6 +187,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const handleUserIdUpdate = () => {
     const val = userIdInput.value.trim();
     if (val) {
+      userIdInput.dataset.linked = "false";
       chrome.storage.local.set({ userId: val });
       if (accountUserDisplay) {
         accountUserDisplay.textContent = val;
@@ -253,17 +254,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       );
 
       if (careerOsTabs.length === 0) {
-        chrome.storage.local.get(["userId", "linkedAccountEmail"], (res) => {
-          if (res.linkedAccountEmail && accountUserDisplay) {
-            accountUserDisplay.textContent = res.linkedAccountEmail;
-            if (accountDot) accountDot.classList.add("connected");
-          } else if (res.userId && accountUserDisplay) {
-            accountUserDisplay.textContent = res.userId;
-            if (accountDot) accountDot.classList.add("connected");
-          } else if (accountUserDisplay) {
-            accountUserDisplay.textContent = "Enter Account UID or open Web App";
-          }
-        });
+        const stored = await chrome.storage.local.get(["userIdSource"]);
+        if (stored.userIdSource === "careeros-session") {
+          await chrome.storage.local.remove(["userId", "linkedAccountEmail", "userIdSource"]);
+          if (userIdInput) userIdInput.value = "";
+        }
+        if (accountUserDisplay) accountUserDisplay.textContent = "Open CareerOS while signed in to link account";
+        accountDot?.classList.remove("connected");
         return;
       }
 
@@ -320,24 +317,34 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       if (results && results[0] && results[0].result) {
         const authUser = results[0].result;
-        const uid = authUser.uid || authUser.id || authUser.email;
+        const uid = authUser.uid || authUser.id;
+        if (!uid) throw new Error("The open CareerOS tab has no signed-in user.");
         const displayLabel = authUser.email || authUser.displayName || uid;
 
-        if (userIdInput) userIdInput.value = uid;
+        if (userIdInput) {
+          userIdInput.value = uid;
+          userIdInput.dataset.linked = "true";
+        }
         if (accountUserDisplay) accountUserDisplay.textContent = displayLabel;
         if (accountDot) accountDot.classList.add("connected");
 
         chrome.storage.local.set({
           userId: uid,
           linkedAccountEmail: displayLabel,
+          userIdSource: "careeros-session",
           backendUrl: backendSelect ? backendSelect.value : PROD_API_URL,
           apiUrl: backendSelect ? backendSelect.value : PROD_API_URL
         });
 
         showToast(`Auto-Linked to Account: ${uid.slice(0, 12)}...`, "success");
       } else {
-        if (accountUserDisplay) accountUserDisplay.textContent = "CareerOS Web Tab Found";
-        if (accountDot) accountDot.classList.add("connected");
+        const stored = await chrome.storage.local.get(["userIdSource"]);
+        if (stored.userIdSource === "careeros-session") {
+          await chrome.storage.local.remove(["userId", "linkedAccountEmail", "userIdSource"]);
+          if (userIdInput) userIdInput.value = "";
+        }
+        if (accountUserDisplay) accountUserDisplay.textContent = "CareerOS tab found; sign in to link account";
+        accountDot?.classList.remove("connected");
       }
     } catch (err) {
       console.warn("Auto-detect tab notice:", err);
@@ -1138,6 +1145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
 
       const profileData = await performLiveProfileScan(tab.id);
+      if (!profileData?.full_name && !profileData?.name) throw new Error("LinkedIn profile extraction returned no profile data.");
       let certsCount = 0;
       let achCount = 0;
       let badgeCount = 0;
@@ -1161,10 +1169,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             body: JSON.stringify(profileData)
           });
           if (!profileResp.ok) {
-            console.warn("Profile sync notice:", profileResp.status, await profileResp.text());
+            throw new Error(`Profile ingest failed (${profileResp.status}): ${await profileResp.text()}`);
           }
         } catch (err) {
-          console.warn("Profile sync error fallback:", err);
+          throw err;
         }
       }
 
@@ -1400,7 +1408,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const profileData = await performLiveProfileScan(tab.id);
 
       if (profileData && (profileData.name || profileData.experience?.length || profileData.certifications?.length)) {
-        await fetch(`${getActiveBackendUrl()}/ingest/linkedin/profile`, {
+        const response = await fetch(`${getActiveBackendUrl()}/ingest/linkedin/profile`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1408,6 +1416,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           },
           body: JSON.stringify(profileData)
         });
+        if (!response.ok) throw new Error(`Profile ingest failed (${response.status}): ${await response.text()}`);
 
         const certsCount = profileData.certifications?.length || 0;
         const badgesCount = (profileData.achievements?.length || 0) + (profileData.badges?.length || 0);
@@ -1465,15 +1474,12 @@ document.addEventListener("DOMContentLoaded", async () => {
           },
           body: JSON.stringify({ posts_text: postsText })
         });
-        if (resp.ok) {
-          const resData = await resp.json();
-          showToast(
-            `Ingested ${postsList.length} posts (${resData.hackathons_count} hackathons, ${resData.graph_nodes_merged} nodes)! ✓`,
-            "success"
-          );
-        } else {
-          showToast(`AI Ingested ${postsList.length} Posts! ✓`, "success");
-        }
+        if (!resp.ok) throw new Error(`Posts ingest failed (${resp.status}): ${await resp.text()}`);
+        const resData = await resp.json();
+        showToast(
+          `Ingested ${postsList.length} posts (${resData.hackathons_count} hackathons, ${resData.graph_nodes_merged} nodes)! ✓`,
+          "success"
+        );
       } else {
         showToast(
           "No authored posts found on this page. Paste any post or milestone in the 'Manual Post Ingest' box below!",
@@ -1515,11 +1521,14 @@ document.addEventListener("DOMContentLoaded", async () => {
           })
         });
 
+        if (!resp.ok) throw new Error(`Connections ingest failed (${resp.status}): ${await resp.text()}`);
+        const result = await resp.json();
+
         chrome.storage.local.set({ syncedConnCount: conns.length });
         if (reportConnections) reportConnections.textContent = `${conns.length} Contacts`;
         if (syncReportCard) syncReportCard.classList.remove("hidden");
 
-        showToast(`Ingested ${conns.length} Real Contacts into Knowledge Graph! ✓`, "success");
+        showToast(`Ingested ${result.total_connections_imported || conns.length} Real Contacts into Knowledge Graph! ✓`, "success");
       } else {
         showToast("No connections detected on page.", "error");
       }

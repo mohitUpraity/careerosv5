@@ -18,6 +18,7 @@ import { EvaluationReport } from "../types";
 interface EvaluationModalProps {
   report: EvaluationReport | null;
   isLoading: boolean;
+  isCoachMode?: boolean;
   onRetake: () => void;
   onClose: () => void;
 }
@@ -25,18 +26,19 @@ interface EvaluationModalProps {
 export const EvaluationModal: React.FC<EvaluationModalProps> = ({
   report,
   isLoading,
+  isCoachMode = false,
   onRetake,
   onClose,
 }) => {
   useEffect(() => {
-    if (report && report.assessmentStatus !== "incomplete" && (report.hiringDecision === "Strong Hire" || report.hiringDecision === "Hire" || (report.overallScore ?? 0) >= 75)) {
+    if (!isCoachMode && report && report.assessmentStatus !== "incomplete" && (report.hiringDecision === "Strong Hire" || report.hiringDecision === "Hire" || (report.overallScore ?? 0) >= 75)) {
       confetti({
         particleCount: 80,
         spread: 70,
         origin: { y: 0.6 },
       });
     }
-  }, [report]);
+  }, [report, isCoachMode]);
 
   const handleDownload = () => {
     if (!report) return;
@@ -62,16 +64,16 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-                AI Interview Evaluation & Scorecard
+                {isCoachMode ? "Coach Session Debrief" : "AI Interview Evaluation & Scorecard"}
               </h2>
               <p className="text-xs sm:text-sm text-gray-300">
-                {report?.assessmentStatus === "incomplete" ? "Session completeness review · no skill score issued" : "Evidence-based performance feedback from your AI interviewer"}
+                {isCoachMode ? "Practice feedback · this session does not issue scores or verify skills" : report?.assessmentStatus === "incomplete" ? "Session completeness review · no skill score issued" : "Evidence-based performance feedback from your AI interviewer"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
-            <button
+            {!isCoachMode && <button
               onClick={handleDownload}
               disabled={isLoading || !report}
               className="p-2 bg-[#2d2f34] hover:bg-[#3c4043] text-gray-300 hover:text-white rounded-xl border border-[#3c4043] text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40"
@@ -79,7 +81,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
-            </button>
+            </button>}
             <button
               onClick={onRetake}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md"
@@ -129,9 +131,9 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
           {!isLoading && report && !(report as any).detail && (
             <>
               {/* Score & Decision Hero Card */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className={`grid grid-cols-1 ${isCoachMode ? "md:grid-cols-1" : "md:grid-cols-3"} gap-4`}>
                 {/* Overall Score */}
-                <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] flex flex-col items-center justify-center text-center">
+                {!isCoachMode && <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] flex flex-col items-center justify-center text-center">
                   <span className="text-xs uppercase tracking-wider font-semibold text-gray-400 mb-1">
                     Overall Performance Score
                   </span>
@@ -147,10 +149,10 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                       style={{ width: `${report.overallScore ?? 0}%` }}
                     />
                   </div>
-                </div>
+                </div>}
 
                 {/* Hiring Decision */}
-                <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] flex flex-col items-center justify-center text-center">
+                {!isCoachMode && <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] flex flex-col items-center justify-center text-center">
                   <span className="text-xs uppercase tracking-wider font-semibold text-gray-400 mb-1">
                     Hiring Committee Verdict
                   </span>
@@ -172,12 +174,12 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                   <span className="text-xs text-gray-400 mt-2 font-medium">
                     Evaluated against the selected interview rubric
                   </span>
-                </div>
+                </div>}
 
                 {/* Executive Summary */}
                 <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] flex flex-col justify-center">
                   <span className="text-xs uppercase tracking-wider font-semibold text-blue-400 mb-1 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5" /> Executive Summary
+                    <Sparkles className="w-3.5 h-3.5" /> {isCoachMode ? "Practice recap" : "Executive Summary"}
                   </span>
                   <p className="text-xs text-gray-200 leading-relaxed">
                     {report.executiveSummary}
@@ -185,7 +187,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 </div>
               </div>
 
-              {(report.evidenceSummary?.length || report.communicationAnalysis || report.proctoringSummary) && (
+              {!isCoachMode && (report.evidenceSummary?.length || report.communicationAnalysis || report.proctoringSummary) && (
                 <div className="space-y-4 rounded-2xl border border-purple-500/25 bg-[#24232b] p-5">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-purple-300">Evidence and session analysis</h3>
                   {report.evidenceSummary?.length ? <div className="space-y-2">
@@ -203,7 +205,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
               )}
 
               {/* Category Breakdown Bars */}
-              <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] space-y-4">
+              {!isCoachMode && <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] space-y-4">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Award className="w-4 h-4 text-blue-400" />
                   Competency Score Breakdown
@@ -227,14 +229,14 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               {/* Strengths & Improvements */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Top Strengths */}
                 <div className="p-5 bg-emerald-950/20 border border-emerald-500/30 rounded-2xl space-y-2.5">
                   <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" /> Standout Strengths
+                    <CheckCircle2 className="w-4 h-4" /> {isCoachMode ? "What worked" : "Standout Strengths"}
                   </h3>
                   <ul className="space-y-1.5">
                     {(Array.isArray(report.topStrengths) ? report.topStrengths : []).map((s, i) => (
@@ -249,7 +251,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 {/* Areas for Improvement */}
                 <div className="p-5 bg-amber-950/20 border border-amber-500/30 rounded-2xl space-y-2.5">
                   <h3 className="text-sm font-bold text-amber-400 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4" /> Growth & Improvement Areas
+                    <AlertTriangle className="w-4 h-4" /> {isCoachMode ? "What to improve" : "Growth & Improvement Areas"}
                   </h3>
                   <ul className="space-y-1.5">
                     {(Array.isArray(report.areasForImprovement) ? report.areasForImprovement : []).map((a, i) => (
@@ -267,7 +269,7 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 <div className="p-5 bg-[#2d2f34] rounded-2xl border border-[#3c4043] space-y-3">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-purple-400" />
-                    Recommended Preparation Roadmap
+                    {isCoachMode ? "What to practice next" : "Recommended Preparation Roadmap"}
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {report.actionableStudyRoadmap.map((item, idx) => (

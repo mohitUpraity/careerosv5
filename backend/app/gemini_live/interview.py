@@ -35,6 +35,7 @@ class LiveInterviewSession:
         voice_name: str = "Kore",
         round_type: str = "mixed",
         difficulty: str = "medium",
+        interview_mode: str = "strict",
         send_json_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
         send_audio_callback: Optional[Callable[[bytes], Awaitable[None]]] = None,
     ):
@@ -48,6 +49,7 @@ class LiveInterviewSession:
         self.voice_name = voice_name
         self.round_type = round_type
         self.difficulty = difficulty
+        self.interview_mode = "coach" if interview_mode == "coach" else "strict"
         self.send_json = send_json_callback
         self.send_audio = send_audio_callback
 
@@ -78,7 +80,7 @@ class LiveInterviewSession:
         self.engine = GeminiLiveEngine(
             api_key=self.api_key,
             config=config,
-            tools=get_live_tools(),
+            tools=get_live_tools(self.interview_mode),
             on_audio_chunk=self._handle_engine_audio,
             on_output_transcript=self._handle_engine_output_transcript,
             on_input_transcript=self._handle_engine_input_transcript,
@@ -120,7 +122,33 @@ class LiveInterviewSession:
 
     def _build_system_instruction(self) -> str:
         who = f" The candidate's name is {self.candidate_name}." if self.candidate_name else ""
+        if self.interview_mode == "coach":
+            return f"""You are Sarah Jenkins, an experienced and supportive interview coach conducting a guided training session for {self.role} at {self.company}.{who}
+
+This is COACH MODE, not a hiring interview or skill assessment. Help the candidate learn in real time. Ask one realistic, role-specific interview question at a time, then wait for their answer. After each answer:
+1. Give candid, specific feedback on what worked and what was missing, citing details they actually said.
+2. Explain what a strong answer should cover and why, including useful structure (such as STAR for behavioral examples or requirements, design, and trade-offs for technical questions).
+3. Offer concrete talking points and a concise sample phrasing. Never invent accomplishments or metrics for the candidate; label examples as examples.
+4. Say what to do and what to avoid next time. Invite them to retry or ask for clarification before continuing.
+
+RESPONSE FORMAT AFTER EACH ANSWER: Speak these sections clearly and in this order: "What worked", "What to improve", "A stronger answer", and "Do / avoid next time". For the stronger answer, give a concise, question-specific example the candidate can adapt, without inventing personal experience. Do not immediately move to a new interview question; first offer the candidate a chance to retry or ask for help. Only ask the next question after they are ready.
+
+ENDING THE SESSION: Continue coaching until the candidate says they are finished or asks to end. Then give a short recap of the main strengths and next practice steps, say a natural closing, and call conclude_interview. If they ask to stop early, respect that and conclude without pressuring them to continue.
+
+Be warm, clear, and practical. Do not shame the candidate or give empty praise. Do not issue proctor warnings, make a hiring decision, or treat coached responses as independent evidence. This session cannot verify skills.
+
+Role: {self.role}
+Interview format: {self.round_type}
+Difficulty: {self.difficulty}
+Job requirements: {self.job_description[:6000] or 'Ask questions relevant to the role and your expertise.'}
+Resume context: {self.resume_context[:3000] or 'Do not assume experience; help the candidate frame only what they tell you.'}"""
+
         return f"""You are Sarah Jenkins — 12 years in tech hiring, currently senior hiring lead at {self.company}. You're conducting a live {self.round_type} interview for {self.role}.{who}
+
+SESSION MODE: STRICT — behave as a direct hiring interviewer.
+STRICT INTERVIEW MODE:
+- Do not help, teach, coach, hint, or give model answers during the interview.
+- Ask one question at a time, probe claims and vague answers, and assess only what the candidate demonstrates.
 
 WHO YOU ARE (not who you pretend to be):
 - You are a REAL interviewer. You have sat across thousands of candidates. You've hired people who became stars and you've passed on people who looked great on paper. Your reputation depends on making the right call TODAY.
@@ -215,15 +243,20 @@ RESUME CONTEXT (use to verify claims, find inconsistencies, ask targeted questio
     async def start(self):
         """Starts live engine and triggers opening greeting alongside proctoring loop."""
         await self.engine.start()
-        await self.proctor_subagent.start()
+        if self.interview_mode == "strict":
+            await self.proctor_subagent.start()
 
         # Trigger warm opening question
         greeting_prompt = (
+            f"[The candidate has joined the live call. Open as a composed, supportive interview coach. "
+            if self.interview_mode == "coach" else
             f"[The candidate has joined the live call. Open as a composed, professional hiring interviewer. "
+        )
+        greeting_prompt += (
             f"Address them by name ({self.candidate_name}), identify the {self.role} interview at {self.company}, "
             "briefly confirm they can hear you, then ask one specific, role-relevant opening question. "
-            "Avoid generic small talk, excessive praise, and claiming you can see or hear them clearly until live inputs confirm that. "
-            "Ask the question once and wait for the candidate's answer.]"
+            + ("Explain that you will help them practice and provide coaching after each answer. " if self.interview_mode == "coach" else "Avoid generic small talk, excessive praise, and claiming you can see or hear them clearly until live inputs confirm that. ")
+            + "Ask the question once and wait for the candidate's answer.]"
         )
         await self.engine.send_text_prompt(greeting_prompt)
 
@@ -236,7 +269,8 @@ RESUME CONTEXT (use to verify claims, find inconsistencies, ask targeted questio
             # 1. Stream to live voice persona for natural vision grounding
             self.engine.push_video(jpeg_bytes)
             # 2. Update proctoring vision buffer for anti-cheating scrutiny
-            self.proctor_subagent.update_frame(jpeg_bytes)
+            if self.interview_mode == "strict":
+                self.proctor_subagent.update_frame(jpeg_bytes)
 
     async def send_text_message(self, text: str):
         if not self.is_terminated:
@@ -258,12 +292,16 @@ RESUME CONTEXT (use to verify claims, find inconsistencies, ask targeted questio
             return {"status": "ignored", "reason": "interview_terminated"}
 
         if name == "issue_proctor_warning":
+            if self.interview_mode == "coach":
+                return {"status": "ignored", "reason": "coach_mode_is_not_assessed_or_proctored"}
             await self.proctor_subagent.trigger_warning(
                 violation_type=str(args.get("violation_type", "looking_away")),
                 reason=str(args.get("warning_reason", "Possible interview integrity violation")),
             )
             return {"status": "warning_recorded", "warnings": self.proctor_subagent.warning_count}
         if name == "terminate_interview_for_malpractice":
+            if self.interview_mode == "coach":
+                return {"status": "ignored", "reason": "coach_mode_is_not_assessed_or_proctored"}
             reason = str(args.get("disqualification_reason", "Repeated interview integrity violations"))
             await self._terminate_for_malpractice(reason)
             return {"status": "terminated", "reason": reason}
@@ -459,7 +497,7 @@ RESUME CONTEXT (use to verify claims, find inconsistencies, ask targeted questio
             "mujhe dekh", "mera camera", "meri video", "dikh raha hu", "dikh rahi hu",
             "क्या आप मुझे देख", "मेरा कैमरा", "मेरी वीडियो", "दिख रहा हूं", "दिख रही हूं",
         ))
-        if visual_request:
+        if visual_request and self.interview_mode == "strict":
             asyncio.create_task(self.proctor_subagent.analyze_visual_question(text))
 
         # Coalesce streamed transcript fragments; one evaluation per spoken pause
@@ -470,6 +508,8 @@ RESUME CONTEXT (use to verify claims, find inconsistencies, ask targeted questio
         self._scratchpad_debounce_task = asyncio.create_task(self._flush_scratchpad_after_pause())
 
     async def _flush_scratchpad_after_pause(self):
+        if self.interview_mode == "coach":
+            return
         try:
             await asyncio.sleep(0.9)
             candidate_text = self._pending_candidate_text.strip()

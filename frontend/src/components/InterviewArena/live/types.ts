@@ -9,6 +9,8 @@ export type InterviewFormat =
   | "Machine Learning & AI Engineering"
   | "Product Management & Execution";
 
+export type InterviewMode = "strict" | "coach";
+
 export type InterviewerVoice = "Zephyr" | "Kore" | "Aoede" | "Puck" | "Fenrir" | "Charon";
 
 export interface InterviewerProfile {
@@ -32,6 +34,7 @@ export interface InterviewConfig {
   jobDescription: string;
   customRequirements: string;
   durationMinutes: number;
+  interviewMode: InterviewMode;
   proctoredSkill?: string;
 }
 

@@ -14,7 +14,7 @@ export interface LiveMultimodalArenaProps {
   onBack?: () => void;
   onTailorResume?: (role: string, company: string, jd: string) => void;
   skillAssessment?: string;
-  onSkillAssessmentResult?: (result: { report: EvaluationReport; warnings: number; disqualified: boolean; candidateTurns: number; codeArtifact: string }) => void;
+  onSkillAssessmentResult?: (result: { report: EvaluationReport; warnings: number; disqualified: boolean; candidateTurns: number; codeArtifact: string; interviewMode: InterviewConfig['interviewMode'] }) => void;
 }
 
 export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
@@ -354,7 +354,7 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
       }
     }
 
-    if (skillAssessment && (!stream?.getVideoTracks().some(track => track.readyState === 'live' && track.enabled) || !stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled))) {
+    if (skillAssessment && config.interviewMode === 'strict' && (!stream?.getVideoTracks().some(track => track.readyState === 'live' && track.enabled) || !stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled))) {
       setPermissionError('A live camera and microphone are required for this proctored skill assessment.');
       return;
     }
@@ -385,9 +385,9 @@ export const LiveMultimodalArena: React.FC<LiveMultimodalArenaProps> = ({
           onToggleMic={handleToggleMic}
           onToggleVideo={handleToggleVideo}
           onLeaveMeeting={handleLeaveMeeting}
-          proctoredAssessment={true}
+          proctoredAssessment={meetingConfig.interviewMode === 'strict'}
           onAssessmentResult={result => {
-            if (result) onSkillAssessmentResult?.(result);
+            if (result && skillAssessment && meetingConfig.interviewMode === 'strict') onSkillAssessmentResult?.({ ...result, interviewMode: meetingConfig.interviewMode });
           }}
         />
       </div>

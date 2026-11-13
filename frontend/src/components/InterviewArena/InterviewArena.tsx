@@ -116,8 +116,13 @@ export const InterviewArena: React.FC<InterviewArenaProps> = ({
     disqualified: boolean;
     candidateTurns: number;
     codeArtifact: string;
+    interviewMode: import('./live/types').InterviewMode;
   }) => {
     if (!verificationSkill) return;
+    if (result.interviewMode !== 'strict') {
+      onSuccessToast?.(`${verificationSkill} remains claimed. Coach mode is practice only and cannot verify skills.`);
+      return;
+    }
     const codingSkill = /python|javascript|typescript|java|c\+\+|c#|sql|programming|coding|react|node|fastapi|go\b|rust|ruby|php|kotlin|swift/i.test(verificationSkill);
     const score = result.report.overallScore;
     if (score === null || result.report.assessmentStatus === 'incomplete') {

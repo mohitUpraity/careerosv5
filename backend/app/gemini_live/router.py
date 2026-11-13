@@ -25,6 +25,7 @@ async def gemini_live_websocket(
     job_description: str = "",
     round_type: str = "mixed",
     difficulty: str = "medium",
+    interview_mode: str = "strict",
 ):
     """
     Direct WebSocket bridge connecting Browser WebRTC/Audio to Google Gemini Live API.
@@ -60,6 +61,7 @@ async def gemini_live_websocket(
         job_description=job_description,
         round_type=round_type,
         difficulty=difficulty,
+        interview_mode=interview_mode,
         voice_name=voice,
         send_json_callback=send_json_to_client,
         send_audio_callback=send_audio_to_client,

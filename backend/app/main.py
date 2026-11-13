@@ -129,6 +129,7 @@ async def live_websocket_alias(
     job_description: str = "",
     round_type: str = "mixed",
     difficulty: str = "medium",
+    interview_mode: str = "strict",
 ):
     from app.gemini_live.router import gemini_live_websocket
     await gemini_live_websocket(
@@ -141,6 +142,7 @@ async def live_websocket_alias(
         job_description=job_description,
         round_type=round_type,
         difficulty=difficulty,
+        interview_mode=interview_mode,
     )
 
 @app.post("/api/evaluate-interview")

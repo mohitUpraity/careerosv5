@@ -35,6 +35,7 @@ interface MeetingControlsProps {
   userVolume: number;
   isFullscreen?: boolean;
   warningCount?: number;
+  showProctorControls?: boolean;
   onToggleMic: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
@@ -57,6 +58,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
   isHandRaised,
   isFullscreen,
   warningCount = 0,
+  showProctorControls = true,
   userVolume,
   onToggleMic,
   onToggleVideo,
@@ -264,7 +266,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
           className={`relative p-2.5 rounded-full transition-colors ${activeSideTab === "analysis" ? "bg-purple-500/20 text-purple-300" : "text-gray-300 hover:bg-[#3c4043] hover:text-white"}`}
           title="Live answer analysis and evidence"
         ><Info className="w-5 h-5" /></button>
-        <button
+        {showProctorControls && <button
           onClick={() => onToggleSideTab("proctor")}
           className={`relative p-2.5 rounded-full transition-colors ${
             activeSideTab === "proctor"
@@ -281,7 +283,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
           {warningCount > 0 && (
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-ping" />
           )}
-        </button>
+        </button>}
 
         <button
           onClick={() => onToggleSideTab("rubric")}

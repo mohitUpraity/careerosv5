@@ -4,14 +4,11 @@ from google.genai import types
 
 logger = logging.getLogger("gemini_live.tools")
 
-def get_live_tools() -> List[types.Tool]:
+def get_live_tools(interview_mode: str = "strict") -> List[types.Tool]:
     """
-    Returns native Gemini Live function declarations for active proctoring,
-    malpractice warnings, disqualification, emoji reactions, and coding challenges.
+    Returns native Gemini Live function declarations for the selected session mode.
     """
-    return [
-        types.Tool(
-            function_declarations=[
+    function_declarations = [
                 types.FunctionDeclaration(
                     name="issue_proctor_warning",
                     description=(
@@ -190,6 +187,16 @@ def get_live_tools() -> List[types.Tool]:
                         required=["action"],
                     ),
                 )
-            ]
-        )
     ]
+    if interview_mode == "coach":
+        # Coaching sessions must not expose assessment, proctoring, or private-scoring tools.
+        function_declarations = [
+            declaration for declaration in function_declarations
+            if declaration.name not in {
+                "issue_proctor_warning",
+                "terminate_interview_for_malpractice",
+                "update_interview_scratchpad",
+                "control_interview_ui",
+            }
+        ]
+    return [types.Tool(function_declarations=function_declarations)]
